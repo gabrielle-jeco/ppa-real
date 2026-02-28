@@ -4,16 +4,17 @@ import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
 import MobileCrewTaskPreview from '../mobile - crew/MobileCrewTaskPreview';
 import MobileActionModal from '../general/MobileActionModal';
 import MobileCameraCapture from '../general/MobileCameraCapture';
+import { compressImage } from '../utils/imageCompressor';
 
 interface MobileSupervisorTaskDetailProps {
     task: any;
     onClose: () => void;
     // Supervisor uses different API endpoint logic maybe? 
-    // But we will use onUpload prop to abstract it.
     onUpload: (formData: FormData) => Promise<void>;
+    onDelete?: (type: 'before' | 'after') => Promise<void>;
 }
 
-export default function MobileSupervisorTaskDetail({ task, onClose, onUpload }: MobileSupervisorTaskDetailProps) {
+export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, onDelete }: MobileSupervisorTaskDetailProps) {
     // Calculated State
     const isApproved = task.status === 'approved';
     const isPastDue = new Date(task.due_at) < new Date(new Date().setHours(0, 0, 0, 0));
@@ -33,8 +34,23 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload }: 
     const [showCamera, setShowCamera] = useState(false);
 
     // Upload State (Preview only)
-    const [beforePreview, setBeforePreview] = useState<string | null>(task.before_image ? (task.before_image.startsWith('http') ? task.before_image : `/storage/${task.before_image}`) : null);
-    const [afterPreview, setAfterPreview] = useState<string | null>(task.after_image ? (task.after_image.startsWith('http') ? task.after_image : `/storage/${task.after_image}`) : null);
+    const getInitialPreview = (imgUrl: string | null) => {
+        if (!imgUrl) return null;
+        return imgUrl.startsWith('http') || imgUrl.startsWith('blob:') || imgUrl.startsWith('/storage/') ? imgUrl : `/storage/${imgUrl}`;
+    };
+
+    const [beforePreview, setBeforePreview] = useState<string | null>(getInitialPreview(task.before_image));
+    const [afterPreview, setAfterPreview] = useState<string | null>(getInitialPreview(task.after_image));
+
+    // Sync state with upstream task changes (e.g., after successful API upload/delete)
+    useEffect(() => {
+        if (task.before_image && !task.before_image.startsWith('blob:')) setBeforePreview(getInitialPreview(task.before_image));
+        else if (!task.before_image) setBeforePreview(null);
+
+        if (task.after_image && !task.after_image.startsWith('blob:')) setAfterPreview(getInitialPreview(task.after_image));
+        else if (!task.after_image) setAfterPreview(null);
+    }, [task.before_image, task.after_image]);
+
     const [isUploading, setIsUploading] = useState(false);
 
     // Preview State
@@ -87,16 +103,24 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload }: 
         if (activeUploadType === 'before') setBeforePreview(previewUrl);
         else setAfterPreview(previewUrl);
 
-        // Immediate Upload
-        const formData = new FormData();
-        formData.append(activeUploadType, file);
-
+        // Immediate Upload with Compression
         setIsUploading(true);
         try {
+            const compressedFile = await compressImage(file, 1200, 1200, 0.7);
+            const formData = new FormData();
+            formData.append(activeUploadType, compressedFile);
+
             await onUpload(formData);
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert("Upload failed");
+            let errorMessage = "Gagal mengunggah foto. Silakan coba lagi.";
+            try {
+                const parsed = JSON.parse(error.message);
+                if (parsed.message) errorMessage = parsed.message;
+            } catch (e) {
+                if (error.message) errorMessage = error.message;
+            }
+            alert(errorMessage);
         } finally {
             setIsUploading(false);
         }
@@ -112,16 +136,24 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload }: 
             if (activeUploadType === 'before') setBeforePreview(previewUrl);
             else setAfterPreview(previewUrl);
 
-            // Immediate Upload
-            const formData = new FormData();
-            formData.append(activeUploadType, file);
-
+            // Immediate Upload with Compression
             setIsUploading(true);
             try {
+                const compressedFile = await compressImage(file, 1200, 1200, 0.7);
+                const formData = new FormData();
+                formData.append(activeUploadType, compressedFile);
+
                 await onUpload(formData);
-            } catch (error) {
+            } catch (error: any) {
                 console.error(error);
-                alert("Upload failed");
+                let errorMessage = "Gagal mengunggah foto. Silakan coba lagi.";
+                try {
+                    const parsed = JSON.parse(error.message);
+                    if (parsed.message) errorMessage = parsed.message;
+                } catch (e) {
+                    if (error.message) errorMessage = error.message;
+                }
+                alert(errorMessage);
             } finally {
                 setIsUploading(false);
                 e.target.value = '';
@@ -130,24 +162,14 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload }: 
     };
 
     const handleDeleteEvidence = async (type: 'before' | 'after') => {
-        if (isReadOnly) return;
+        if (isReadOnly || !onDelete) return;
 
         try {
-            const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/tasks/${task.task_id}/evidence?type=${type}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (res.ok) {
-                if (type === 'before') setBeforePreview(null);
-                else setAfterPreview(null);
-            } else {
-                alert("Failed to delete image");
-            }
+            await onDelete(type);
+            if (type === 'before') setBeforePreview(null);
+            else setAfterPreview(null);
         } catch (error) {
             console.error("Delete failed", error);
-            alert("Delete failed");
         }
     };
 
@@ -253,8 +275,8 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload }: 
                 onClose={handleClose}
                 task={{
                     ...task,
-                    before_image: (beforePreview || '').replace('/storage/', '') || 'https://images.unsplash.com/photo-1550537687-c91072c4792d?q=80&w=1000&auto=format&fit=crop',
-                    after_image: (afterPreview || '').replace('/storage/', '') || 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=1000&auto=format&fit=crop'
+                    before_image: beforePreview,
+                    after_image: afterPreview
                 }}
                 onSelectImage={(type) => {
                     setActiveTab(type as 'before' | 'after');

@@ -62,7 +62,7 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                     <div className="bg-gray-100 rounded-xl p-3 flex items-center gap-3 text-gray-500">
                         <MapPin size={18} />
                         <span className="text-sm font-semibold uppercase tracking-wide">
-                            {user?.location || 'YOGYA CIAMIS (CMS)'}
+                            {user?.locations?.[0]?.name || 'Unknown Location'}
                         </span>
                         <div className="ml-auto bg-gray-200 px-2 py-0.5 rounded text-[10px] font-bold">LOCKED</div>
                     </div>

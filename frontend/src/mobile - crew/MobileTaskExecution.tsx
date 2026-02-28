@@ -4,17 +4,19 @@ import MobileEvidenceListModal from './MobileEvidenceListModal';
 import MobileCrewTaskPreview from './MobileCrewTaskPreview';
 import MobileActionModal from '../general/MobileActionModal';
 import MobileCameraCapture from '../general/MobileCameraCapture';
+import { compressImage } from '../utils/imageCompressor';
 
 interface MobileTaskExecutionProps {
     task: any;
     onClose: () => void;
     onUpload: (formData: FormData) => Promise<void>;
+    onDelete?: (type: 'before' | 'after') => Promise<void>;
 }
 
-export default function MobileTaskExecution({ task, onClose, onUpload }: MobileTaskExecutionProps) {
+export default function MobileTaskExecution({ task, onClose, onUpload, onDelete }: MobileTaskExecutionProps) {
     // Calculated State (Moved up for init)
     const isPastDue = new Date(task.due_at) < new Date(new Date().setHours(0, 0, 0, 0));
-    const isReadOnly = task.status === 'approved' || task.status === 'submitted' || task.status === 'completed' || isPastDue;
+    const isReadOnly = task.status === 'approved' || isPastDue;
 
     const [animateIn, setAnimateIn] = useState(false);
 
@@ -23,8 +25,22 @@ export default function MobileTaskExecution({ task, onClose, onUpload }: MobileT
     const [showEvidenceList, setShowEvidenceList] = useState(isReadOnly); // Acts as "List Mode" (Init with ReadOnly)
 
     // Upload State (Preview only, real data comes from task or fresh upload)
-    const [beforePreview, setBeforePreview] = useState<string | null>(task.before_image ? (task.before_image.startsWith('http') ? task.before_image : `/storage/${task.before_image}`) : null);
-    const [afterPreview, setAfterPreview] = useState<string | null>(task.after_image ? (task.after_image.startsWith('http') ? task.after_image : `/storage/${task.after_image}`) : null);
+    const getInitialPreview = (imgUrl: string | null) => {
+        if (!imgUrl) return null;
+        return imgUrl.startsWith('http') || imgUrl.startsWith('blob:') || imgUrl.startsWith('/storage/') ? imgUrl : `/storage/${imgUrl}`;
+    };
+
+    const [beforePreview, setBeforePreview] = useState<string | null>(getInitialPreview(task.before_image));
+    const [afterPreview, setAfterPreview] = useState<string | null>(getInitialPreview(task.after_image));
+
+    // Sync state with upstream task changes (e.g., after successful API upload/delete)
+    useEffect(() => {
+        if (task.before_image && !task.before_image.startsWith('blob:')) setBeforePreview(getInitialPreview(task.before_image));
+        else if (!task.before_image) setBeforePreview(null);
+
+        if (task.after_image && !task.after_image.startsWith('blob:')) setAfterPreview(getInitialPreview(task.after_image));
+        else if (!task.after_image) setAfterPreview(null);
+    }, [task.before_image, task.after_image]);
 
     // Loading State
     const [isUploading, setIsUploading] = useState(false);
@@ -70,12 +86,13 @@ export default function MobileTaskExecution({ task, onClose, onUpload }: MobileT
         if (activeUploadType === 'before') setBeforePreview(previewUrl);
         else setAfterPreview(previewUrl);
 
-        // Immediate Upload
-        const formData = new FormData();
-        formData.append(activeUploadType, file);
-
+        // Immediate Upload with Compression
         setIsUploading(true);
         try {
+            const compressedFile = await compressImage(file, 1200, 1200, 0.7);
+            const formData = new FormData();
+            formData.append(activeUploadType, compressedFile);
+
             await onUpload(formData);
         } catch (error) {
             console.error(error);
@@ -115,12 +132,13 @@ export default function MobileTaskExecution({ task, onClose, onUpload }: MobileT
             if (activeUploadType === 'before') setBeforePreview(previewUrl);
             else setAfterPreview(previewUrl);
 
-            // Immediate Upload
-            const formData = new FormData();
-            formData.append(activeUploadType, file);
-
+            // Immediate Upload with Compression
             setIsUploading(true);
             try {
+                const compressedFile = await compressImage(file, 1200, 1200, 0.7);
+                const formData = new FormData();
+                formData.append(activeUploadType, compressedFile);
+
                 await onUpload(formData);
             } catch (error) {
                 console.error(error);
@@ -134,24 +152,14 @@ export default function MobileTaskExecution({ task, onClose, onUpload }: MobileT
     };
 
     const handleDeleteEvidence = async (type: 'before' | 'after') => {
-        if (isReadOnly) return; // Prevent delete in read-only mode
+        if (isReadOnly || !onDelete) return; // Prevent delete in read-only mode
 
         try {
-            const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/tasks/${task.task_id}/evidence?type=${type}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (res.ok) {
-                if (type === 'before') setBeforePreview(null);
-                else setAfterPreview(null);
-            } else {
-                alert("Failed to delete image");
-            }
+            await onDelete(type);
+            if (type === 'before') setBeforePreview(null);
+            else setAfterPreview(null);
         } catch (error) {
             console.error("Delete failed", error);
-            alert("Delete failed");
         }
     };
 
@@ -175,7 +183,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload }: MobileT
                 />
             )}
 
-            {/* 1. Underlying Upload View: Only Render if NOT Read Only (Prevent Ghosting) */}
+            {/* 1. Underlying Upload View */}
             {!isReadOnly && (
                 <div key="upload-view" className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
                     {/* Backdrop */}
@@ -277,8 +285,8 @@ export default function MobileTaskExecution({ task, onClose, onUpload }: MobileT
                 onClose={handleClose}
                 task={{
                     ...task,
-                    before_image: (beforePreview || '').replace('/storage/', '') || 'https://images.unsplash.com/photo-1550537687-c91072c4792d?q=80&w=1000&auto=format&fit=crop',
-                    after_image: (afterPreview || '').replace('/storage/', '') || 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=1000&auto=format&fit=crop'
+                    before_image: beforePreview,
+                    after_image: afterPreview
                 }}
                 onSelectImage={(type) => {
                     setActiveTab(type as 'before' | 'after');

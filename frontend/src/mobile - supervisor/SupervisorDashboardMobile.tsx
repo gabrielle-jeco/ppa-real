@@ -2,18 +2,16 @@ import React, { useState } from 'react';
 import { LogOut, ChevronDown, CheckSquare, FileText, BarChart2, Users, MapPin, Star } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 
-// Mock Data
-const SUPERVISOR_NAME = "Raymond Rochville!";
-const LOCATION_NAME = "YOGYA CIAMIS (CMS)";
-const PROGRESS_PERCENTAGE = 65;
-const YEARLY_SCORE = 98; // Mock Score for Supervisor
-
 interface DashboardProps {
     onNavigate: (view: any) => void;
+    user?: any;
 }
 
-const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate }) => {
+const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user }) => {
     // onNavigate is a prop we'll use to switch 'pages' in this mobile view (Dashboard -> CrewList)
+
+    const PROGRESS_PERCENTAGE = 65; // Mock data
+    const YEARLY_SCORE = 98; // Mock data
 
     const handleLogout = () => {
         // Direct logout without confirmation on mobile as requested
@@ -35,12 +33,12 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate }) => 
                 <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-4">
                         <div className="w-14 h-14 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-xl font-bold">
-                            {SUPERVISOR_NAME.charAt(0)}
+                            {user?.name?.charAt(0) || 'S'}
                         </div>
                         <div>
                             <p className="text-xs text-gray-400">Welcome,</p>
                             <h2 className="text-lg font-bold text-gray-800 leading-tight">
-                                {SUPERVISOR_NAME}
+                                {user?.name || 'Supervisor'}
                             </h2>
                         </div>
                     </div>
@@ -55,7 +53,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate }) => 
                 <div className="bg-gray-100 rounded-xl p-3 flex items-center gap-3 text-gray-500">
                     <MapPin size={18} />
                     <span className="text-sm font-semibold uppercase tracking-wide">
-                        {LOCATION_NAME}
+                        {user?.locations?.[0]?.name || 'Unknown Location'}
                     </span>
                     <div className="ml-auto bg-gray-200 px-2 py-0.5 rounded text-[10px] font-bold">LOCKED</div>
                 </div>

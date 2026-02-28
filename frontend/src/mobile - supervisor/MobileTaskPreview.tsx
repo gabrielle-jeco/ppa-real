@@ -32,10 +32,20 @@ export default function MobileTaskPreview({ task, isOpen, onClose, onDeleteProof
     };
 
     // Collect available images
+    const getFullUrl = (url: string) => {
+        if (!url || url === 'null') return null;
+        if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('/storage/')) return url;
+        return `/storage/${url}`;
+    };
+
     const images: { type: string; url: string }[] = [];
-    if (task.before_image && task.before_image !== 'null') images.push({ type: 'Before Work', url: task.before_image });
-    if (task.after_image && task.after_image !== 'null') images.push({ type: 'After Work', url: task.after_image });
-    if (task.proof_image && task.proof_image !== 'null') images.push({ type: 'Proof', url: task.proof_image });
+    const beforeFull = getFullUrl(task.before_image);
+    const afterFull = getFullUrl(task.after_image);
+    const proofFull = getFullUrl(task.proof_image);
+
+    if (beforeFull) images.push({ type: 'Before Work', url: beforeFull });
+    if (afterFull) images.push({ type: 'After Work', url: afterFull });
+    if (proofFull) images.push({ type: 'Proof', url: proofFull });
 
     const currentImage = images.length > 0 ? images[currentIndex] : null;
 

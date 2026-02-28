@@ -78,7 +78,7 @@ export default function SupervisorPerformance() {
                     }}
                     disabled={isFuture}
                     className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${isSelected
-                        ? 'bg-purple-600 text-white shadow-md'
+                        ? 'bg-primary text-white shadow-md'
                         : isFuture
                             ? 'text-gray-300 cursor-not-allowed'
                             : 'text-gray-600 hover:bg-gray-100'
@@ -162,7 +162,7 @@ export default function SupervisorPerformance() {
                     <button
                         onClick={() => setActiveTab('STATS')}
                         className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition ${activeTab === 'STATS'
-                            ? 'bg-purple-600 text-white shadow-sm'
+                            ? 'bg-primary text-white shadow-sm'
                             : 'text-gray-500 hover:bg-gray-50'
                             }`}
                     >
@@ -172,7 +172,7 @@ export default function SupervisorPerformance() {
                     <button
                         onClick={() => setActiveTab('CHECKLIST')}
                         className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition ${activeTab === 'CHECKLIST'
-                            ? 'bg-purple-600 text-white shadow-sm'
+                            ? 'bg-primary text-white shadow-sm'
                             : 'text-gray-500 hover:bg-gray-50'
                             }`}
                     >
@@ -272,7 +272,7 @@ export default function SupervisorPerformance() {
                                         days.push(
                                             <div
                                                 key={i}
-                                                className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold ${attendanceColor} ${isToday ? 'ring-2 ring-purple-500 ring-offset-2 z-10' : ''}`}
+                                                className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold ${attendanceColor} ${isToday ? 'ring-2 ring-primary ring-offset-2 z-10' : ''}`}
                                             >
                                                 {i}
                                             </div>

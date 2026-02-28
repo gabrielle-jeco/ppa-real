@@ -12,9 +12,11 @@ return new class extends Migration {
      */
     public function up()
     {
-        Schema::table('tasks', function (Blueprint $table) {
-            $table->string('before_image')->nullable()->after('status');
-            $table->string('after_image')->nullable()->after('before_image');
+        Schema::create('job_levels', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->timestamps();
         });
     }
 
@@ -25,8 +27,6 @@ return new class extends Migration {
      */
     public function down()
     {
-        Schema::table('tasks', function (Blueprint $table) {
-            $table->dropColumn(['before_image', 'after_image']);
-        });
+        Schema::dropIfExists('job_levels');
     }
 };

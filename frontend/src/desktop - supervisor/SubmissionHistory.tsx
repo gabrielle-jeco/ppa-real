@@ -9,6 +9,14 @@ interface SubmissionHistoryProps {
 export default function SubmissionHistory({ task, onClose }: SubmissionHistoryProps) {
     if (!task) return null;
 
+    const getFullUrl = (url?: string | null) => {
+        if (!url) return null;
+        return url.startsWith('http') || url.startsWith('blob:') || url.startsWith('/storage/') ? url : `/storage/${url}`;
+    };
+
+    const beforeFull = getFullUrl(task.before_image);
+    const afterFull = getFullUrl(task.after_image);
+
     return (
         <div className="flex flex-col h-full relative">
             {/* Header */}
@@ -31,30 +39,19 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
                     </h3>
 
                     <div className="space-y-3">
-                        <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
-                            <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden relative flex items-center justify-center text-gray-400 text-[10px]">
-                                IMG
+                        {beforeFull ? (
+                            <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
+                                <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
+                                    <img src={beforeFull} alt="Before" className="w-full h-full object-cover" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-gray-700 truncate">Before Evidence</p>
+                                    <p className="text-[10px] text-gray-400">{new Date(task.updated_at).toLocaleString()}</p>
+                                </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-gray-700 truncate">IMG_12345678.jpeg</p>
-                                <p className="text-[10px] text-gray-400">11 Nov 2025, 8.00 AM</p>
-                            </div>
-                            <button className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full transition">
-                                <Trash2 size={16} />
-                            </button>
-                        </div>
-                        <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
-                            <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden relative flex items-center justify-center text-gray-400 text-[10px]">
-                                IMG
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-gray-700 truncate">IMG_12345679.jpeg</p>
-                                <p className="text-[10px] text-gray-400">11 Nov 2025, 8.00 AM</p>
-                            </div>
-                            <button className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full transition">
-                                <Trash2 size={16} />
-                            </button>
-                        </div>
+                        ) : (
+                            <div className="text-xs text-gray-400 italic">No submission yet.</div>
+                        )}
                     </div>
                 </div>
 
@@ -65,36 +62,19 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
                     </h3>
 
                     <div className="space-y-3">
-                        {task.proof_image ? (
+                        {afterFull ? (
                             <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
                                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
-                                    <img src={`/storage/${task.proof_image}`} alt="Proof" className="w-full h-full object-cover" />
+                                    <img src={afterFull} alt="After" className="w-full h-full object-cover" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium text-gray-700 truncate">Proof_Submission.jpg</p>
+                                    <p className="text-xs font-medium text-gray-700 truncate">After Evidence</p>
                                     <p className="text-[10px] text-gray-400">{new Date(task.updated_at).toLocaleString()}</p>
                                 </div>
-                                <button className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full transition">
-                                    <Trash2 size={16} />
-                                </button>
                             </div>
                         ) : (
                             <div className="text-xs text-gray-400 italic">No submission yet.</div>
                         )}
-
-                        {/* Mock Static Entry */}
-                        <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition opacity-60">
-                            <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden relative flex items-center justify-center text-gray-400 text-[10px]">
-                                IMG
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-gray-700 truncate">IMG_12345678.jpeg</p>
-                                <p className="text-[10px] text-gray-400">11 Nov 2025, 8.00 AM</p>
-                            </div>
-                            <button className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full transition">
-                                <Trash2 size={16} />
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>

@@ -13,17 +13,12 @@ return new class extends Migration {
     public function up()
     {
         Schema::create('users', function (Blueprint $table) {
-            $table->id('user_id');
-            $table->string('full_name');
+            $table->id();
+            $table->string('name');
             $table->string('username')->unique();
+            $table->string('email')->nullable()->unique();
             $table->string('password');
-            $table->string('email')->nullable()->unique(); // Added for flexibility
-            $table->enum('role_type', ['employee', 'supervisor', 'manager']);
-            $table->enum('manager_type', ['SM', 'RM'])->nullable();
-
-            $table->unsignedBigInteger('location_id')->nullable();
-            $table->foreign('location_id')->references('location_id')->on('locations')->onDelete('set null');
-
+            $table->foreignId('job_level_id')->constrained('job_levels')->onDelete('cascade');
             $table->boolean('active')->default(true);
             $table->rememberToken();
             $table->timestamps();

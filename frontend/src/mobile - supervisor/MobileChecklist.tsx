@@ -272,12 +272,34 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                     }}
                     onUpload={async (formData) => {
                         const token = localStorage.getItem('auth_token');
-                        await fetch(`/api/tasks/${selectedTaskForUpload.task_id}/evidence`, { // Use EVIDENCE endpoint now
+                        const res = await fetch(`/api/tasks/${selectedTaskForUpload.task_id}/evidence`, { // Use EVIDENCE endpoint now
                             method: 'POST',
                             headers: { 'Authorization': `Bearer ${token}` },
                             body: formData
                         });
-                        // No need to set state here, component handles preview
+                        if (!res.ok) {
+                            const errText = await res.text();
+                            throw new Error(errText);
+                        }
+
+                        // Parse the updated task from the response or fetch again
+                        const data = await res.json();
+                        setSelectedTaskForUpload(data);
+                        fetchMyTasks();
+                    }}
+                    onDelete={async (type) => {
+                        const token = localStorage.getItem('auth_token');
+                        const res = await fetch(`/api/tasks/${selectedTaskForUpload.task_id}/evidence?type=${type}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (!res.ok) {
+                            const errText = await res.text();
+                            throw new Error(errText);
+                        }
+                        const data = await res.json();
+                        setSelectedTaskForUpload(data.task);
+                        fetchMyTasks();
                     }}
                 />
             )}

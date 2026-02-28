@@ -20,38 +20,50 @@ class ManagerController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $query = User::where('role_type', 'supervisor')->where('active', true);
-        $locations = [];
+        // Fetch Supervisors through Reporting Lines
+        $supervisorsCollection = $user->subordinateLines()->with(['subordinate.locations'])->get()
+            ->pluck('subordinate')
+            ->filter(function ($spv) {
+                return $spv && $spv->active;
+            });
+
+        $locations = $user->locations->map(function ($loc) {
+            return ['id' => $loc->id, 'name' => $loc->name];
+        });
+
         $filterLocationName = 'All Locations';
 
         // LOGIC: Filter by Location
         if ($user->manager_type === 'SM') {
-            // Store Manager: Strictly locked to their location
-            $query->where('location_id', $user->location_id);
-            $locations = $user->location ? [['id' => $user->location->location_id, 'name' => $user->location->name]] : [];
-            $filterLocationName = $user->location ? $user->location->name : 'Unknown';
-        } else {
-            // Regional Manager: Can see all, or filter by specific
-            $locations = \App\Models\Location::select('location_id as id', 'name')->get();
+            $smLocationId = $user->locations->first() ? $user->locations->first()->id : null;
+            $filterLocationName = $user->locations->first() ? $user->locations->first()->name : 'Unknown Location';
 
+            if ($smLocationId) {
+                $supervisorsCollection = $supervisorsCollection->filter(function ($spv) use ($smLocationId) {
+                    return $spv->locations->contains('id', $smLocationId);
+                });
+            }
+        } else {
+            // Regional Manager: Can filter by specific location dropdown
             if ($request->has('location_id') && $request->location_id) {
-                // frontend sends "id" (which is location_id)
-                $query->where('location_id', $request->location_id);
-                // In $locations collection, we selected 'location_id as id', so we search by 'id'
-                $loc = $locations->firstWhere('id', $request->location_id);
+                $supervisorsCollection = $supervisorsCollection->filter(function ($spv) use ($request) {
+                    return $spv->locations->contains('id', $request->location_id);
+                });
+
+                $loc = $user->locations->firstWhere('id', $request->location_id);
                 $filterLocationName = $loc ? $loc->name : 'Unknown Location';
             }
         }
 
-        $supervisors = $query->with('location')->get()->map(function ($spv) {
+        $supervisors = $supervisorsCollection->values()->map(function ($spv) {
             // Randomize data for demo purposes to match the "Traffic Light" requirement
             $score = rand(60, 98);
 
             return [
-                'id' => $spv->user_id,
-                'name' => $spv->full_name,
-                'role' => 'Supervisor', // In future, maybe distinguish 'Fresh', 'Fashion' etc.
-                'location' => $spv->location ? $spv->location->name : 'N/A',
+                'id' => $spv->id,
+                'name' => $spv->name,
+                'role' => 'Supervisor',
+                'location' => $spv->locations->first() ? $spv->locations->first()->name : 'N/A',
                 'status' => $spv->active ? 'active' : 'inactive',
                 'score' => $score,
                 'activity_percentage' => $score, // Mapping score to activity % for now
@@ -65,7 +77,7 @@ class ManagerController extends Controller
 
         return response()->json([
             'manager' => [
-                'name' => $user->full_name,
+                'name' => $user->name,
                 'role' => $user->role_type === 'manager' ? ($user->manager_type === 'SM' ? 'Store Manager' : 'Regional Manager') : 'Manager',
                 'type' => $user->manager_type // identifying RM vs SM on frontend
             ],

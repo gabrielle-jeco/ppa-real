@@ -12,10 +12,15 @@ return new class extends Migration {
      */
     public function up()
     {
-        Schema::create('roles', function (Blueprint $table) {
-            $table->id('role_id');
-            $table->string('role_name');
+        Schema::create('attendances', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->date('date');
+            $table->string('status_code');
             $table->timestamps();
+
+            // Enforce exactly one attendance per user per day
+            $table->unique(['user_id', 'date']);
         });
     }
 
@@ -26,6 +31,6 @@ return new class extends Migration {
      */
     public function down()
     {
-        Schema::dropIfExists('roles');
+        Schema::dropIfExists('attendances');
     }
 };

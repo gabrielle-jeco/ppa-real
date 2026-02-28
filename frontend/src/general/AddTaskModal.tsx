@@ -27,7 +27,11 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate }:
         e.preventDefault();
         // Combine date and time
         const dueAt = `${date} ${time}:00`;
-        onSubmit({ title, due_at: dueAt, note });
+        onSubmit({
+            title,
+            due_at: dueAt,
+            note,
+        });
         onClose();
         // Reset form
         setTitle('');
@@ -100,6 +104,8 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate }:
                             className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-primary outline-none shadow-sm"
                         />
                     </div>
+
+
 
                     <div className="pt-4 flex justify-end">
                         <button

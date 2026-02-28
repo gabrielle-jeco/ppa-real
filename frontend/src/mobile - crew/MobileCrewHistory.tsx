@@ -6,9 +6,10 @@ interface MobileCrewHistoryProps {
     user: any;
     onBack: () => void;
     onSelectTask: (task: any) => void;
+    refreshTrigger?: number;
 }
 
-export default function MobileCrewHistory({ user, onBack, onSelectTask }: MobileCrewHistoryProps) {
+export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshTrigger }: MobileCrewHistoryProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [viewMode, setViewMode] = useState<'ACTIVITY' | 'TASKS'>('TASKS'); // Default to TASKS for now
     const [showRoleDropdown, setShowRoleDropdown] = useState(false);
@@ -44,7 +45,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask }: Mobile
         };
 
         fetchTasks();
-    }, [selectedDate, user?.user_id]);
+    }, [selectedDate, user?.user_id, refreshTrigger]);
 
 
     // Mock Activity Log (Placeholder)
@@ -236,11 +237,8 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask }: Mobile
                                         className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between gap-3 border border-transparent hover:border-gray-200 transition"
                                     >
                                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${task.status === 'approved' ? 'bg-blue-100 border-blue-500 text-blue-600' :
-                                                task.status === 'completed' || task.status === 'submitted' ? 'bg-green-100 border-green-500 text-green-600' :
-                                                    'border-gray-300 bg-white'
-                                                }`}>
-                                                {(task.status === 'approved' || task.status === 'completed' || task.status === 'submitted') && <div className={`w-2.5 h-2.5 rounded-full ${task.status === 'approved' ? 'bg-blue-500' : 'bg-green-500'}`}></div>}
+                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${task.status === 'approved' ? 'bg-blue-100 border-blue-500 text-blue-600' : 'border-gray-300 bg-white'}`}>
+                                                {task.status === 'approved' && <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-bold text-gray-800 text-sm line-clamp-1 mb-0.5">{task.title}</p>

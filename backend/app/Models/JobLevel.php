@@ -5,14 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Location extends Model
+class JobLevel extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name'];
+    protected $fillable = ['name', 'description'];
 
     public function users()
     {
-        return $this->belongsToMany(User::class, 'user_locations', 'location_id', 'user_id');
+        return $this->hasMany(User::class);
     }
 }

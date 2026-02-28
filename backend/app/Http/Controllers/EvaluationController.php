@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Evaluation;
+use App\Models\MonthlyPersonalityEvaluation;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,25 +13,32 @@ class EvaluationController extends Controller
     {
         try {
             $request->validate([
-                'user_id' => 'required|exists:users,user_id',
+                'user_id' => 'required|exists:users,id',
                 'scores' => 'required|array',
                 'total_score' => 'required|numeric',
                 'date' => 'required|date',
                 'notes' => 'nullable|string'
             ]);
 
-            $evaluation = Evaluation::updateOrCreate(
+            $date = \Carbon\Carbon::parse($request->date)->startOfMonth()->format('Y-m-d');
+
+            $evaluation = MonthlyPersonalityEvaluation::updateOrCreate(
                 [
-                    'user_id' => $request->user_id,
-                    'date' => $request->date,
+                    'evaluatee_id' => $request->user_id,
+                    'evaluation_period' => $date,
                 ],
                 [
-                    'manager_id' => Auth::id(),
-                    'scores' => $request->scores,
-                    'total_score' => $request->total_score,
-                    'notes' => $request->notes
+                    'evaluator_id' => Auth::id(),
+                    'score' => $request->total_score,
                 ]
             );
+
+            // Frontend compatibility response
+            $evaluation->setAttribute('total_score', $evaluation->score);
+            $evaluation->setAttribute('user_id', $evaluation->evaluatee_id);
+            $evaluation->setAttribute('date', $evaluation->evaluation_period);
+            $evaluation->setAttribute('scores', $request->scores);
+            $evaluation->setAttribute('notes', $request->notes);
 
             return response()->json($evaluation);
         } catch (\Exception $e) {
@@ -45,10 +52,16 @@ class EvaluationController extends Controller
         $dateStr = $request->query('date', now()->format('Y-m-d'));
         $date = \Carbon\Carbon::parse($dateStr);
 
-        $evaluation = Evaluation::where('user_id', $supervisorId)
-            ->whereYear('date', $date->year)
-            ->whereMonth('date', $date->month)
+        $evaluation = MonthlyPersonalityEvaluation::where('evaluatee_id', $supervisorId)
+            ->whereYear('evaluation_period', $date->year)
+            ->whereMonth('evaluation_period', $date->month)
             ->first();
+
+        if ($evaluation) {
+            $evaluation->setAttribute('total_score', $evaluation->score);
+            $evaluation->setAttribute('user_id', $evaluation->evaluatee_id);
+            $evaluation->setAttribute('date', $evaluation->evaluation_period);
+        }
 
         // Safe response
         return response()->json([

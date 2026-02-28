@@ -66,15 +66,20 @@ export default defineConfig({
   ],
   server: {
     host: '0.0.0.0', // Expose to network
+    allowedHosts: ['.trycloudflare.com'],
+    //hmr: { protocol: 'wss', clientPort: 443 },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         headers: {
           Accept: 'application/json',
-          "Content-Type": "application/json",
         },
       },
+      '/storage': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      }
     },
   },
 })

@@ -6,9 +6,10 @@ interface MobileTaskListProps {
     user: any;
     onBack: () => void;
     onSelectTask: (task: any) => void;
+    refreshTrigger?: number;
 }
 
-export default function MobileTaskList({ user, onBack, onSelectTask }: MobileTaskListProps) {
+export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrigger }: MobileTaskListProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [tasks, setTasks] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -42,9 +43,9 @@ export default function MobileTaskList({ user, onBack, onSelectTask }: MobileTas
         if (user?.user_id) {
             fetchTasks();
         }
-    }, [selectedDate, user?.user_id]);
+    }, [selectedDate, user?.user_id, refreshTrigger]);
 
-    const completedCount = tasks.filter(t => t.status === 'completed' || t.status === 'submitted' || t.status === 'approved').length;
+    const completedCount = tasks.filter(t => t.status === 'approved').length;
     const totalCount = tasks.length;
     const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
@@ -88,7 +89,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask }: MobileTas
                             </div>
                         ) : (
                             tasks.map((task) => {
-                                const isCompleted = task.status === 'completed' || task.status === 'submitted' || task.status === 'approved';
+                                const isCompleted = task.status === 'approved';
                                 return (
                                     <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between group border border-transparent hover:border-gray-200 transition">
                                         <div className="flex items-start gap-3 flex-1">

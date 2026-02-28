@@ -9,16 +9,13 @@ class Task extends Model
 {
     use HasFactory;
 
-    protected $primaryKey = 'task_id';
-
     protected $fillable = [
-        'user_id',
-        'manager_id',
+        'employee_id',
+        'employer_id',
         'title',
-        'note',
+        'description',
         'due_at',
         'status',
-        'proof_image',
         'before_image',
         'after_image'
     ];
@@ -27,13 +24,30 @@ class Task extends Model
         'due_at' => 'datetime',
     ];
 
+    protected $appends = ['task_id', 'manager_id', 'note'];
+
+    public function getTaskIdAttribute()
+    {
+        return $this->id;
+    }
+
+    public function getManagerIdAttribute()
+    {
+        return $this->employer_id;
+    }
+
+    public function getNoteAttribute()
+    {
+        return $this->description;
+    }
+
     public function assignedTo()
     {
-        return $this->belongsTo(User::class, 'user_id', 'user_id');
+        return $this->belongsTo(User::class, 'employee_id');
     }
 
     public function createdBy()
     {
-        return $this->belongsTo(User::class, 'manager_id', 'user_id');
+        return $this->belongsTo(User::class, 'employer_id');
     }
 }

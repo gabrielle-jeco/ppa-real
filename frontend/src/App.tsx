@@ -18,6 +18,28 @@ function App() {
     if (storedUser && token) {
       setUser(JSON.parse(storedUser));
     }
+
+    // Dynamic PWA Theme Color Logic
+    const updateThemeColor = () => {
+      const isMobile = window.innerWidth < 768;
+      const themeColor = isMobile ? '#2563eb' : '#7c3aed'; // Blue-600 vs Purple-600 (Primary)
+
+      let metaThemeColor = document.querySelector('meta[name="theme-color"]');
+      if (!metaThemeColor) {
+        metaThemeColor = document.createElement('meta');
+        metaThemeColor.setAttribute('name', 'theme-color');
+        document.head.appendChild(metaThemeColor);
+      }
+      metaThemeColor.setAttribute('content', themeColor);
+    };
+
+    // Initial check
+    updateThemeColor();
+
+    // Listen to resize
+    window.addEventListener('resize', updateThemeColor);
+
+    return () => window.removeEventListener('resize', updateThemeColor);
   }, []);
 
   // Simplified Auth Flow for Phase 2 Verification

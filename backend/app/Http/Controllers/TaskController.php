@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Task;
 use App\Models\User;
+use App\Models\GuideRead;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
@@ -21,7 +22,7 @@ class TaskController extends Controller
         // Security check (if Manager, allow if in same location or RM. If Supervisor, allow only self)
         // For simplicity now, assuming Manager context
 
-        $query = Task::where('user_id', $supervisorId);
+        $query = Task::where('employee_id', $supervisorId);
 
         if ($request->has('date')) {
             $query->whereDate('due_at', $request->date);
@@ -39,19 +40,19 @@ class TaskController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'supervisor_id' => 'required|exists:users,user_id',
+            'supervisor_id' => 'required|exists:users,id',
             'title' => 'required|string',
             'due_at' => 'required|date',
-            'note' => 'nullable|string'
+            'note' => 'nullable|string',
         ]);
 
         $task = Task::create([
-            'user_id' => $request->supervisor_id,
-            'manager_id' => Auth::id(),
+            'employee_id' => $request->supervisor_id, // Who is doing the task
+            'employer_id' => Auth::id(), // Who assigned the task
             'title' => $request->title,
-            'note' => $request->note,
+            'description' => $request->note,
             'due_at' => $request->due_at,
-            'status' => 'pending'
+            'status' => 'pending',
         ]);
 
         return response()->json($task, 201);
@@ -84,22 +85,7 @@ class TaskController extends Controller
         return response()->json($task);
     }
 
-    /**
-     * Remove proof image from a task.
-     */
-    public function removeProof($id)
-    {
-        $task = Task::findOrFail($id);
 
-        // In a real app, delete the file from storage here (Storage::delete($task->proof_image))
-
-        $task->proof_image = null;
-        // Optionally reset status if proof is removed?
-        // $task->status = 'pending'; 
-        $task->save();
-
-        return response()->json(['message' => 'Proof removed', 'task' => $task]);
-    }
     /**
      * Upload evidence (Before/After photos) for a task.
      * Route: POST /api/tasks/{id}/evidence
@@ -114,8 +100,15 @@ class TaskController extends Controller
         $task = Task::findOrFail($id);
 
         // Security check: Ensure the authenticated user is the one assigned to the task
-        if ($task->user_id !== Auth::id()) {
+        // But also allow Supervisors to upload evidence on tasks they assigned
+        if ($task->employee_id !== Auth::id() && $task->employer_id !== Auth::id()) {
             return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (!$request->hasFile('before') && !$request->hasFile('after')) {
+            return response()->json([
+                'message' => 'Foto tidak terdeteksi atau terlalu besar (Maks 10MB).'
+            ], 400);
         }
 
         if ($request->hasFile('before')) {
@@ -128,10 +121,7 @@ class TaskController extends Controller
             $task->after_image = $path;
         }
 
-        // If both images are present (or logically "work is done"), update status
-        if ($task->before_image && $task->after_image) {
-            $task->status = 'submitted';
-        }
+        // Do not update status here; status remains pending until approved by supervisor.
 
         $task->save();
 
@@ -150,11 +140,6 @@ class TaskController extends Controller
         $task = Task::findOrFail($id);
         $type = $request->input('type');
 
-        // Security check
-        if ($task->user_id !== Auth::id()) {
-            // return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
         if ($type === 'before') {
             $task->before_image = null;
         } elseif ($type === 'after') {
@@ -164,5 +149,68 @@ class TaskController extends Controller
         $task->save();
 
         return response()->json(['message' => 'Evidence removed', 'task' => $task]);
+    }
+
+    /**
+     * Confirm reading the guide for a specific workstation.
+     * Route: POST /api/crew/read-guide
+     */
+    public function readGuide(Request $request)
+    {
+        $request->validate([
+            'role' => 'required|string', // e.g., 'cashier', 'fresh'
+        ]);
+
+        $user = Auth::user();
+
+        // Find the workstation ID (Case Insensitive)
+        $workStation = \App\Models\WorkStation::whereRaw('LOWER(name) = ?', [strtolower($request->role)])->first();
+
+        if (!$workStation) {
+            return response()->json(['message' => 'Invalid role'], 400);
+        }
+
+        $now = now();
+
+        // Insert or ignore into guide_reads
+        $guideRead = GuideRead::firstOrCreate(
+            [
+                'user_id' => $user->id,
+                'work_station_id' => $workStation->id,
+                'read_date' => $now->toDateString(),
+            ]
+        );
+
+        return response()->json([
+            'message' => 'Guide confirmed',
+            'guide_read' => $guideRead,
+            'timestamp' => $now
+        ]);
+    }
+
+    /**
+     * Check if the guide for a specific role has already been read today.
+     * Route: GET /api/crew/check-guide?role=cashier
+     */
+    public function checkGuideStatus(Request $request)
+    {
+        $request->validate([
+            'role' => 'required|string',
+        ]);
+
+        $user = Auth::user();
+        $workStation = \App\Models\WorkStation::whereRaw('LOWER(name) = ?', [strtolower($request->role)])->first();
+
+        if (!$workStation) {
+            return response()->json(['message' => 'Invalid role'], 400);
+        }
+
+        // Check if a guide read entry exists for today
+        $hasRead = GuideRead::where('user_id', $user->id)
+            ->where('work_station_id', $workStation->id)
+            ->where('read_date', now()->toDateString())
+            ->exists();
+
+        return response()->json(['has_read' => $hasRead]);
     }
 }

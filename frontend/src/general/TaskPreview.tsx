@@ -1,15 +1,26 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Trash2, X } from 'lucide-react';
 
 interface TaskPreviewProps {
     task: any;
     onClose: () => void;
-    onDeleteProof: (taskId: number) => void;
+    onDeleteProof?: (taskId: number) => void;
     readOnly?: boolean;
 }
 
 export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = false }: TaskPreviewProps) {
+    const [activeTab, setActiveTab] = useState<'before' | 'after'>('before');
+
     if (!task) return null;
+
+    const getFullUrl = (url?: string | null) => {
+        if (!url) return null;
+        return url.startsWith('http') || url.startsWith('blob:') || url.startsWith('/storage/') ? url : `/storage/${url}`;
+    };
+
+    const beforeFull = getFullUrl(task.before_image);
+    const afterFull = getFullUrl(task.after_image);
+    const currentImage = activeTab === 'before' ? beforeFull : afterFull;
 
     return (
         <div className="flex flex-col h-full relative">
@@ -24,46 +35,40 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
                 </button>
             </div>
 
+            {/* Tabs */}
+            <div className="flex gap-2 mb-4">
+                <button onClick={() => setActiveTab('before')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'before' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Before Work</button>
+                <button onClick={() => setActiveTab('after')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'after' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>After Work</button>
+            </div>
+
             {/* Main Preview (Gray Box) */}
-            <div className="flex-1 bg-gray-200 rounded-2xl mb-4 flex items-center justify-center relative overflow-hidden">
-                {task.proof_image ? (
-                    <img src={task.proof_image} alt="Proof" className="w-full h-full object-cover" />
+            <div className="flex-1 bg-gray-200 rounded-2xl mb-4 flex items-center justify-center relative overflow-hidden shadow-inner">
+                {currentImage ? (
+                    <img src={currentImage} alt="Proof" className="w-full h-full object-contain" />
                 ) : (
-                    <div className="text-gray-400 text-sm">No Image Preview</div>
+                    <div className="flex flex-col items-center justify-center text-gray-400 text-sm">
+                        <span className="text-4xl mb-2">📷</span>
+                        No image uploaded.
+                    </div>
                 )}
             </div>
 
-            {/* Thumbnails List (Real Data) */}
-            <div className="space-y-3 overflow-y-auto max-h-64 pr-1">
-                {task.proof_image ? (
-                    <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition cursor-pointer">
-                        {/* Thumbnail */}
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
-                            <img src={task.proof_image} alt="Thumb" className="w-full h-full object-cover" />
-                        </div>
+            {/* Information */}
+            <div className="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-3 shadow-sm">
+                <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden flex items-center justify-center">
+                    {currentImage ? (
+                        <img src={currentImage} alt="Thumb" className="w-full h-full object-cover" />
+                    ) : (
+                        <span className="text-xs text-gray-400">N/A</span>
+                    )}
+                </div>
 
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-gray-700 truncate">Submission Image</p>
-                            <p className="text-[10px] text-gray-400">
-                                {new Date(task.updated_at || new Date()).toLocaleString()}
-                            </p>
-                        </div>
-
-                        {!readOnly && (
-                            <button
-                                onClick={() => onDeleteProof(task.task_id)}
-                                className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full transition"
-                                title="Delete this image"
-                            >
-                                <Trash2 size={16} />
-                            </button>
-                        )}
-                    </div>
-                ) : (
-                    <div className="text-center text-xs text-gray-400 py-4">
-                        No submission images found.
-                    </div>
-                )}
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-700 truncate">{activeTab === 'before' ? 'Before Evidence' : 'After Evidence'}</p>
+                    <p className="text-xs text-gray-400">
+                        {new Date(task.updated_at || new Date()).toLocaleString()}
+                    </p>
+                </div>
             </div>
         </div>
     );

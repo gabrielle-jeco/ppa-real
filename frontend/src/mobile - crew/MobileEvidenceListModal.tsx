@@ -38,7 +38,11 @@ export default function MobileEvidenceListModal({
         if (!imageUrl) return null;
 
         // Ensure full URL
-        const fullUrl = imageUrl.startsWith('http') ? imageUrl : `/storage/${imageUrl}`;
+        const getFullUrl = (url: string) => {
+            if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('/storage/')) return url;
+            return `/storage/${url}`;
+        };
+        const fullUrl = getFullUrl(imageUrl);
 
         return (
             <div

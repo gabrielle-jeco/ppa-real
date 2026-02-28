@@ -21,18 +21,19 @@ class SupervisorController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Fetch Crews in the same location
-        $crews = User::where('role_type', 'employee')
-            ->where('location_id', $user->location_id)
-            ->where('active', true)
-            ->get()
+        // Fetch Crews via Reporting Lines relation
+        $subordinates = $user->subordinateLines()->with('subordinate.locations')->get();
+        $crews = $subordinates->pluck('subordinate')->filter(function ($crew) {
+            return $crew && $crew->active;
+        })
+            ->values()
             ->map(function ($crew) {
                 $score = rand(60, 98); // Dummy score for demo
                 return [
                     'id' => $crew->user_id,
                     'name' => $crew->full_name,
                     'role' => $crew->role_type, // 'Crew' (maybe specific role later)
-                    'location' => $crew->location ? $crew->location->name : 'N/A',
+                    'location' => $crew->locations->first() ? $crew->locations->first()->name : 'N/A',
                     'status' => 'active',
                     'score' => $score,
                     'activity_percentage' => $score,
@@ -46,12 +47,12 @@ class SupervisorController extends Controller
 
         return response()->json([
             'supervisor' => [
-                'id' => $user->user_id, // Added ID
-                'name' => $user->full_name,
-                'role' => 'Supervisor', // Specific role name later
-                'location' => $user->location ? $user->location->name : 'Unknown',
+                'id' => $user->id,
+                'name' => $user->name,
+                'role' => 'Supervisor',
+                'location' => $user->locations->first() ? $user->locations->first()->name : 'Unknown',
             ],
-            'location_name' => $user->location ? $user->location->name : 'All Locations',
+            'location_name' => $user->locations->first() ? $user->locations->first()->name : 'All Locations',
             'location_avg_progress' => round($crews->avg('task_progress'), 1),
             'crews' => $crews
         ]);

@@ -13,9 +13,14 @@ const SupervisorMobileApp: React.FC = () => {
     const [currentView, setCurrentView] = useState<MobileView>('DASHBOARD');
     const [selectedCrew, setSelectedCrew] = useState<any>(null);
     const [supervisor, setSupervisor] = useState<any>(null);
+    const [currentUser, setCurrentUser] = useState<any>(null);
 
     // Fetch Supervisor Info on Mount
     useEffect(() => {
+        const userData = localStorage.getItem('user_data');
+        if (userData) {
+            setCurrentUser(JSON.parse(userData));
+        }
         fetchSupervisorInfo();
     }, []);
 
@@ -43,7 +48,7 @@ const SupervisorMobileApp: React.FC = () => {
     const renderContent = () => {
         switch (currentView) {
             case 'DASHBOARD':
-                return <SupervisorDashboardMobile onNavigate={handleNavigate} />;
+                return <SupervisorDashboardMobile onNavigate={handleNavigate} user={currentUser} />;
             case 'EMPLOYEE_LIST':
                 return <MobileCrewList onNavigate={handleNavigate} />;
             case 'CHECKLIST':
@@ -83,7 +88,7 @@ const SupervisorMobileApp: React.FC = () => {
                     />
                 );
             default:
-                return <SupervisorDashboardMobile onNavigate={handleNavigate} />;
+                return <SupervisorDashboardMobile onNavigate={handleNavigate} user={currentUser} />;
         }
     };
 
