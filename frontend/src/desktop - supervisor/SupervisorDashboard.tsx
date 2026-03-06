@@ -27,8 +27,8 @@ export default function SupervisorDashboard() {
                 const data = await response.json();
                 setDashboardData(data);
 
-                // Select first crew by default if available
-                if (data.crews && data.crews.length > 0) {
+                // Only auto-select first crew if none is selected yet
+                if (!selectedCrewId && data.crews && data.crews.length > 0) {
                     setSelectedCrewId(data.crews[0].id);
                 }
             }
@@ -60,7 +60,7 @@ export default function SupervisorDashboard() {
             {/* Right: Detailed View */}
             <div className="flex-1 overflow-hidden relative">
                 {selectedCrew ? (
-                    <CrewDetail crew={selectedCrew} />
+                    <CrewDetail crew={selectedCrew} onTaskChange={fetchDashboardData} />
                 ) : (
                     <div className="h-full flex items-center justify-center text-gray-400">Select a crew to view details</div>
                 )}

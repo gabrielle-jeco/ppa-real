@@ -64,7 +64,12 @@ class TaskController extends Controller
     public function destroy($id)
     {
         $task = Task::findOrFail($id);
-        // Authorization check?
+
+        // Only the creator (employer) can delete a task
+        if ($task->employer_id !== Auth::id()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         $task->delete();
         return response()->json(['message' => 'Task deleted']);
     }

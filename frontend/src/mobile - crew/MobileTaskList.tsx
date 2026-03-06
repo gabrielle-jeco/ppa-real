@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Check, ChevronDown } from 'lucide-react';
+import { Camera, ChevronDown } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 
 interface MobileTaskListProps {
@@ -94,12 +94,12 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                                     <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between group border border-transparent hover:border-gray-200 transition">
                                         <div className="flex items-start gap-3 flex-1">
                                             {/* Status Indicator */}
-                                            <div className={`w-5 h-5 rounded border-2 mt-1 flex items-center justify-center transition-colors flex-shrink-0 cursor-default
+                                            <div className={`w-5 h-5 rounded-md border-2 mt-1 flex items-center justify-center transition-colors flex-shrink-0 cursor-default
                                             ${isCompleted
                                                     ? 'bg-blue-100 border-blue-500 text-blue-600'
                                                     : 'border-gray-300 bg-gray-50'}`}
                                             >
-                                                {isCompleted && <Check size={14} strokeWidth={3} />}
+                                                {isCompleted && <span className="font-bold text-xs">✓</span>}
                                             </div>
 
                                             <div className="flex-1 min-w-0 pr-2">

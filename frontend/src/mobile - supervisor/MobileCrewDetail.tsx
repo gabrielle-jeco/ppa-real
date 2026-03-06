@@ -62,13 +62,15 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
         }
     };
 
-    // TOGGLE STATUS
-    const handleToggleStatus = async (task: any) => {
-        const newStatus = task.status === 'approved' ? 'pending' : 'approved';
-        setTasks(tasks.map(t => t.task_id === task.task_id ? { ...t, status: newStatus } : t));
+    // UPDATE STATUS
+    const handleUpdateStatus = async (taskId: number, newStatus: string) => {
+        setTasks(tasks.map(t => t.task_id === taskId ? { ...t, status: newStatus } : t));
+        if (previewTask?.task_id === taskId) {
+            setPreviewTask({ ...previewTask, status: newStatus });
+        }
         try {
             const token = localStorage.getItem('auth_token');
-            await fetch(`/api/tasks/${task.task_id}/status`, {
+            await fetch(`/api/tasks/${taskId}/status`, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -80,6 +82,12 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             console.error("Status update failed", error);
             fetchTasks();
         }
+    };
+
+    // TOGGLE STATUS (Checkbox)
+    const handleToggleStatus = async (task: any) => {
+        const newStatus = task.status === 'approved' ? 'pending' : 'approved';
+        handleUpdateStatus(task.task_id, newStatus);
     };
 
     // DELETE TASK
@@ -148,13 +156,14 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 onClose={() => setIsPreviewOpen(false)}
                 task={previewTask}
                 onDeleteProof={handleDeleteProof}
+                onUpdateStatus={(status) => handleUpdateStatus(previewTask.task_id, status)}
                 readOnly={previewTask?.status === 'approved' || (previewTask && new Date(previewTask.due_at) < new Date(new Date().setHours(0, 0, 0, 0)))}
             />
 
             {/* CARD 1: Profile & History (Static) */}
             <div className="bg-white rounded-3xl p-5 shadow-sm mb-4 flex justify-between items-center shrink-0">
                 <p className="text-gray-600 font-medium text-sm">
-                    Role as <span className="underline decoration-gray-400">Crew</span> Today
+                    Role as <span className="underline decoration-gray-400">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : 'Crew'}</span> Today
                 </p>
                 <div className="flex gap-2">
                     <button
@@ -236,12 +245,12 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                     {/* Status Checkbox */}
                                     <div
                                         onClick={() => !isPastDue && handleToggleStatus(task)}
-                                        className={`w-5 h-5 rounded border-2 mt-1 flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer
+                                        className={`w-5 h-5 rounded-md border-2 mt-1 flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer
                                         ${isApproved
                                                 ? 'bg-blue-100 border-blue-500 text-blue-600'
                                                 : isPastDue ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : 'border-gray-300 bg-white hover:border-blue-500'}`}
                                     >
-                                        {isApproved && <Check size={14} strokeWidth={3} />}
+                                        {isApproved && <span className="font-bold text-xs">✓</span>}
                                     </div>
 
                                     <div className="flex-1 min-w-0 pr-2">

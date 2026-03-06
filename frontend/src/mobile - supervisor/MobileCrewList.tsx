@@ -6,6 +6,7 @@ interface Crew {
     id: number;
     name: string; // Changed from full_name to match API
     role: string; // Changed from role_name
+    current_workstation: string | null; // Latest workstation from ActivityLog
     score: number; // Changed from performance_score
     location: string;
 }

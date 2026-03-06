@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, CheckCircle } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 
 interface MobileTaskGuideProps {
@@ -122,8 +122,8 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
 
                         {/* 2. Standardized Checkbox Card */}
                         <label className={`flex items-center gap-3 bg-white p-4 rounded-xl border transition mb-6 shadow-sm ${isAlreadyConfirmed ? 'border-green-200 bg-green-50 opacity-80 cursor-default' : 'cursor-pointer border-blue-100 hover:bg-blue-50'}`}>
-                            <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition ${isRead ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}>
-                                {isRead && <CheckCircle size={16} className="text-white" />}
+                            <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors flex-shrink-0 ${isRead ? 'bg-blue-100 border-blue-500 text-blue-600' : 'border-gray-300 bg-white'}`}>
+                                {isRead && <span className="font-bold text-xs">✓</span>}
                             </div>
                             <input
                                 type="checkbox"

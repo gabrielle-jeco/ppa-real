@@ -6,9 +6,10 @@ import EvaluationForm from '../general/EvaluationForm';
 
 interface SupervisorDetailProps {
     supervisor: any;
+    onTaskChange?: () => void;
 }
 
-export default function SupervisorDetail({ supervisor }: SupervisorDetailProps) {
+export default function SupervisorDetail({ supervisor, onTaskChange }: SupervisorDetailProps) {
     const [tasks, setTasks] = useState<any[]>([]);
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
 
@@ -20,6 +21,9 @@ export default function SupervisorDetail({ supervisor }: SupervisorDetailProps) 
     const [viewMode, setViewMode] = useState<'TASKS' | 'EVALUATION'>('TASKS');
     const [todayEvaluation, setTodayEvaluation] = useState<any>(null);
 
+    // Stats State
+    const [stats, setStats] = useState<any>(null);
+
     // Filter State
     const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -27,15 +31,37 @@ export default function SupervisorDetail({ supervisor }: SupervisorDetailProps) 
         if (supervisor?.id) {
             fetchTasks();
             fetchEvaluationStatus();
+            fetchSupervisorStats();
             setRightPanelMode('STATS');
             setViewMode('TASKS');
         }
     }, [supervisor?.id]);
 
     useEffect(() => {
-        fetchTasks();
-        fetchEvaluationStatus();
-    }, [selectedDate]);
+        if (supervisor?.id) {
+            fetchTasks();
+            fetchEvaluationStatus();
+            fetchSupervisorStats();
+        }
+    }, [selectedDate, supervisor?.id]);
+
+    const fetchSupervisorStats = async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const m = selectedDate.getMonth() + 1;
+            const y = selectedDate.getFullYear();
+            const d = selectedDate.getDate(); // Pass day to calculate daily SC point
+            const res = await fetch(`/api/manager/supervisors/${supervisor.id}/stats?month=${m}&year=${y}&day=${d}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setStats(data);
+            }
+        } catch (error) {
+            console.error("Fetch stats failed", error);
+        }
+    };
 
     const fetchEvaluationStatus = async () => {
         try {
@@ -114,6 +140,8 @@ export default function SupervisorDetail({ supervisor }: SupervisorDetailProps) 
 
             if (res.ok) {
                 fetchTasks(); // Refresh list
+                fetchSupervisorStats(); // Refresh stats
+                onTaskChange?.(); // Update parent list
             }
         } catch (error) {
             console.error("Add task failed", error);
@@ -129,6 +157,8 @@ export default function SupervisorDetail({ supervisor }: SupervisorDetailProps) 
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setTasks(tasks.filter(t => t.task_id !== taskId));
+            fetchSupervisorStats(); // Refresh stats
+            onTaskChange?.(); // Update parent list
         } catch (error) {
             console.error("Delete failed", error);
         }
@@ -152,6 +182,8 @@ export default function SupervisorDetail({ supervisor }: SupervisorDetailProps) 
                 },
                 body: JSON.stringify({ status: newStatus })
             });
+            fetchSupervisorStats(); // Refresh stats
+            onTaskChange?.(); // Update parent list
         } catch (error) {
             console.error("Status update failed", error);
             fetchTasks(); // Revert on error
@@ -436,7 +468,7 @@ export default function SupervisorDetail({ supervisor }: SupervisorDetailProps) 
                                                 className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${task.status === 'approved' ? 'bg-purple-100 border-primary text-primary' : 'border-gray-300'
                                                     } ${isToday(selectedDate) ? 'cursor-pointer hover:border-primary' : 'cursor-default opacity-60'}`}
                                             >
-                                                {task.status === 'approved' && <span className="font-bold">✓</span>}
+                                                {task.status === 'approved' && <span className="font-bold text-xs">✓</span>}
                                             </div>
                                             <div className="flex-1">
                                                 <p className={`text-sm font-medium ${task.status === 'approved' ? 'text-gray-800' : 'text-gray-600'}`}>
@@ -506,71 +538,61 @@ export default function SupervisorDetail({ supervisor }: SupervisorDetailProps) 
                                         {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                                     </h2>
 
-                                    {/* --- Supervisor Performance Stats Layout (Mock Data) --- */}
-                                    {(() => {
-                                        // Mock Stats Data (to be connected to API later)
-                                        const stats = {
-                                            my_avg_point: 81,
-                                            task_for_sc: { completed: 70, total: 100, label: 'Task for SC' },
-                                            task_from_manager: { completed: 35, total: 100, label: 'Task Completed From SM/RM' },
-                                            monthly_task_given: '168/8 People',
-                                            avg_service_crew_point: 70
-                                        };
+                                    {/* --- Supervisor Performance Stats Layout --- */}
+                                    {stats ? (
+                                        <div className="space-y-6 overflow-y-auto pr-2 pb-4">
+                                            {/* My AVG Point */}
+                                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <h3 className="text-sm font-semibold text-gray-600">My AVG Point</h3>
+                                                    <span className="text-sm font-bold text-gray-800">{stats.my_avg_point}%</span>
+                                                </div>
+                                                <div className="w-full bg-purple-100 rounded-full h-4 overflow-hidden">
+                                                    <div className="bg-yellow-400 h-4 rounded-full transition-all duration-500" style={{ width: `${stats.my_avg_point}%` }}></div>
+                                                </div>
+                                            </div>
 
-                                        return (
-                                            <div className="space-y-6 overflow-y-auto pr-2 pb-4">
-
-                                                {/* My AVG Point */}
-                                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <h3 className="text-sm font-semibold text-gray-600">My AVG Point</h3>
-                                                        <span className="text-sm font-bold text-gray-800">{stats.my_avg_point}%</span>
+                                            {/* Stats Grid */}
+                                            <div className="grid grid-cols-1 gap-4">
+                                                {/* Task for SC */}
+                                                <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+                                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_for_sc.label}</h3>
+                                                    <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
+                                                        <div className="bg-red-500 h-3 rounded-full transition-all duration-500" style={{ width: `${(stats.task_for_sc.completed / Math.max(stats.task_for_sc.total, 1)) * 100}%` }}></div>
                                                     </div>
-                                                    <div className="w-full bg-purple-100 rounded-full h-4 overflow-hidden">
-                                                        <div className="bg-yellow-400 h-4 rounded-full" style={{ width: `${stats.my_avg_point}%` }}></div>
-                                                    </div>
+                                                    <p className="text-xs text-gray-400">{stats.task_for_sc.completed}% Completed</p>
                                                 </div>
 
-                                                {/* Stats Grid */}
-                                                <div className="grid grid-cols-1 gap-4">
-                                                    {/* Task for SC */}
-                                                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-                                                        <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_for_sc.label}</h3>
-                                                        <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
-                                                            <div className="bg-red-500 h-3 rounded-full" style={{ width: `${(stats.task_for_sc.completed / stats.task_for_sc.total) * 100}%` }}></div>
+                                                {/* Task Completed From SM/RM */}
+                                                <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+                                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_from_manager.label}</h3>
+                                                    <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
+                                                        <div className="bg-red-500 h-3 rounded-full transition-all duration-500" style={{ width: `${(stats.task_from_manager.completed / Math.max(stats.task_from_manager.total, 1)) * 100}%` }}></div>
+                                                    </div>
+                                                    <p className="text-xs text-gray-400">{stats.task_from_manager.completed}%</p>
+                                                </div>
+
+                                                {/* Dual Grid for smaller items */}
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
+                                                        <h3 className="text-[10px] font-semibold text-gray-500 mb-3">Task Given (Monthly)</h3>
+                                                        <div className="bg-gray-100 rounded-xl p-2 text-center">
+                                                            <span className="font-bold text-gray-700 text-sm">{stats.monthly_task_given}</span>
                                                         </div>
-                                                        <p className="text-xs text-gray-400">{stats.task_for_sc.completed}% Completed</p>
                                                     </div>
 
-                                                    {/* Task Completed From SM/RM */}
-                                                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-                                                        <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_from_manager.label}</h3>
-                                                        <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
-                                                            <div className="bg-red-500 h-3 rounded-full" style={{ width: `${(stats.task_from_manager.completed / stats.task_from_manager.total) * 100}%` }}></div>
-                                                        </div>
-                                                        <p className="text-xs text-gray-400">{stats.task_from_manager.completed}%</p>
-                                                    </div>
-
-                                                    {/* Dual Grid for smaller items */}
-                                                    <div className="grid grid-cols-2 gap-4">
-                                                        <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
-                                                            <h3 className="text-[10px] font-semibold text-gray-500 mb-3">Task Given (Monthly)</h3>
-                                                            <div className="bg-gray-100 rounded-xl p-2 text-center">
-                                                                <span className="font-bold text-gray-700 text-sm">{stats.monthly_task_given}</span>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
-                                                            <h3 className="text-[10px] font-semibold text-gray-500 mb-3">AVG Service Crew Point</h3>
-                                                            <div className="bg-gray-100 rounded-xl p-2 text-center">
-                                                                <span className="font-bold text-gray-700 text-sm">{stats.avg_service_crew_point}%</span>
-                                                            </div>
+                                                    <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
+                                                        <h3 className="text-[10px] font-semibold text-gray-500 mb-3">AVG Service Crew Point</h3>
+                                                        <div className="bg-gray-100 rounded-xl p-2 text-center">
+                                                            <span className="font-bold text-gray-700 text-sm">{stats.avg_service_crew_point}%</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        );
-                                    })()}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center p-6 text-gray-400">Loading Stats...</div>
+                                    )}
                                 </div>
                             </div>
                         ) : (
@@ -584,43 +606,47 @@ export default function SupervisorDetail({ supervisor }: SupervisorDetailProps) 
                                     </p>
                                 </div>
 
-                                <div className="space-y-6 overflow-y-auto pr-2">
-                                    {/* Daily Stats */}
-                                    <div>
-                                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4">
-                                            <h3 className="text-xs font-semibold text-gray-500 mb-3">Task Given</h3>
-                                            <div className="bg-gray-100 rounded-xl p-3 flex items-center justify-between">
-                                                <span className="font-bold text-gray-700">80 / 8 People</span>
+                                {stats ? (
+                                    <div className="space-y-6 overflow-y-auto pr-2">
+                                        {/* Daily Stats */}
+                                        <div>
+                                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4">
+                                                <h3 className="text-xs font-semibold text-gray-500 mb-3">Task Given</h3>
+                                                <div className="bg-gray-100 rounded-xl p-3 flex items-center justify-between">
+                                                    <span className="font-bold text-gray-700">{stats.daily_task_given || '0 / 0 People'}</span>
+                                                </div>
+                                            </div>
+                                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                                                <h3 className="text-xs font-semibold text-gray-500 mb-3">AVG Service Crew Point Today</h3>
+                                                <div className="bg-gray-100 rounded-xl p-3 relative overflow-hidden h-12 flex items-center px-4">
+                                                    <div className="absolute left-0 top-0 bottom-0 bg-gray-300 opacity-20 transition-all duration-500" style={{ width: `${stats.avg_sc_point_today || 0}%` }}></div>
+                                                    <span className="font-bold text-gray-700 relative z-10">{stats.avg_sc_point_today || 0}%</span>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                                            <h3 className="text-xs font-semibold text-gray-500 mb-3">AVG Service Crew Point Today</h3>
-                                            <div className="bg-gray-100 rounded-xl p-3 relative overflow-hidden h-12 flex items-center px-4">
-                                                <div className="absolute left-0 top-0 bottom-0 bg-gray-300 w-[50%] opacity-20"></div>
-                                                <span className="font-bold text-gray-700 relative z-10">50%</span>
+
+                                        <hr className="border-gray-200" />
+
+                                        {/* Monthly Stats */}
+                                        <div>
+                                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4">
+                                                <h3 className="text-xs font-semibold text-gray-500 mb-3">Task Given (Monthly)</h3>
+                                                <div className="bg-gray-100 rounded-xl p-3 flex items-center justify-between">
+                                                    <span className="font-bold text-gray-700">{stats.monthly_task_given || '0 / 0 People'}</span>
+                                                </div>
+                                            </div>
+                                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                                                <h3 className="text-xs font-semibold text-gray-500 mb-3">AVG Service Crew Point</h3>
+                                                <div className="bg-gray-100 rounded-xl p-3 relative overflow-hidden h-12 flex items-center px-4">
+                                                    <div className="absolute left-0 top-0 bottom-0 bg-gray-300 opacity-20 transition-all duration-500" style={{ width: `${stats.avg_service_crew_point || 0}%` }}></div>
+                                                    <span className="font-bold text-gray-700 relative z-10">{stats.avg_service_crew_point || 0}%</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <hr className="border-gray-200" />
-
-                                    {/* Monthly Stats */}
-                                    <div>
-                                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4">
-                                            <h3 className="text-xs font-semibold text-gray-500 mb-3">Task Given (Monthly)</h3>
-                                            <div className="bg-gray-100 rounded-xl p-3 flex items-center justify-between">
-                                                <span className="font-bold text-gray-700">240 / 8 People</span>
-                                            </div>
-                                        </div>
-                                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                                            <h3 className="text-xs font-semibold text-gray-500 mb-3">AVG Service Crew Point</h3>
-                                            <div className="bg-gray-100 rounded-xl p-3 relative overflow-hidden h-12 flex items-center px-4">
-                                                <div className="absolute left-0 top-0 bottom-0 bg-gray-300 w-[70%] opacity-20"></div>
-                                                <span className="font-bold text-gray-700 relative z-10">70%</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                ) : (
+                                    <div className="text-center p-6 text-gray-400">Loading Stats...</div>
+                                )}
                             </>
                         )
                     ) : (

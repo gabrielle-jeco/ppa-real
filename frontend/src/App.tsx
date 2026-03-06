@@ -11,6 +11,7 @@ import CrewMobileApp from './mobile - crew/CrewMobileApp';
 function App() {
   const [user, setUser] = useState<any>(null);
   const [activeSupervisorPage, setActiveSupervisorPage] = useState<'employees' | 'performance'>('employees');
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user_data');
@@ -36,10 +37,15 @@ function App() {
     // Initial check
     updateThemeColor();
 
-    // Listen to resize
+    // Mobile detection (reactive to resize) + theme color update
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', updateThemeColor);
+    window.addEventListener('resize', handleResize);
 
-    return () => window.removeEventListener('resize', updateThemeColor);
+    return () => {
+      window.removeEventListener('resize', updateThemeColor);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   // Simplified Auth Flow for Phase 2 Verification
@@ -69,12 +75,6 @@ function App() {
 
   // Supervisor Flow
   if (user.role_type === 'supervisor') {
-    // Simple mobile check (you can move this to a hook later if needed)
-    const isMobile = window.innerWidth < 768;
-
-    // Re-check on resize (optional for dev convenience)
-    // useEffect(() => { ... }) - omitted for brevity, initial check is usually enough for "Load as Mobile"
-
     if (isMobile) {
       return <SupervisorMobileApp />;
     }
@@ -94,7 +94,6 @@ function App() {
     );
   }
 
-  // Crew Flow
   // Crew Flow
   if (user.role_type === 'crew' || user.role_type === 'employee') {
     return <CrewMobileApp user={user} onLogout={handleLogout} />;

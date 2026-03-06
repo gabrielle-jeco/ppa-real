@@ -22,7 +22,7 @@ export default function OfflineAlert() {
     return (
         <div className="fixed top-0 left-0 right-0 bg-red-500 text-white z-[99999] px-4 py-2 flex items-center justify-center gap-2 shadow-md animate-fade-in-down">
             <WifiOff size={16} />
-            <span className="text-sm font-bold">You are currently offline. Using cached data.</span>
+            <span className="text-sm font-bold">You are currently offline. Can't connect to server.</span>
         </div>
     );
 }

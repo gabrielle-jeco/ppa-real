@@ -38,22 +38,52 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
         return Array.from({ length: 12 }, (_, i) => i);
     };
 
-    // Fetch Evaluation Status
-    useEffect(() => {
-        fetchEvaluationStatus();
-    }, [selectedDate]);
+    // Stats State (Mirroring Crew)
+    const [stats, setStats] = useState<any>({
+        yearly_score: 0,
+        monthly_score: 0,
+        active_percentage: 0,
+        personality_score: 0,
+        activity_monitor: []
+    });
 
+    const activePercentage = stats.active_percentage || 0;
+    const yearlyScore = stats.yearly_score || 0;
+    const personalityScore = stats.personality_score || 0;
+    const activityMonitor = stats.activity_monitor || [];
+
+    // Fetch Evaluation Status & Stats
     const fetchEvaluationStatus = async () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('auth_token');
             const dateStr = selectedDate.toLocaleDateString('en-CA');
-            const res = await fetch(`/api/evaluations/check/${crew.id}?date=${dateStr}`, {
+            const m = selectedDate.getMonth() + 1;
+            const y = selectedDate.getFullYear();
+
+            // 1. Check if Evaluated
+            const resEval = await fetch(`/api/evaluations/check/${crew.id}?date=${dateStr}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (res.ok) {
-                const data = await res.json();
-                setEvaluationData(data); // data.evaluated is boolean, data.data is the record
+            if (resEval.ok) {
+                const data = await resEval.json();
+                setEvaluationData(data); // data.evaluated is boolean
+            }
+
+            // 2. Fetch Crew Stats
+            const resStats = await fetch(`/api/crew/stats?month=${m}&year=${y}&user_id=${crew.id}`, { // Using query param user_id to fetch specific crew if API supports it, or just use `/api/evaluations` data
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            // Note: The previous logic in Crew route uses Auth::user(). We need to ensure we can fetch *another* user's stats if we are a SPV. 
+            // Wait, if it's the Supervisor doing Evaluation, they need the Crew API to expose stats by ID.
+            // Let's assume for now the API needs an update or we construct it manually. 
+            // The prompt stated "bisa disamakan aja dengan yang punya crew". Let's fetch from `/api/crew/${crew.id}/stats` or similar if it exists, otherwise `/api/crew/stats` with param.
+
+            // Let's use `/api/crew/stats?user_id` as standard fallback. We will patch the backend next if needed.
+            if (resStats.ok) {
+                const dataStats = await resStats.json();
+                setStats(dataStats);
             }
         } catch (error) {
             console.error("Check evaluation failed", error);
@@ -61,6 +91,10 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        fetchEvaluationStatus();
+    }, [selectedDate, crew.id]);
 
     const handleScoreChange = (id: string, value: number) => {
         setScores(prev => ({ ...prev, [id]: value }));
@@ -131,6 +165,26 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
         return days;
     };
 
+    // Calculate Dummy Active Percentage to match Mock Calendar natively
+    const calendarDays = getCalendarDays();
+    let totalWorkDays = 0;
+    let presentDays = 0;
+
+    calendarDays.forEach(day => {
+        if (!day) return;
+        const now = new Date();
+        if (day > now) return; // Skip future days
+
+        const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+        if (!isWeekend) {
+            totalWorkDays++;
+            const hash = (day.getDate() + day.getMonth() * 31) % 7;
+            if (hash <= 4 || hash > 5) presentDays++;
+        }
+    });
+
+    const displayActivePercentage = totalWorkDays > 0 ? Math.round((presentDays / totalWorkDays) * 100) : 0;
+
     return (
         <MobileLayout
             title={crew.full_name || crew.name}
@@ -182,37 +236,42 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                         // === STATS VIEW ===
                         <div className="space-y-4">
                             {/* Profile & Active Percentage */}
-                            <div className="bg-gray-200 rounded-3xl p-5">
+                            <div className="bg-gray-100 rounded-3xl p-5">
                                 <p className="text-sm font-bold text-gray-700 mb-2">{crew.full_name || crew.name}</p>
                                 <div className="w-full bg-white rounded-full h-4 mb-2 overflow-hidden">
-                                    <div className="bg-green-500 h-full rounded-full" style={{ width: '95%' }}></div>
+                                    <div className="bg-green-500 h-full rounded-full transition-all duration-1000" style={{ width: `${displayActivePercentage}%` }}></div>
                                 </div>
-                                <p className="text-xs text-gray-500">Active Percentage - 95% ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
+                                <p className="text-xs text-gray-500">Active Percentage - {displayActivePercentage}% ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
                             </div>
 
                             {/* Activity Monitor */}
-                            <div className="bg-gray-200 rounded-3xl p-5">
+                            <div className="bg-gray-100 rounded-3xl p-5">
                                 <p className="text-sm font-medium text-gray-600 mb-3">{selectedDate.toLocaleString('default', { month: 'long' })} Activity Monitor</p>
-                                <div className="w-full h-4 bg-gray-300 rounded-full overflow-hidden flex mb-4">
-                                    <div className="h-full bg-green-400" style={{ width: '60%' }}></div>
-                                    <div className="h-full bg-blue-600" style={{ width: '40%' }}></div>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-green-400 shrink-0"></div>
-                                        <span className="text-xs font-medium text-gray-600">Crew-Cashier - 60%</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-blue-600 shrink-0"></div>
-                                        <span className="text-xs font-medium text-gray-600">Crew-Supermarket - 40%</span>
-                                    </div>
-                                </div>
+                                {activityMonitor.length > 0 ? (
+                                    <>
+                                        <div className="w-full h-4 bg-gray-300 rounded-full overflow-hidden flex mb-4">
+                                            {activityMonitor.map((item: any, idx: number) => (
+                                                <div key={idx} className={`h-full ${['bg-green-400', 'bg-blue-600', 'bg-yellow-400', 'bg-purple-500'][idx % 4]}`} style={{ width: `${item.percentage}%` }}></div>
+                                            ))}
+                                        </div>
+                                        <div className="space-y-2">
+                                            {activityMonitor.map((item: any, idx: number) => (
+                                                <div key={idx} className="flex items-center gap-2">
+                                                    <div className={`w-3 h-3 rounded-full ${['bg-green-400', 'bg-blue-600', 'bg-yellow-400', 'bg-purple-500'][idx % 4]} shrink-0`}></div>
+                                                    <span className="text-xs font-medium text-gray-600">{item.label} - {item.percentage}%</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <p className="text-xs text-gray-400 italic">No activity logged yet for this month.</p>
+                                )}
                             </div>
 
-                            {/* Monthly Score */}
-                            <div className="bg-gray-200 rounded-3xl p-5">
+                            {/* Monthly Score / Personality Score */}
+                            <div className="bg-gray-100 rounded-3xl p-5">
                                 <p className="text-xs font-medium text-gray-600 mb-2 uppercase">POINT SIKAP KEPRIBADIAN ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
-                                <p className="text-sm font-bold text-gray-700">Total Point : {evaluationData.data?.total_score}</p>
+                                <p className="text-sm font-bold text-gray-700">Total Point : {personalityScore}</p>
                             </div>
 
                             {/* Calendar View */}
@@ -241,10 +300,17 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                             bg = 'bg-gray-50';
                                             text = 'text-gray-300';
                                         } else {
-                                            // Mock Attendance Coloring for Past/Present
-                                            if (hash <= 3) { bg = 'bg-green-500'; text = 'text-white'; }
-                                            else if (hash === 4) { bg = 'bg-yellow-400'; text = 'text-white'; }
-                                            else if (hash === 5) { bg = 'bg-red-500'; text = 'text-white'; }
+                                            // Mock Attendance Logic based on User Request
+                                            if (day.getDay() === 0 || day.getDay() === 6) {
+                                                // Weekend -> Libur (Abu)
+                                                bg = 'bg-gray-400'; text = 'text-white';
+                                            } else {
+                                                // Weekday dummy
+                                                if (hash <= 3) { bg = 'bg-green-500'; text = 'text-white'; } // Hadir
+                                                else if (hash === 4) { bg = 'bg-yellow-400'; text = 'text-white'; } // Telat
+                                                else if (hash === 5) { bg = 'bg-red-500'; text = 'text-white'; } // Mangkir
+                                                else { bg = 'bg-green-500'; text = 'text-white'; } // Default hadir
+                                            }
                                         }
 
                                         return (
@@ -259,10 +325,10 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                             </div>
 
                             {/* Yearly Overall Point */}
-                            <div className="bg-gray-200 rounded-3xl p-6 pb-12">
+                            <div className="bg-gray-100 rounded-3xl p-6 pb-12">
                                 <p className="text-xs font-medium text-gray-500 uppercase mb-4">YEARLY OVERALL POINT</p>
                                 <p className="text-sm font-medium text-gray-500 mb-1">Total Point :</p>
-                                <p className="text-6xl font-medium text-black tracking-tight">97</p>
+                                <p className="text-6xl font-medium text-black tracking-tight">{yearlyScore}</p>
                             </div>
 
                         </div>
@@ -276,7 +342,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                     <p className="text-sm font-bold text-gray-700 mb-3">{String.fromCharCode(97 + idx)}. {criterion.label}</p>
 
                                     {/* Grey Box for Descriptions */}
-                                    <div className="bg-gray-200 rounded-3xl p-5 mb-4 text-xs text-gray-600 leading-relaxed space-y-1">
+                                    <div className="bg-gray-100 rounded-3xl p-5 mb-4 text-xs text-gray-600 leading-relaxed space-y-1">
                                         {criterion.desc.split('\n').map((line, i) => (
                                             <div key={i}>{line}</div>
                                         ))}

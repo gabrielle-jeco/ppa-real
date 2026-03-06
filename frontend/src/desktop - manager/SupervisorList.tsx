@@ -62,7 +62,7 @@ export default function SupervisorList({ data, selectedId, onSelect, selectedLoc
                 <div className="mb-2">
                     <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden mb-2">
                         <div
-                            className="bg-primary h-2.5 rounded-full"
+                            className="bg-primary h-2.5 rounded-full transition-all duration-500"
                             style={{ width: `${location_avg_progress}%` }}
                         ></div>
                     </div>
@@ -99,7 +99,7 @@ export default function SupervisorList({ data, selectedId, onSelect, selectedLoc
                         <div className="space-y-2">
                             <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
                                 <div
-                                    className={`h-3 rounded-full ${getProgressColor(spv.activity_percentage)}`}
+                                    className={`h-3 rounded-full transition-all duration-500 ${getProgressColor(spv.activity_percentage)}`}
                                     style={{ width: `${spv.activity_percentage}%` }}
                                 ></div>
                             </div>

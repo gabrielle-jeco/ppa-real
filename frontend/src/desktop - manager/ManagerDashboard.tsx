@@ -12,13 +12,14 @@ export default function ManagerDashboard() {
         fetchDashboardData();
     }, []);
 
-    const fetchDashboardData = async (locationId: string = "") => {
+    const fetchDashboardData = async (locationId?: string) => {
+        const filterLocation = locationId !== undefined ? locationId : selectedLocationId;
         try {
             const token = localStorage.getItem('auth_token');
             if (!token) return;
 
-            const url = locationId
-                ? `/api/manager/supervisors?location_id=${locationId}`
+            const url = filterLocation
+                ? `/api/manager/supervisors?location_id=${filterLocation}`
                 : `/api/manager/supervisors`;
 
             const response = await fetch(url, {
@@ -32,11 +33,9 @@ export default function ManagerDashboard() {
                 const data = await response.json();
                 setDashboardData(data);
 
-                // Select first supervisor by default if available
-                if (data.supervisors && data.supervisors.length > 0) {
+                // Only auto-select first supervisor if none is selected yet
+                if (!selectedSupervisorId && data.supervisors && data.supervisors.length > 0) {
                     setSelectedSupervisorId(data.supervisors[0].id);
-                } else {
-                    setSelectedSupervisorId(null);
                 }
             }
         } catch (error) {
@@ -75,7 +74,7 @@ export default function ManagerDashboard() {
             {/* Right: Detailed View */}
             <div className="flex-1 overflow-hidden relative">
                 {selectedSupervisor ? (
-                    <SupervisorDetail supervisor={selectedSupervisor} />
+                    <SupervisorDetail supervisor={selectedSupervisor} onTaskChange={() => fetchDashboardData()} />
                 ) : (
                     <div className="h-full flex items-center justify-center text-gray-400">Select a supervisor to view details</div>
                 )}

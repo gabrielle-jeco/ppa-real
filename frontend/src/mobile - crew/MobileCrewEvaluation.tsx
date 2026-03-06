@@ -1,19 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 
 interface MobileCrewEvaluationProps {
     onBack: () => void;
+    user?: any;
 }
 
-export default function MobileCrewEvaluation({ onBack }: MobileCrewEvaluationProps) {
+export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluationProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [stats, setStats] = useState<any>({
+        yearly_score: 0,
+        monthly_score: 0,
+        active_percentage: 0,
+        personality_score: 0,
+        activity_monitor: []
+    });
 
-    // Mock Data for Crew View
-    const crewName = "Raymond R.";
-    const activePercentage = 95;
-    const yearlyScore = 97;
-    const monthlyScore = 80;
+    // Fetch Stats when Date changes
+    useEffect(() => {
+        const fetchEvaluation = async () => {
+            const m = selectedDate.getMonth() + 1;
+            const y = selectedDate.getFullYear();
+            try {
+                const response = await fetch(`/api/crew/stats?month=${m}&year=${y}`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setStats(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch evaluation stats", error);
+            }
+        };
+        fetchEvaluation();
+    }, [selectedDate]);
+
+    // Live Data
+    const crewName = user?.name || "Crew Member";
+    const activePercentage = stats.active_percentage || 0;
+    const yearlyScore = stats.yearly_score || 0;
+    const personalityScore = stats.personality_score || 0;
+    const activityMonitor = stats.activity_monitor || [];
 
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth();
@@ -47,6 +76,28 @@ export default function MobileCrewEvaluation({ onBack }: MobileCrewEvaluationPro
         for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
         return days;
     };
+
+    // Calculate Dummy Active Percentage to match Mock Calendar natively
+    const calendarDays = getCalendarDays();
+    let totalWorkDays = 0;
+    let presentDays = 0;
+
+    calendarDays.forEach(day => {
+        if (!day) return;
+        const now = new Date();
+        if (day > now) return; // Skip future days
+
+        const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+        if (!isWeekend) {
+            totalWorkDays++;
+            const hash = (day.getDate() + day.getMonth() * 31) % 7;
+            // <= 3 (Hadir), 4 (Telat - counts as present?), 5 (Mangkir). Only <= 4 are "present".
+            if (hash <= 4 || hash > 5) presentDays++;
+        }
+    });
+
+    // Override the DB % with the Dummy UI Mock percentage since YoAbsen API is missing
+    const displayActivePercentage = totalWorkDays > 0 ? Math.round((presentDays / totalWorkDays) * 100) : 0;
 
     return (
         <CrewLayout
@@ -94,45 +145,47 @@ export default function MobileCrewEvaluation({ onBack }: MobileCrewEvaluationPro
                     </div>
                 </div>
 
-                {/* 2. Stats View (Directly mirrored from Supervisor MobileCrewEvaluation) */}
+                {/* 2. Stats View */}
                 <div className="space-y-4">
-
-                    {/* Calendar View (Moved UP to match Mockup closer, or keep Supervisor order? User said "match Supervisor". Supervisor has Calendar lower. But Mockup has it higher. I will stick to Supervisor exact order first to be "consistent with code", or match Mockup? The user said "compare supervisor and crew... layout... is it same?". I'll match Supervisor's order for consistency between apps.) */}
-                    {/* Actually, looking at the code I read in 3607, Calendar WAS lower. I'll paste it lower to match Supervisor EXACTLY. */}
 
                     {/* Profile & Active Percentage */}
                     <div className="bg-gray-100 rounded-3xl p-5">
-                        {/* Note: Supervisor used bg-gray-200. I'll use gray-100 for slightly cleaner look but similar vibe, or just 200. Let's use 100 to avoid looking too dirty on some screens, or match exact? Let's match exact 200 if that's what supervisor looks like. */}
                         <p className="text-sm font-bold text-gray-700 mb-2">{crewName}</p>
                         <div className="w-full bg-white rounded-full h-4 mb-2 overflow-hidden">
-                            <div className="bg-green-500 h-full rounded-full" style={{ width: `${activePercentage}%` }}></div>
+                            <div className="bg-green-500 h-full rounded-full transition-all duration-1000" style={{ width: `${displayActivePercentage}%` }}></div>
                         </div>
-                        <p className="text-xs text-gray-500">Active Percentage - {activePercentage}% ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
+                        <p className="text-xs text-gray-500">Active Percentage - {displayActivePercentage}% ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
                     </div>
 
                     {/* Activity Monitor */}
                     <div className="bg-gray-100 rounded-3xl p-5">
                         <p className="text-sm font-medium text-gray-600 mb-3">{selectedDate.toLocaleString('default', { month: 'long' })} Activity Monitor</p>
-                        <div className="w-full h-4 bg-gray-300 rounded-full overflow-hidden flex mb-4">
-                            <div className="h-full bg-green-400" style={{ width: '60%' }}></div>
-                            <div className="h-full bg-blue-600" style={{ width: '40%' }}></div>
-                        </div>
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-green-400 shrink-0"></div>
-                                <span className="text-xs font-medium text-gray-600">Crew-Cashier - 60%</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-blue-600 shrink-0"></div>
-                                <span className="text-xs font-medium text-gray-600">Crew-Supermarket - 40%</span>
-                            </div>
-                        </div>
+
+                        {activityMonitor.length > 0 ? (
+                            <>
+                                <div className="w-full h-4 bg-gray-300 rounded-full overflow-hidden flex mb-4">
+                                    {activityMonitor.map((item: any, idx: number) => (
+                                        <div key={idx} className={`h-full ${['bg-green-400', 'bg-blue-600', 'bg-yellow-400', 'bg-purple-500'][idx % 4]}`} style={{ width: `${item.percentage}%` }}></div>
+                                    ))}
+                                </div>
+                                <div className="space-y-2">
+                                    {activityMonitor.map((item: any, idx: number) => (
+                                        <div key={idx} className="flex items-center gap-2">
+                                            <div className={`w-3 h-3 rounded-full ${['bg-green-400', 'bg-blue-600', 'bg-yellow-400', 'bg-purple-500'][idx % 4]} shrink-0`}></div>
+                                            <span className="text-xs font-medium text-gray-600">{item.label} - {item.percentage}%</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <p className="text-xs text-gray-400 italic">No activity logged yet for this month.</p>
+                        )}
                     </div>
 
-                    {/* Monthly Score */}
+                    {/* Personality Score */}
                     <div className="bg-gray-100 rounded-3xl p-5">
                         <p className="text-xs font-medium text-gray-600 mb-2 uppercase">POINT SIKAP KEPRIBADIAN ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
-                        <p className="text-sm font-bold text-gray-700">Total Point : {monthlyScore}</p>
+                        <p className="text-sm font-bold text-gray-700">Total Point : {personalityScore}</p>
                     </div>
 
                     {/* Calendar View */}
@@ -160,10 +213,17 @@ export default function MobileCrewEvaluation({ onBack }: MobileCrewEvaluationPro
                                     bg = 'bg-gray-50';
                                     text = 'text-gray-300';
                                 } else {
-                                    // Mock Attendance
-                                    if (hash <= 3) { bg = 'bg-green-500'; text = 'text-white'; }
-                                    else if (hash === 4) { bg = 'bg-yellow-400'; text = 'text-white'; }
-                                    else if (hash === 5) { bg = 'bg-red-500'; text = 'text-white'; }
+                                    // Mock Attendance Logic based on User Request
+                                    if (day.getDay() === 0 || day.getDay() === 6) {
+                                        // Weekend -> Libur (Abu)
+                                        bg = 'bg-gray-400'; text = 'text-white';
+                                    } else {
+                                        // Weekday dummy
+                                        if (hash <= 3) { bg = 'bg-green-500'; text = 'text-white'; } // Hadir
+                                        else if (hash === 4) { bg = 'bg-yellow-400'; text = 'text-white'; } // Telat
+                                        else if (hash === 5) { bg = 'bg-red-500'; text = 'text-white'; } // Mangkir
+                                        else { bg = 'bg-green-500'; text = 'text-white'; } // Default hadir
+                                    }
                                 }
 
                                 return (

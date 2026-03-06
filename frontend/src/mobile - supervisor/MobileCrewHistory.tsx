@@ -10,9 +10,8 @@ interface MobileCrewHistoryProps {
 
 export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
-    const [viewMode, setViewMode] = useState<'ACTIVITY' | 'TASKS'>('ACTIVITY');
+    const [viewMode, setViewMode] = useState<'ACTIVITY' | 'TASKS'>('TASKS');
     const [showRoleDropdown, setShowRoleDropdown] = useState(false);
-    const [tasks, setTasks] = useState<any[]>([]); // For Task History
 
     // Preview State
     const [previewTask, setPreviewTask] = useState<any>(null);
@@ -33,36 +32,42 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
         return Array.from({ length: 12 }, (_, i) => i);
     };
 
-    // Mock Activity Logs
-    const [activityLogs] = useState([
-        { time: '08:00', role: 'Crew - Supermarket', action: 'Clock In' },
-        { time: '10:00', role: 'Crew - Cashier', action: 'Break Start' },
-        { time: '15:00', role: 'Crew - Supermarket', action: 'Task Complete' },
-        { time: '16:00', role: 'Crew - Cashier', action: 'Clock Out' },
-        { time: '18:00', role: 'System', action: 'Auto-Report' },
-    ]);
+    // Real Data State
+    const [tasks, setTasks] = useState<any[]>([]); // For Task History
+    const [activityLogs, setActivityLogs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
 
+    // Fetch Tasks & Activities
     useEffect(() => {
-        if (viewMode === 'TASKS') {
-            fetchTasks();
-        }
-    }, [selectedDate, viewMode]);
+        const fetchData = async () => {
+            if (!crew?.id) return;
 
-    const fetchTasks = async () => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            const dateStr = selectedDate.toLocaleDateString('en-CA');
-            const res = await fetch(`/api/crews/${crew.id}/tasks?date=${dateStr}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setTasks(data);
+            setLoading(true);
+            try {
+                const dateStr = selectedDate.toLocaleDateString('en-CA');
+                const token = localStorage.getItem('auth_token') || '';
+
+                const taskReq = fetch(`/api/crews/${crew.id}/tasks?date=${dateStr}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const activityReq = fetch(`/api/crew/activity-logs?date=${dateStr}&user_id=${crew.id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const [taskRes, activityRes] = await Promise.all([taskReq, activityReq]);
+
+                if (taskRes.ok) setTasks(await taskRes.json());
+                if (activityRes.ok) setActivityLogs(await activityRes.json());
+            } catch (error) {
+                console.error("Failed to fetch history data", error);
+            } finally {
+                setLoading(false);
             }
-        } catch (error) {
-            console.error("Failed to fetch crew tasks", error);
-        }
-    };
+        };
+
+        fetchData();
+    }, [selectedDate, viewMode, crew?.id]);
 
     const handleViewPhoto = (task: any) => {
         setPreviewTask(task);
@@ -244,15 +249,21 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                     <div className="overflow-y-auto flex-1 pb-20 -mx-2 px-2 space-y-3">
                         {viewMode === 'ACTIVITY' ? (
                             // Activity Logs
-                            activityLogs.map((log, idx) => (
-                                <div key={idx} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between border border-transparent hover:border-gray-200 transition">
-                                    <div className="flex flex-col gap-0.5">
-                                        <span className="text-gray-800 font-bold text-sm">{log.role}</span>
-                                        <span className="text-gray-400 text-[10px] italic">{log.action}</span>
+                            activityLogs.length > 0 ? (
+                                activityLogs.map((log, idx) => (
+                                    <div key={idx} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between border border-transparent hover:border-gray-200 transition">
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-gray-800 font-bold text-sm capitalize">{log.role}</span>
+                                            <span className="text-gray-400 text-[10px] italic capitalize">{log.action ? log.action.replace('_', ' ') : 'Role Change'}</span>
+                                        </div>
+                                        <span className="text-gray-500 text-xs font-semibold bg-white px-2 py-1 rounded-lg shadow-sm border border-gray-100">{log.time}</span>
                                     </div>
-                                    <span className="text-gray-500 text-xs font-semibold bg-white px-2 py-1 rounded-lg shadow-sm border border-gray-100">{log.time}</span>
+                                ))
+                            ) : (
+                                <div className="text-center py-8 text-gray-400 text-xs">
+                                    No activity recorded for this date.
                                 </div>
-                            ))
+                            )
                         ) : (
                             // Task History
                             tasks.length > 0 ? (
@@ -261,7 +272,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                         <div className="flex items-center gap-3 flex-1 min-w-0">
                                             <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${task.status === 'approved' ? 'bg-blue-100 border-blue-500 text-blue-600' : 'border-gray-300 bg-white'
                                                 }`}>
-                                                {task.status === 'approved' && <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>}
+                                                {task.status === 'approved' && <span className="font-bold text-xs">✓</span>}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-bold text-gray-800 text-sm line-clamp-1 mb-0.5">{task.title}</p>

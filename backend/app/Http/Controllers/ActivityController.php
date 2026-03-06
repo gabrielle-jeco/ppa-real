@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
 use App\Models\WorkStation;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 
 class ActivityController extends Controller
@@ -70,5 +71,47 @@ class ActivityController extends Controller
     {
         $stations = WorkStation::all();
         return response()->json($stations);
+    }
+
+    /**
+     * Get user's activity logs.
+     * Route: GET /api/crew/activity-logs
+     */
+    public function getLogs(Request $request)
+    {
+        $authUser = Auth::user();
+        $targetUserId = $request->query('user_id', $authUser->id);
+
+        $user = User::find($targetUserId);
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        // Authorization logic
+        if ($authUser->id != $user->id) {
+            // Must be superior to view other's activity logs
+            if ($authUser->role_type !== 'supervisor' && $authUser->role_type !== 'manager') {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+        }
+
+        $dateStr = $request->query('date', now()->toDateString());
+
+        $logs = ActivityLog::with('workStation')
+            ->where('user_id', $user->id)
+            ->whereDate('created_at', $dateStr)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($log) {
+                return [
+                    'id' => $log->id,
+                    'type' => 'role_change',
+                    'role' => $log->workStation ? $log->workStation->name : 'Unknown',
+                    'time' => $log->created_at->format('H:i'),
+                    'action' => $log->action
+                ];
+            });
+
+        return response()->json($logs);
     }
 }

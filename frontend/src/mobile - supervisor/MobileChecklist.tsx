@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Check, ChevronDown } from 'lucide-react';
+import { Camera, ChevronDown } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileTaskPreview from './MobileTaskPreview';
 import MobileSupervisorTaskDetail from './MobileSupervisorTaskDetail';
@@ -196,9 +196,9 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                                 Completed {completedCount}/{totalCount}
                             </p>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div className="w-full bg-gray-100 rounded-full h-3">
                             <div
-                                className="bg-blue-300 h-3 rounded-full transition-all duration-500"
+                                className="bg-blue-600 h-3 rounded-full transition-all duration-500"
                                 style={{ width: `${progress}%` }}
                             ></div>
                         </div>
@@ -228,12 +228,12 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                                 <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between group border border-transparent hover:border-gray-200 transition">
                                     <div className="flex items-start gap-3 flex-1">
                                         {/* Status Indicator (Read Only) */}
-                                        <div className={`w-5 h-5 rounded border-2 mt-1 flex items-center justify-center transition-colors flex-shrink-0 cursor-default
+                                        <div className={`w-5 h-5 rounded-md border-2 mt-1 flex items-center justify-center transition-colors flex-shrink-0 cursor-default
                                     ${isApproved
-                                                ? 'bg-green-100 border-green-500 text-green-600'
+                                                ? 'bg-blue-100 border-blue-500 text-blue-600'
                                                 : 'border-gray-300 bg-gray-50'}`}
                                         >
-                                            {isApproved && <Check size={14} strokeWidth={3} />}
+                                            {isApproved && <span className="font-bold text-xs">✓</span>}
                                         </div>
 
                                         <div className="flex-1 min-w-0 pr-2">

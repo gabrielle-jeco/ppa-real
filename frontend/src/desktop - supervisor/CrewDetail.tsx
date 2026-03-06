@@ -7,13 +7,11 @@ import SubmissionHistory from './SubmissionHistory';
 
 interface CrewDetailProps {
     crew: any;
+    onTaskChange?: () => void;
 }
 
-export default function CrewDetail({ crew }: CrewDetailProps) {
-    const [tasks, setTasks] = useState<any[]>([]); // Tasks for the Crew
-    // Removed My Tasks logic
-    // Removed My Tasks logic
-
+export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
+    const [tasks, setTasks] = useState<any[]>([]);
 
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
 
@@ -23,21 +21,31 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
     const [viewMode, setViewMode] = useState<'TASKS' | 'EVALUATION'>('TASKS');
     const [todayEvaluation, setTodayEvaluation] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [activityLogs, setActivityLogs] = useState<any[]>([]);
+    const [evalStats, setEvalStats] = useState<any>(null);
 
     useEffect(() => {
         if (crew?.id) {
             fetchTasks();
             fetchEvaluationStatus();
+            fetchActivityLogs();
             setRightPanelMode('ACTIVITY');
             setViewMode('TASKS');
-            // setActiveTab('CREW');
         }
     }, [crew?.id]);
 
     useEffect(() => {
         fetchTasks();
         fetchEvaluationStatus();
+        fetchActivityLogs();
     }, [selectedDate]);
+
+    // Fetch eval stats when crew or month changes
+    useEffect(() => {
+        if (crew?.id) {
+            fetchEvalStats();
+        }
+    }, [crew?.id, selectedDate]);
 
     // Fetch Crew's Tasks
     const fetchTasks = async () => {
@@ -74,6 +82,40 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
         }
     };
 
+    // Fetch Activity Logs for this crew on selected date
+    const fetchActivityLogs = async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const dateStr = selectedDate.toLocaleDateString('en-CA');
+            const res = await fetch(`/api/crew/activity-logs?user_id=${crew.id}&date=${dateStr}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setActivityLogs(data);
+            }
+        } catch (error) {
+            console.error("Fetch activity logs failed", error);
+        }
+    };
+
+    // Fetch Crew Eval Stats (Activity Monitor, Personality, Yearly Score)
+    const fetchEvalStats = async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const m = selectedDate.getMonth() + 1;
+            const y = selectedDate.getFullYear();
+            const res = await fetch(`/api/supervisor/crew/${crew.id}/eval-stats?month=${m}&year=${y}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setEvalStats(data);
+            }
+        } catch (error) {
+            console.error("Fetch eval stats failed", error);
+        }
+    };
 
     const isToday = (date: Date) => {
         const today = new Date();
@@ -107,7 +149,10 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
                     ...taskData
                 })
             });
-            if (res.ok) fetchTasks();
+            if (res.ok) {
+                fetchTasks();
+                onTaskChange?.();
+            }
         } catch (error) {
             console.error("Add task failed", error);
         }
@@ -122,6 +167,7 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setTasks(tasks.filter(t => t.task_id !== taskId));
+            onTaskChange?.();
         } catch (error) {
             console.error("Delete failed", error);
         }
@@ -140,6 +186,7 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
                 },
                 body: JSON.stringify({ status: newStatus })
             });
+            onTaskChange?.();
         } catch (error) {
             console.error("Status update failed", error);
             fetchTasks();
@@ -179,14 +226,9 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
 
     const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-    // Dummy Activity Log Data (Crew Roles History)
-    const activityLogs = [
-        { time: '08.00', role: 'Crew - Supermarket' },
-        { time: '10.00', role: 'Crew - Cashier' },
-        { time: '15.00', role: 'Crew - Supermarket' },
-        { time: '16.00', role: 'Crew - Cashier' },
-        { time: '18.00', role: 'Crew - Supermarket' },
-    ];
+    // Activity Monitor colors for bar chart
+    const monitorColors = ['bg-green-400', 'bg-purple-500', 'bg-blue-400', 'bg-yellow-400', 'bg-red-400', 'bg-pink-400'];
+    const dotColors = ['bg-green-400', 'bg-purple-500', 'bg-blue-400', 'bg-yellow-400', 'bg-red-400', 'bg-pink-400'];
 
     const currentList = tasks;
 
@@ -209,7 +251,7 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                         <h2 className="text-xl font-bold text-primary mb-1">{crew.name}</h2>
                         <p className="text-xs text-gray-500 mb-4">
-                            Role as <span className="underline decoration-primary">Crew (Fashion)</span> <br />
+                            Role as <span className="underline decoration-primary">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : crew.role || 'Crew'}</span> <br />
                             Today
                         </p>
                         <button
@@ -405,7 +447,7 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
                                                 className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${task.status === 'approved' ? 'bg-purple-100 border-primary text-primary' : 'border-gray-300'
                                                     } ${(isToday(selectedDate)) ? 'cursor-pointer hover:border-primary' : 'cursor-default opacity-60'}`}
                                             >
-                                                {task.status === 'approved' && <span className="font-bold">✓</span>}
+                                                {task.status === 'approved' && <span className="font-bold text-xs">✓</span>}
                                             </div>
                                             <div className="flex-1">
                                                 <p className={`text-sm font-medium ${task.status === 'approved' ? 'text-gray-800' : 'text-gray-600'}`}>{task.title}</p>
@@ -468,21 +510,26 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
                                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
                                         <h3 className="text-sm font-semibold text-gray-600 mb-4">{selectedDate.toLocaleDateString('en-US', { month: 'long' })} Activity Monitor</h3>
 
-                                        <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex mb-4">
-                                            <div className="h-full bg-green-400" style={{ width: '60%' }}></div>
-                                            <div className="h-full bg-purple-500" style={{ width: '40%' }}></div>
-                                        </div>
+                                        {evalStats?.activity_monitor && evalStats.activity_monitor.length > 0 ? (
+                                            <>
+                                                <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex mb-4">
+                                                    {evalStats.activity_monitor.map((item: any, idx: number) => (
+                                                        <div key={idx} className={`h-full ${monitorColors[idx % monitorColors.length]}`} style={{ width: `${item.percentage}%` }}></div>
+                                                    ))}
+                                                </div>
 
-                                        <div className="space-y-3">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                                                <span className="text-xs font-medium text-gray-600">Crew-Cashier - 60%</span>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                                                <span className="text-xs font-medium text-gray-600">Crew-Supermarket - 40%</span>
-                                            </div>
-                                        </div>
+                                                <div className="space-y-3">
+                                                    {evalStats.activity_monitor.map((item: any, idx: number) => (
+                                                        <div key={idx} className="flex items-center gap-3">
+                                                            <div className={`w-3 h-3 rounded-full ${dotColors[idx % dotColors.length]}`}></div>
+                                                            <span className="text-xs font-medium text-gray-600">{item.label} - {item.percentage}%</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <p className="text-xs text-gray-400 italic">No activity data this month.</p>
+                                        )}
                                     </div>
 
                                     {/* Result Card */}
@@ -517,7 +564,7 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
                                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">YEARLY OVERALL POINT</h3>
                                         <p className="text-sm font-medium text-gray-400 mb-1">Total Point :</p>
                                         <div className="text-6xl font-light text-black tracking-tighter">
-                                            97
+                                            {evalStats?.yearly_score ?? '-'}
                                         </div>
                                     </div>
                                 </div>
@@ -532,15 +579,18 @@ export default function CrewDetail({ crew }: CrewDetailProps) {
                                     </p>
                                 </div>
                                 <div className="space-y-4 overflow-y-auto pr-2">
-                                    {activityLogs.map((log, idx) => (
-                                        <div key={idx} className="bg-gray-200 rounded-xl p-4 flex items-center justify-between">
-                                            <span className="text-sm font-bold text-gray-700">{log.time}</span>
-                                            <span className="text-sm font-medium text-gray-600">{log.role}</span>
+                                    {activityLogs.length > 0 ? (
+                                        activityLogs.map((log: any, idx: number) => (
+                                            <div key={log.id || idx} className="bg-gray-200 rounded-xl p-4 flex items-center justify-between">
+                                                <span className="text-sm font-bold text-gray-700">{log.time}</span>
+                                                <span className="text-sm font-medium text-gray-600">Crew - {log.role}</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center text-gray-400 py-10 bg-gray-50 rounded-2xl">
+                                            No activity logs for this date.
                                         </div>
-                                    ))}
-                                    {[...Array(2)].map((_, i) => (
-                                        <div key={`empty-${i}`} className="bg-gray-100 rounded-xl p-4 h-12 opacity-50"></div>
-                                    ))}
+                                    )}
                                 </div>
                             </>
                         )

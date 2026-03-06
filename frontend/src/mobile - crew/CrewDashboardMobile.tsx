@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapPin, Users, BookOpen, CheckCircle, Calendar, Star, ChevronDown, LogOut } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 
@@ -21,16 +21,65 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
     // Removed local state: const [selectedRole, setSelectedRole] = useState(ROLES[0].id);
     const [isGuideOpen, setIsGuideOpen] = useState(false);
     const [isGuideRead, setIsGuideRead] = useState(false);
+    const [stats, setStats] = useState<any>({
+        yearly_score: 0,
+        active_percentage: 0,
+        task_progress: { completed: 0, total: 0 }
+    });
 
-    // Mock Data
-    const yearlyScore = 97;
-    const taskProgress = { completed: 5, total: 8 };
-    const progressPercent = (taskProgress.completed / taskProgress.total) * 100;
+    // Fetch Stats
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const response = await fetch('/api/crew/stats', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setStats(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch crew stats", error);
+            }
+        };
+        fetchStats();
+    }, []);
 
-    // Helper for Star Color
+    // --- Dummy Attendance Calculator for UI consistency (Mirroring Evaluation page) ---
+    const getDummyActivePercentage = () => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = today.getMonth();
+        const lastDay = new Date(year, month + 1, 0).getDate();
+
+        let totalWorkDays = 0;
+        let presentDays = 0;
+
+        for (let i = 1; i <= lastDay; i++) {
+            const day = new Date(year, month, i);
+            if (day > today) continue; // Skip future days
+
+            const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+            if (!isWeekend) {
+                totalWorkDays++;
+                const hash = (day.getDate() + day.getMonth() * 31) % 7;
+                // <= 4 (Hadir/Telat counts as present), 5 (Mangkir)
+                if (hash <= 4 || hash > 5) presentDays++;
+            }
+        }
+        return totalWorkDays > 0 ? Math.round((presentDays / totalWorkDays) * 100) : 0;
+    };
+
+    // Bound Data
+    // Override the DB % with the Dummy UI Mock percentage since YoAbsen API is missing
+    const activePercentage = getDummyActivePercentage();
+    const taskProgress = stats.task_progress;
+    const progressPercent = taskProgress.total > 0 ? (taskProgress.completed / taskProgress.total) * 100 : 0;
+
+    // Helper for Star Color (Active Percentage rules)
     const getScoreColor = (score: number) => {
         if (score > 90) return 'text-green-500';
-        if (score > 75) return 'text-yellow-400';
+        if (score >= 75) return 'text-yellow-400';
         return 'text-red-500';
     };
 
@@ -51,10 +100,10 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                                 </h2>
                             </div>
                         </div>
-                        {/* Star Rating */}
-                        <div className={`flex flex-col items-center ${getScoreColor(yearlyScore)}`}>
+                        {/* Star Rating mapped to Active Percentage */}
+                        <div className={`flex flex-col items-center ${getScoreColor(activePercentage)}`}>
                             <Star fill="currentColor" size={24} />
-                            <span className="text-xs font-bold mt-1">{yearlyScore}</span>
+                            <span className="text-xs font-bold mt-1">{activePercentage}</span>
                         </div>
                     </div>
 

@@ -177,7 +177,7 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
                     />
                 );
             case 'evaluation':
-                return <MobileCrewEvaluation onBack={() => setActivePage('dashboard')} />;
+                return <MobileCrewEvaluation user={user} onBack={() => setActivePage('dashboard')} />;
             case 'guide':
                 return (
                     <MobileTaskGuide

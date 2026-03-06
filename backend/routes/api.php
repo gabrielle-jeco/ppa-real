@@ -22,6 +22,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Manager Routes
     Route::get('/manager/supervisors', [App\Http\Controllers\ManagerController::class, 'getSupervisors']);
+    Route::get('/manager/supervisors/{id}/stats', [App\Http\Controllers\ManagerController::class, 'getSupervisorStats']);
 
     // Task Routes
     Route::get('/supervisor/{id}/tasks', [App\Http\Controllers\TaskController::class, 'index']);
@@ -39,8 +40,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Crew Actions
     Route::post('/crew/activity', [App\Http\Controllers\ActivityController::class, 'logStationChange']);
+    Route::get('/crew/activity-logs', [App\Http\Controllers\ActivityController::class, 'getLogs']);
     Route::post('/crew/read-guide', [App\Http\Controllers\TaskController::class, 'readGuide']);
     Route::get('/crew/check-guide', [App\Http\Controllers\TaskController::class, 'checkGuideStatus']);
+    Route::get('/crew/stats', [App\Http\Controllers\CrewController::class, 'myStats']);
     Route::get('/work-stations', [App\Http\Controllers\ActivityController::class, 'getWorkStations']);
 });
 
@@ -48,5 +51,6 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware(['auth:sanctum'])->prefix('supervisor')->group(function () {
     Route::get('/crews', [App\Http\Controllers\SupervisorController::class, 'index']);
     Route::get('/stats', [App\Http\Controllers\SupervisorController::class, 'myStats']);
+    Route::get('/crew/{id}/eval-stats', [App\Http\Controllers\SupervisorController::class, 'getCrewEvalStats']);
 });
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart2, CheckSquare, Camera, Check, ChevronDown, Clock } from 'lucide-react';
+import { BarChart2, CheckSquare, Camera, ChevronDown, Clock } from 'lucide-react';
 import TaskPreview from '../general/TaskPreview'; // Ensure this uses default import
 
 export default function SupervisorPerformance() {
@@ -93,8 +93,10 @@ export default function SupervisorPerformance() {
 
     const fetchStats = async () => {
         try {
+            const m = selectedDate.getMonth() + 1;
+            const y = selectedDate.getFullYear();
             const token = localStorage.getItem('auth_token');
-            const res = await fetch('/api/supervisor/stats', {
+            const res = await fetch(`/api/supervisor/stats?month=${m}&year=${y}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
@@ -217,126 +219,115 @@ export default function SupervisorPerformance() {
                         </div>
                     </div>
 
-                    {/* Attendance Calendar (Integrated) */}
-                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-8">
-                        <h3 className="text-sm font-semibold text-gray-600 mb-4">Attendance History</h3>
-                        <div className="mb-2">
-                            <div className="grid grid-cols-7 text-center mb-2 border-b border-gray-100 pb-2">
-                                {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(day => (
-                                    <span key={day} className="text-[10px] font-bold text-gray-400">{day}</span>
-                                ))}
-                            </div>
-                            <div className="grid grid-cols-7 gap-y-3 justify-items-center">
-                                {(() => {
-                                    // Use the existing helper functions from component scope
-                                    // But wait, renderCalendar uses selectedDate from state which is fine.
-                                    // However, renderCalendar implementation in this file includes the <button> logic 
-                                    // which might conflict if I call it directly or copy-paste logic?
-                                    // The existing renderCalendar function (lines 59-92) returns an array of elements.
-                                    // I can just call {renderCalendar()} here! 
-                                    // BUT, the existing renderCalendar at line 59 was designed for the checklist?
-                                    // Let's check the existing renderCalendar logic at line 59.
-                                    // It returns buttons with `onClick` to `setSelectedDate`.
-                                    // And styling is for selection.
-                                    // We want ATTENDANCE styling (colored dots based on hash) and DISABLED clicks (or view only).
-                                    // The previous 'Attendance' tab had its own inline rendering logic.
-                                    // I should implement a specific `renderAttendanceCalendar` helper or inline it here.
-                                    // To avoid conflict with the existing `renderCalendar` (which is used for Checklist view probably? No, let's check Checklist view).
-                                    // Checklist view at line 290 uses `renderCalendar()`.
-                                    // So I should validly CREATE A NEW helper or inline logic for Attendance to avoid breaking Checklist.
+                    {/* Side-by-Side Content Grid */}
+                    <div className="flex flex-col lg:flex-row gap-6 mb-8">
+                        {/* Left Side: Attendance Calendar */}
+                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex-1 lg:max-w-[400px]">
+                            <h3 className="text-sm font-semibold text-gray-600 mb-4">Attendance History</h3>
+                            <div className="mb-2">
+                                <div className="grid grid-cols-7 text-center mb-2 border-b border-gray-100 pb-2">
+                                    {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(day => (
+                                        <span key={day} className="text-[10px] font-bold text-gray-400">{day}</span>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-7 gap-y-3 justify-items-center">
+                                    {(() => {
+                                        const daysInMonth = getDaysInMonth();
+                                        const firstDay = getFirstDayOfMonth();
+                                        const days = [];
 
-                                    const daysInMonth = getDaysInMonth();
-                                    const firstDay = getFirstDayOfMonth();
-                                    const days = [];
+                                        for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-8"></div>);
+                                        for (let i = 1; i <= daysInMonth; i++) {
+                                            const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), i);
+                                            const isFuture = isFutureDate(date);
+                                            const isToday = date.getDate() === today.getDate() &&
+                                                date.getMonth() === today.getMonth() &&
+                                                date.getFullYear() === today.getFullYear();
 
-                                    for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-8"></div>);
-                                    for (let i = 1; i <= daysInMonth; i++) {
-                                        const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), i);
-                                        const isFuture = isFutureDate(date);
-                                        const isToday = date.getDate() === today.getDate() &&
-                                            date.getMonth() === today.getMonth() &&
-                                            date.getFullYear() === today.getFullYear();
+                                            // Mock Attendance Coloring
+                                            let attendanceColor = 'bg-gray-100 text-gray-700';
+                                            if (!isFuture) {
+                                                const hash = (i + selectedDate.getMonth() * 31) % 7;
+                                                if (hash <= 3) attendanceColor = 'bg-green-500 text-white shadow-sm';
+                                                else if (hash === 4) attendanceColor = 'bg-yellow-400 text-white shadow-sm';
+                                                else if (hash === 5) attendanceColor = 'bg-red-500 text-white shadow-sm';
+                                                else attendanceColor = 'bg-gray-300 text-white';
+                                            } else {
+                                                attendanceColor = 'text-gray-300 cursor-not-allowed';
+                                            }
 
-                                        // Mock Attendance Coloring (Same as Mobile)
-                                        let attendanceColor = 'bg-gray-100 text-gray-700';
-                                        if (!isFuture) {
-                                            const hash = (i + selectedDate.getMonth() * 31) % 7;
-                                            if (hash <= 3) attendanceColor = 'bg-green-500 text-white shadow-sm';
-                                            else if (hash === 4) attendanceColor = 'bg-yellow-400 text-white shadow-sm';
-                                            else if (hash === 5) attendanceColor = 'bg-red-500 text-white shadow-sm';
-                                            else attendanceColor = 'bg-gray-300 text-white';
-                                        } else {
-                                            attendanceColor = 'text-gray-300 cursor-not-allowed';
+                                            days.push(
+                                                <div
+                                                    key={i}
+                                                    className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold ${attendanceColor} ${isToday ? 'ring-2 ring-primary ring-offset-2 z-10' : ''}`}
+                                                >
+                                                    {i}
+                                                </div>
+                                            );
                                         }
-
-                                        days.push(
-                                            <div
-                                                key={i}
-                                                className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold ${attendanceColor} ${isToday ? 'ring-2 ring-primary ring-offset-2 z-10' : ''}`}
-                                            >
-                                                {i}
-                                            </div>
-                                        );
-                                    }
-                                    return days;
-                                })()}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* My AVG Point - Main Bar */}
-                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-8">
-                        <div className="flex justify-between items-center mb-2">
-                            <h3 className="text-sm font-semibold text-gray-600">My AVG Point</h3>
-                            <span className="text-sm font-bold text-gray-800">{stats.my_avg_point}%</span>
-                        </div>
-                        <div className="w-full bg-purple-100 rounded-full h-4 overflow-hidden">
-                            <div
-                                className="bg-yellow-400 h-4 rounded-full"
-                                style={{ width: `${stats.my_avg_point}%` }}
-                            ></div>
-                        </div>
-                    </div>
-
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Task for SC */}
-                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                            <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_for_sc.label || 'Task for SC'}</h3>
-                            <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
-                                <div
-                                    className="bg-red-500 h-3 rounded-full"
-                                    style={{ width: `${(stats.task_for_sc.completed / stats.task_for_sc.total) * 100}%` }}
-                                ></div>
-                            </div>
-                            <p className="text-xs text-gray-400">{stats.task_for_sc.completed}% Completed</p>
-                        </div>
-
-                        {/* Task Completed From SM/RM */}
-                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                            <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_from_manager.label || 'Task Completed From SM/RM'}</h3>
-                            <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
-                                <div
-                                    className="bg-red-500 h-3 rounded-full"
-                                    style={{ width: `${(stats.task_from_manager.completed / stats.task_from_manager.total) * 100}%` }}
-                                ></div>
-                            </div>
-                            <p className="text-xs text-gray-400">{stats.task_from_manager.completed}%</p>
-                        </div>
-
-                        {/* Task Given (Monthly) */}
-                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                            <h3 className="text-sm font-semibold text-gray-600 mb-4">Task Given (Monthly)</h3>
-                            <div className="bg-gray-200 rounded-xl p-4 text-center">
-                                <span className="font-bold text-gray-700">{stats.monthly_task_given}</span>
+                                        return days;
+                                    })()}
+                                </div>
                             </div>
                         </div>
 
-                        {/* AVG Service Crew Point */}
-                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                            <h3 className="text-sm font-semibold text-gray-600 mb-4">AVG Service Crew Point</h3>
-                            <div className="bg-gray-200 rounded-xl p-4 text-center">
-                                <span className="font-bold text-gray-700">{stats.avg_service_crew_point}%</span>
+                        {/* Right Side: Stats & AVG Point */}
+                        <div className="flex-1 flex flex-col gap-6">
+                            {/* My AVG Point - Main Bar */}
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex-shrink-0">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h3 className="text-sm font-semibold text-gray-600">My AVG Point</h3>
+                                    <span className="text-sm font-bold text-gray-800">{stats.my_avg_point}%</span>
+                                </div>
+                                <div className="w-full bg-purple-100 rounded-full h-4 overflow-hidden">
+                                    <div
+                                        className="bg-yellow-400 h-4 rounded-full transition-all duration-500"
+                                        style={{ width: `${stats.my_avg_point}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+
+                            {/* Stats Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 h-full">
+                                {/* Task for SC */}
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_for_sc.label || 'Task for SC'}</h3>
+                                    <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
+                                        <div
+                                            className="bg-red-500 h-3 rounded-full transition-all duration-500"
+                                            style={{ width: `${(stats.task_for_sc.completed / stats.task_for_sc.total) * 100}%` }}
+                                        ></div>
+                                    </div>
+                                    <p className="text-xs text-gray-400">{stats.task_for_sc.completed}% Completed</p>
+                                </div>
+
+                                {/* Task Completed From SM/RM */}
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_from_manager.label || 'Task Completed From SM/RM'}</h3>
+                                    <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
+                                        <div
+                                            className="bg-red-500 h-3 rounded-full transition-all duration-500"
+                                            style={{ width: `${(stats.task_from_manager.completed / stats.task_from_manager.total) * 100}%` }}
+                                        ></div>
+                                    </div>
+                                    <p className="text-xs text-gray-400">{stats.task_from_manager.completed}%</p>
+                                </div>
+
+                                {/* Task Given (Monthly) */}
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">Task Given (Monthly)</h3>
+                                    <div className="bg-gray-200 rounded-xl p-4 text-center">
+                                        <span className="font-bold text-gray-700">{stats.monthly_task_given}</span>
+                                    </div>
+                                </div>
+
+                                {/* AVG Service Crew Point */}
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">AVG Service Crew Point</h3>
+                                    <div className="bg-gray-200 rounded-xl p-4 text-center">
+                                        <span className="font-bold text-gray-700">{stats.avg_service_crew_point}%</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -407,11 +398,11 @@ export default function SupervisorPerformance() {
                                 <div key={task.task_id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition group">
                                     <div className="flex items-start gap-4">
                                         {/* Status Icon */}
-                                        <div className={`mt-0.5 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors cursor-default ${task.status === 'approved'
+                                        <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors cursor-default ${task.status === 'approved'
                                             ? 'bg-purple-100 border-primary text-primary'
                                             : 'border-gray-300'
                                             }`}>
-                                            {task.status === 'approved' && <Check size={16} strokeWidth={3} />}
+                                            {task.status === 'approved' && <span className="font-bold text-xs">✓</span>}
                                         </div>
 
                                         <div className="flex-1">

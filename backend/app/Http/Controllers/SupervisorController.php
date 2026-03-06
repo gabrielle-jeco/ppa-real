@@ -4,7 +4,11 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Models\Task;
+use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
+use App\Services\ScoringService;
+use Carbon\Carbon;
 
 class SupervisorController extends Controller
 {
@@ -23,27 +27,53 @@ class SupervisorController extends Controller
 
         // Fetch Crews via Reporting Lines relation
         $subordinates = $user->subordinateLines()->with('subordinate.locations')->get();
+        $startOfMonth = Carbon::now()->startOfMonth();
+        $endOfMonth = Carbon::now()->endOfMonth();
+
         $crews = $subordinates->pluck('subordinate')->filter(function ($crew) {
             return $crew && $crew->active;
         })
             ->values()
-            ->map(function ($crew) {
-                $score = rand(60, 98); // Dummy score for demo
+            ->map(function ($crew) use ($user, $startOfMonth, $endOfMonth) {
+                $score = (($crew->user_id * 7 + 13) % 39) + 60; // Deterministic dummy (60-98) — waiting for YoAbsen
+    
+                // Real task completion for this crew (approved / total tasks this month)
+                $totalTasks = Task::where('employee_id', $crew->user_id)
+                    ->where('employer_id', $user->id)
+                    ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+                    ->count();
+                $approvedTasks = Task::where('employee_id', $crew->user_id)
+                    ->where('employer_id', $user->id)
+                    ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+                    ->whereIn('status', ['approved', 'completed'])
+                    ->count();
+                $taskProgress = $totalTasks > 0 ? round(($approvedTasks / $totalTasks) * 100, 1) : 0;
+                $hasTasks = $totalTasks > 0;
+
+                // Current workstation from today's latest ActivityLog
+                $latestLog = ActivityLog::with('workStation')
+                    ->where('user_id', $crew->user_id)
+                    ->whereDate('created_at', Carbon::today())
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+                $currentWorkstation = $latestLog && $latestLog->workStation
+                    ? $latestLog->workStation->name
+                    : null;
+
                 return [
                     'id' => $crew->user_id,
                     'name' => $crew->full_name,
-                    'role' => $crew->role_type, // 'Crew' (maybe specific role later)
+                    'role' => $crew->role_type,
+                    'current_workstation' => $currentWorkstation,
                     'location' => $crew->locations->first() ? $crew->locations->first()->name : 'N/A',
                     'status' => 'active',
-                    'score' => $score,
-                    'activity_percentage' => $score,
-                    'task_progress' => rand(50, 100),
-                    'is_top_performer' => $score > 90
+                    'score' => $score, // Dummy — attendance, waiting for YoAbsen
+                    'activity_percentage' => $score, // Dummy — attendance, waiting for YoAbsen
+                    'task_progress' => $taskProgress,
+                    'has_tasks' => $hasTasks,
+                    'is_top_performer' => $score > 90 // Dummy — attendance, waiting for YoAbsen
                 ];
             });
-
-        // Calculate Average for the Location/Group
-        $avgScore = $crews->avg('score');
 
         return response()->json([
             'supervisor' => [
@@ -53,7 +83,7 @@ class SupervisorController extends Controller
                 'location' => $user->locations->first() ? $user->locations->first()->name : 'Unknown',
             ],
             'location_name' => $user->locations->first() ? $user->locations->first()->name : 'All Locations',
-            'location_avg_progress' => round($crews->avg('task_progress'), 1),
+            'location_avg_progress' => round($crews->where('has_tasks', true)->avg('task_progress') ?? 0, 1),
             'crews' => $crews
         ]);
     }
@@ -62,27 +92,57 @@ class SupervisorController extends Controller
      * Get Supervisor's OWN Performance Stats.
      * Mocking data based on 'Penilaian Supervisor' mockup.
      */
-    public function myStats(Request $request)
+    public function myStats(Request $request, ScoringService $scoringService)
     {
         $user = Auth::user();
 
-        // In real app, fetch from evaluations table where user_id = auth user.
-        // For now, return Mock Data matching the UI.
+        // Calculate REAL Supervisor Detailed Score
+        $month = $request->query('month', Carbon::now()->month);
+        $year = $request->query('year', Carbon::now()->year);
+
+        try {
+            $targetDate = Carbon::create($year, $month, 1);
+        } catch (\Exception $e) {
+            $targetDate = Carbon::now();
+        }
+
+        $detailedStats = $scoringService->getSupervisorMonthlyDetailedScore($user, $targetDate);
+
+        return response()->json($detailedStats);
+    }
+
+    /**
+     * Get Crew Evaluation Stats (Activity Monitor, Personality, Yearly Score).
+     * Route: GET /api/supervisor/crew/{id}/eval-stats
+     */
+    public function getCrewEvalStats($id, Request $request, ScoringService $scoringService)
+    {
+        $user = Auth::user();
+        if ($user->role_type !== 'supervisor' && $user->role_type !== 'manager') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $crewUser = User::find($id);
+        if (!$crewUser) {
+            return response()->json(['message' => 'Crew not found'], 404);
+        }
+
+        $month = $request->query('month', Carbon::now()->month);
+        $year = $request->query('year', Carbon::now()->year);
+
+        try {
+            $targetDate = Carbon::create($year, $month, 1);
+        } catch (\Exception $e) {
+            $targetDate = Carbon::now();
+        }
+
+        $detailedStats = $scoringService->getCrewMonthlyDetailedStats($crewUser, $targetDate);
+        $yearlyScore = $scoringService->getCrewYearlyScore($crewUser, $targetDate);
 
         return response()->json([
-            'my_avg_point' => 81,
-            'task_for_sc' => [
-                'completed' => 70,
-                'total' => 100, // 70%
-                'label' => 'Task for SC'
-            ],
-            'task_from_manager' => [
-                'completed' => 35,
-                'total' => 100, // 35%
-                'label' => 'Task Completed From SM/RM'
-            ],
-            'monthly_task_given' => '168/8 People', // Mock
-            'avg_service_crew_point' => 70 // Mock
+            'activity_monitor' => $detailedStats['activity_monitor'],
+            'personality_score' => $detailedStats['personality_score'],
+            'yearly_score' => $yearlyScore,
         ]);
     }
 }

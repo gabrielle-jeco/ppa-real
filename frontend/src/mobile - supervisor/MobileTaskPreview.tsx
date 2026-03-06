@@ -6,12 +6,13 @@ interface MobileTaskPreviewProps {
     task: any;
     isOpen: boolean;
     onClose: () => void;
-    onDeleteProof: (taskId: number) => void;
+    onDeleteProof?: (taskId: number) => void;
+    onUpdateStatus?: (status: string) => void;
     showHistoryLabel?: boolean;
     readOnly?: boolean;
 }
 
-export default function MobileTaskPreview({ task, isOpen, onClose, onDeleteProof, showHistoryLabel = false, readOnly = false }: MobileTaskPreviewProps) {
+export default function MobileTaskPreview({ task, isOpen, onClose, onDeleteProof, onUpdateStatus, showHistoryLabel = false, readOnly = false }: MobileTaskPreviewProps) {
     const [animateIn, setAnimateIn] = useState(false);
     const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -143,35 +144,44 @@ export default function MobileTaskPreview({ task, isOpen, onClose, onDeleteProof
                 </div>
 
                 {/* Footer / Actions */}
-                <div className="p-5 bg-white flex items-center justify-between gap-4">
+                <div className="p-5 bg-white flex flex-col gap-3">
                     {currentImage ? (
-                        <div className="flex-1">
-                            <p className="text-xs text-gray-500 mb-1">{currentImage.type} Evidence</p>
-                            {/* Only show delete for Proof, or if Supervisor can delete any? Currently prop is onDeleteProof. 
-                                Safe bet: Only show if type is Proof. AND NOT READ ONLY */}
-                            {currentImage.type === 'Proof' && !readOnly ? (
-                                <button
-                                    onClick={() => {
-                                        if (window.confirm('Delete this proof?')) {
-                                            onDeleteProof(task.task_id);
-                                            handleClose();
-                                        }
-                                    }}
-                                    className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold py-3 px-4 rounded-xl transition"
-                                >
-                                    <Trash2 size={18} />
-                                    Delete Proof
-                                </button>
-                            ) : (
-                                <div className="py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium">
-                                    Evidence View Only
-                                </div>
-                            )}
-                        </div>
+                        <p className="text-xs text-gray-500 text-center mb-1">{currentImage.type} Evidence</p>
                     ) : (
                         <p className="text-center w-full text-gray-400 text-sm py-2">
                             Task pending or no visual proof required.
                         </p>
+                    )}
+
+                    {(!readOnly && onUpdateStatus && task.status !== 'approved' && task.status !== 'rejected') ? (
+                        <div className="flex gap-3 mt-2">
+                            <button
+                                onClick={() => {
+                                    if (window.confirm('Reject this task?')) {
+                                        onUpdateStatus('rejected');
+                                        handleClose();
+                                    }
+                                }}
+                                className="flex-1 flex items-center justify-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 font-bold py-3 px-4 rounded-xl transition"
+                            >
+                                Reject
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (window.confirm('Approve this task?')) {
+                                        onUpdateStatus('approved');
+                                        handleClose();
+                                    }
+                                }}
+                                className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white shadow-lg shadow-green-200 hover:bg-green-600 font-bold py-3 px-4 rounded-xl transition"
+                            >
+                                Approve
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium mt-2">
+                            Evidence View Only
+                        </div>
                     )}
                 </div>
             </div>

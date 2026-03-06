@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { LogOut, ChevronDown, CheckSquare, FileText, BarChart2, Users, MapPin, Star } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LogOut, CheckSquare, FileText, BarChart2, Users, MapPin, Star } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 
 interface DashboardProps {
@@ -9,9 +9,44 @@ interface DashboardProps {
 
 const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user }) => {
     // onNavigate is a prop we'll use to switch 'pages' in this mobile view (Dashboard -> CrewList)
+    const [stats, setStats] = useState<any>(null);
+    const [avgCrewProgress, setAvgCrewProgress] = useState(0);
 
-    const PROGRESS_PERCENTAGE = 65; // Mock data
-    const YEARLY_SCORE = 98; // Mock data
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const response = await fetch('/api/supervisor/stats', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setStats(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch supervisor stats", error);
+            }
+        };
+        fetchStats();
+
+        // Also fetch crew data for Average Task Progress
+        const fetchCrewProgress = async () => {
+            try {
+                const res = await fetch('/api/supervisor/crews', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvgCrewProgress(data.location_avg_progress || 0);
+                }
+            } catch (error) {
+                console.error("Failed to fetch crew progress", error);
+            }
+        };
+        fetchCrewProgress();
+    }, []);
+
+    const PROGRESS_PERCENTAGE = avgCrewProgress;
+    const YEARLY_SCORE = stats ? stats.my_avg_point : 0;
 
     const handleLogout = () => {
         // Direct logout without confirmation on mobile as requested
@@ -63,7 +98,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
             <div className="mb-8 mt-2">
                 <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
                     <div
-                        className="bg-gray-400 h-3 rounded-full"
+                        className="bg-gray-400 h-3 rounded-full transition-all duration-500"
                         style={{ width: `${PROGRESS_PERCENTAGE}%` }}
                     ></div>
                 </div>

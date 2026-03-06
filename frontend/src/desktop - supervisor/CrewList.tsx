@@ -40,7 +40,7 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                 <div className="mb-2">
                     <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden mb-2">
                         <div
-                            className="bg-primary h-2.5 rounded-full"
+                            className="bg-primary h-2.5 rounded-full transition-all duration-500"
                             style={{ width: `${location_avg_progress}%` }}
                         ></div>
                     </div>

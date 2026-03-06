@@ -85,23 +85,25 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
     // Mock Data for now, mirroring SupervisorPerformance structure
     // In real app, fetch from /api/supervisor/stats?date=...
     useEffect(() => {
-        // Simulate Fetch
-        setLoading(true);
-        setTimeout(() => {
-            setStats({
-                taskGiven: "80 / 8 People",
-                taskGivenMonthly: "240 / 8 People",
-                avgServicePoint: "50%",
-                avgServicePointMonthly: "70%",
-                monitor: {
-                    cashier: 60,
-                    supermarket: 40
-                },
-                evaluationScore: 85, // Example score
-                yearlyPoint: 97
-            });
-            setLoading(false);
-        }, 500);
+        const fetchStats = async () => {
+            setLoading(true);
+            try {
+                const month = selectedDate.getMonth() + 1;
+                const year = selectedDate.getFullYear();
+                const response = await fetch(`/api/supervisor/stats?month=${month}&year=${year}`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setStats(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch supervisor report stats", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchStats();
     }, [selectedDate]);
 
     // Calendar Handlers (Reuse logic)
@@ -174,10 +176,10 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                 <div className="bg-white p-5 rounded-3xl shadow-sm">
                     <div className="flex justify-between items-center mb-2">
                         <h3 className="text-xs font-bold text-gray-600">My AVG Point</h3>
-                        <span className="text-sm font-bold text-gray-800">81%</span>
+                        <span className="text-sm font-bold text-gray-800">{stats?.my_avg_point || 0}%</span>
                     </div>
                     <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden">
-                        <div className="h-full bg-yellow-400 rounded-full" style={{ width: '81%' }}></div>
+                        <div className="h-full bg-yellow-400 rounded-full transition-all duration-1000" style={{ width: `${stats?.my_avg_point || 0}%` }}></div>
                     </div>
                 </div>
 
@@ -187,18 +189,18 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
                         <h3 className="text-xs font-bold text-gray-600 mb-3">Task for SC</h3>
                         <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden mb-1">
-                            <div className="h-full bg-red-500 rounded-full" style={{ width: '70%' }}></div>
+                            <div className="h-full bg-red-500 rounded-full transition-all duration-1000" style={{ width: `${stats?.task_for_sc?.completed || 0}%` }}></div>
                         </div>
-                        <p className="text-[10px] text-gray-400">70% Completed</p>
+                        <p className="text-[10px] text-gray-400">{stats?.task_for_sc?.completed || 0}% Completed</p>
                     </div>
 
                     {/* Task Completed From SM/RM */}
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
                         <h3 className="text-xs font-bold text-gray-600 mb-3">Task Completed From SM/RM</h3>
                         <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden mb-1">
-                            <div className="h-full bg-red-500 rounded-full" style={{ width: '35%' }}></div>
+                            <div className="h-full bg-red-500 rounded-full transition-all duration-1000" style={{ width: `${stats?.task_from_manager?.completed || 0}%` }}></div>
                         </div>
-                        <p className="text-[10px] text-gray-400">35%</p>
+                        <p className="text-[10px] text-gray-400">{stats?.task_from_manager?.completed || 0}%</p>
                     </div>
                 </div>
 
@@ -208,7 +210,7 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
                         <h3 className="text-xs font-bold text-gray-600 mb-3">Task Given (Monthly)</h3>
                         <div className="bg-gray-200 rounded-xl py-3 px-4 text-center">
-                            <span className="font-bold text-gray-700 text-sm">168/8 People</span>
+                            <span className="font-bold text-gray-700 text-sm">{stats?.monthly_task_given || '0/0 People'}</span>
                         </div>
                     </div>
 
@@ -216,7 +218,7 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
                         <h3 className="text-xs font-bold text-gray-600 mb-3">AVG Service Crew Point</h3>
                         <div className="bg-gray-200 rounded-xl py-3 px-4 text-center">
-                            <span className="font-bold text-gray-700 text-sm">70%</span>
+                            <span className="font-bold text-gray-700 text-sm">{stats?.avg_service_crew_point || 0}%</span>
                         </div>
                     </div>
                 </div>
