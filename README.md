@@ -33,14 +33,10 @@ All accounts below use the same password:
 
 **Available Users:**
 
-* `spv_jakarta_fresh`
-* `spv_jakarta_cashier`
-* `spv_bandung_fashion`
-* `supervisor_andi`
-* `rm_jakarta`
-* `rm_bandung`
-* `rm_jabar`
-* `rm_demo`
+* `anton_mgr`
+* `surya_spv`
+* `budi_crew`
+* `deni_crew`
 
 ---
 
