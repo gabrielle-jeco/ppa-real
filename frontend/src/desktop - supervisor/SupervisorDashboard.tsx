@@ -57,8 +57,7 @@ export default function SupervisorDashboard() {
                 onSelect={handleSelectCrew}
             />
 
-            {/* Right: Detailed View */}
-            <div className="flex-1 overflow-hidden relative">
+            <div className="flex-1 overflow-hidden relative flex flex-col min-h-0">
                 {selectedCrew ? (
                     <CrewDetail crew={selectedCrew} onTaskChange={fetchDashboardData} />
                 ) : (

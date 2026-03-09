@@ -140,8 +140,31 @@ export default function SupervisorPerformance() {
     // Since supervisors can't delete proofs on desktop, we pass a dummy function or hide the delete button in TaskPreview via props if supported.
     // However, TaskPreview expects onDeleteProof. Let's provide a dummy one that alerts or does nothing, as the requirement is view-only.
     // Or better, implement it but maybe restrict it? For now, let's keep it simple.
-    const handleDeleteProof = async (taskId: number) => {
-        alert("Deletion is only available on mobile.");
+    const handleDeleteProof = async (taskId: number, type: 'before' | 'after') => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch(`/api/tasks/${taskId}/evidence?type=${type}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                // Update local state by removing the specific image
+                setMyTasks(myTasks.map(t => t.task_id === taskId ? {
+                    ...t,
+                    ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                } : t));
+                if (previewTask?.task_id === taskId) {
+                    setPreviewTask({
+                        ...previewTask,
+                        ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                    });
+                }
+            } else {
+                alert('Failed to delete image.');
+            }
+        } catch (error) {
+            console.error("Failed to delete proof", error);
+        }
     };
 
     const handleViewPhoto = (task: any) => {

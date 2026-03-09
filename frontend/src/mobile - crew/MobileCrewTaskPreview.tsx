@@ -106,6 +106,7 @@ export default function MobileCrewTaskPreview({
                                     onClick={() => {
                                         if (window.confirm(`Delete ${activeTab} image?`)) {
                                             onDelete(activeTab);
+                                            handleClose();
                                         }
                                     }}
                                     className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold py-3 px-4 rounded-xl transition"

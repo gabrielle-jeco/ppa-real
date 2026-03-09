@@ -3,6 +3,7 @@ import { Plus, Check, Trash2, Camera } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileAddTaskModal from './MobileAddTaskModal';
 import MobileTaskPreview from './MobileTaskPreview';
+import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
 
 interface MobileCrewDetailProps {
     crew: any;
@@ -16,6 +17,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
     // Preview State
     const [previewTask, setPreviewTask] = useState<any>(null);
+    const [isEvidenceListOpen, setIsEvidenceListOpen] = useState(false);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
     useEffect(() => {
@@ -106,25 +108,42 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
     };
 
     // DELETE PROOF
-    const handleDeleteProof = async (taskId: number) => {
+    const handleDeleteProof = async (taskId: number, type: 'before' | 'after') => {
         try {
             const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/tasks/${taskId}/proof`, {
+            if (!token) throw new Error("No token found");
+
+            const res = await fetch(`/api/tasks/${taskId}/evidence?type=${type}`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
             });
+
             if (res.ok) {
-                setTasks(tasks.map(t => t.task_id === taskId ? { ...t, proof_image: null } : t));
-                if (previewTask?.task_id === taskId) setPreviewTask({ ...previewTask, proof_image: null });
+                // Update local state by removing the specific image
+                setTasks(tasks.map(t => t.task_id === taskId ? {
+                    ...t,
+                    ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                } : t));
+                if (previewTask?.task_id === taskId) {
+                    setPreviewTask({
+                        ...previewTask,
+                        ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                    });
+                }
+            } else {
+                alert('Failed to delete image.');
             }
         } catch (error) {
-            console.error("Failed to delete proof", error);
+            console.error('Error deleting image:', error);
+            alert('An error occurred.');
         }
     };
 
     const handleViewPhoto = (task: any) => {
         setPreviewTask(task);
-        setIsPreviewOpen(true);
+        setIsEvidenceListOpen(true);
     };
 
     const completedCount = tasks.filter(t => t.status === 'approved').length;
@@ -151,11 +170,30 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 defaultDate={selectedDate.toLocaleDateString('en-CA')}
             />
 
+            <MobileEvidenceListModal
+                isOpen={isEvidenceListOpen}
+                onClose={() => setIsEvidenceListOpen(false)}
+                task={previewTask}
+                onSelectImage={(type) => {
+                    // MobileTaskPreview automatically populates based on task state
+                    setIsPreviewOpen(true);
+                }}
+                onDelete={!isToday(selectedDate) ? undefined : (type) => {
+                    if (previewTask && (type === 'before' || type === 'after')) {
+                        handleDeleteProof(previewTask.task_id, type);
+                    }
+                }}
+                readOnly={!isToday(selectedDate)}
+            />
+
             <MobileTaskPreview
                 isOpen={isPreviewOpen}
                 onClose={() => setIsPreviewOpen(false)}
                 task={previewTask}
-                onDeleteProof={handleDeleteProof}
+                onDeleteProof={(taskId, type) => {
+                    handleDeleteProof(taskId, type);
+                    setIsPreviewOpen(false); // Fulfill user requirement: Close preview immediately on delete, returning to EvidenceList
+                }}
                 onUpdateStatus={(status) => handleUpdateStatus(previewTask.task_id, status)}
                 readOnly={previewTask?.status === 'approved' || (previewTask && new Date(previewTask.due_at) < new Date(new Date().setHours(0, 0, 0, 0)))}
             />

@@ -193,17 +193,27 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
         }
     };
 
-    const handleDeleteProof = async (taskId: number) => {
-        if (!window.confirm("Are you sure you want to delete this proof image?")) return;
+    const handleDeleteProof = async (taskId: number, type: 'before' | 'after') => {
         try {
             const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/tasks/${taskId}/proof`, {
+            const res = await fetch(`/api/tasks/${taskId}/evidence?type=${type}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
-                setTasks(tasks.map(t => t.task_id === taskId ? { ...t, proof_image: null } : t));
-                if (previewTask?.task_id === taskId) setPreviewTask({ ...previewTask, proof_image: null });
+                // Update local state by removing the specific image
+                setTasks(tasks.map(t => t.task_id === taskId ? {
+                    ...t,
+                    ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                } : t));
+                if (previewTask?.task_id === taskId) {
+                    setPreviewTask({
+                        ...previewTask,
+                        ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                    });
+                }
+            } else {
+                alert('Failed to delete image.');
             }
         } catch (error) {
             console.error("Failed to delete proof", error);
@@ -242,12 +252,11 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
             />
 
             <div className="items-center justify-between hidden lg:flex mb-6"></div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 h-full min-h-0">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 h-full flex-1 min-h-0">
 
                 {/* 1. Left Panel (Profile & Calendar) - Col Span 5 (LG) / 3 (XL) */}
                 {/* 1. Left Panel (Profile & Calendar) - Compact: Span 4, Full: Span 3 */}
-                <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-3 flex flex-col gap-4 lg:gap-6 h-full overflow-y-auto pr-2">
+                <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-3 flex flex-col gap-4 lg:gap-6 h-full overflow-y-auto pr-2 min-h-0">
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                         <h2 className="text-xl font-bold text-primary mb-1">{crew.name}</h2>
                         <p className="text-xs text-gray-500 mb-4">
@@ -428,7 +437,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
 
                 {/* 2. Middle Panel (Task List) - Col Span 4 (LG) / 5 (XL) */}
                 {/* 2. Middle Panel (Task List) - Compact: Span 4, Full: Span 5 */}
-                <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-5 flex flex-col h-full overflow-hidden">
+                <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-5 flex flex-col h-full overflow-hidden min-h-0">
                     {viewMode === 'TASKS' ? (
                         <>
                             {/* Header */}
@@ -437,7 +446,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                 <p className="text-sm text-gray-400">Today</p>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto pr-2 space-y-3">
+                            <div className="flex-1 overflow-y-auto pr-2 space-y-3 min-h-0">
                                 {currentList.length === 0 && <div className="text-center text-gray-400 py-10">No tasks found.</div>}
                                 {currentList.map((task) => (
                                     <div key={task.task_id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition group">
@@ -496,7 +505,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
 
                 {/* 3. Right Panel (Activity) - Col Span 3 (LG) / 4 (XL) */}
                 {/* 3. Right Panel (Activity) - Compact: Span 4, Full: Span 4 */}
-                <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-4 flex flex-col h-full ease-in-out duration-300">
+                <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-4 flex flex-col h-full ease-in-out duration-300 min-h-0">
                     {/* Render Logic: If Activity Mode OR Eval Mode -> Show Stats/Eval. Else (Preview/History) -> Show Preview/History */}
                     {(rightPanelMode === 'ACTIVITY' || viewMode === 'EVALUATION') ? (
                         viewMode === 'EVALUATION' ? (
@@ -571,14 +580,14 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                             </div>
                         ) : (
                             // ACTIVITY MODE (Default)
-                            <>
-                                <div className="mb-4">
+                            <div className="flex flex-col h-full min-h-0">
+                                <div className="mb-4 shrink-0">
                                     <h2 className="font-bold text-gray-800 text-lg">Activity</h2>
                                     <p className="text-sm text-gray-400">
                                         {selectedDate.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
                                     </p>
                                 </div>
-                                <div className="space-y-4 overflow-y-auto pr-2">
+                                <div className="space-y-4 flex-1 overflow-y-auto pr-2 min-h-0">
                                     {activityLogs.length > 0 ? (
                                         activityLogs.map((log: any, idx: number) => (
                                             <div key={log.id || idx} className="bg-gray-200 rounded-xl p-4 flex items-center justify-between">
@@ -592,7 +601,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                         </div>
                                     )}
                                 </div>
-                            </>
+                            </div>
                         )
                     ) : (
                         // PREVIEW / HISTORY MODE
