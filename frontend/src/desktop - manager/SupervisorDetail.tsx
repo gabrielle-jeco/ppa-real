@@ -190,25 +190,27 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
         }
     };
 
-    const handleDeleteProof = async (taskId: number) => {
-        if (!window.confirm("Are you sure you want to delete this proof image?")) return;
-
+    const handleDeleteProof = async (taskId: number, type: 'before' | 'after') => {
         try {
             const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/tasks/${taskId}/proof`, {
+            const res = await fetch(`/api/tasks/${taskId}/evidence?type=${type}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-
             if (res.ok) {
-                // Update local state
-                setTasks(tasks.map(t =>
-                    t.task_id === taskId ? { ...t, proof_image: null } : t
-                ));
-                // Also update the previewTask if it's the one being viewed
+                // Update local state by removing the specific image
+                setTasks(tasks.map(t => t.task_id === taskId ? {
+                    ...t,
+                    ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                } : t));
                 if (previewTask?.task_id === taskId) {
-                    setPreviewTask({ ...previewTask, proof_image: null });
+                    setPreviewTask({
+                        ...previewTask,
+                        ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                    });
                 }
+            } else {
+                alert('Failed to delete image.');
             }
         } catch (error) {
             console.error("Failed to delete proof", error);
