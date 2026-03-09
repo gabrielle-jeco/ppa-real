@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Camera } from 'lucide-react';
+import { ChevronDown, Camera, Trash2 } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileTaskPreview from './MobileTaskPreview';
+import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
 
 interface MobileCrewHistoryProps {
     crew: any;
@@ -15,6 +16,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
 
     // Preview State
     const [previewTask, setPreviewTask] = useState<any>(null);
+    const [isEvidenceListOpen, setIsEvidenceListOpen] = useState(false);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
     const today = new Date();
@@ -69,9 +71,88 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
         fetchData();
     }, [selectedDate, viewMode, crew?.id]);
 
+    const isToday = (date: Date) => {
+        const todayDate = new Date();
+        return date.getDate() === todayDate.getDate() &&
+            date.getMonth() === todayDate.getMonth() &&
+            date.getFullYear() === todayDate.getFullYear();
+    };
+
+    const handleUpdateStatus = async (taskId: number, newStatus: string) => {
+        setTasks(tasks.map(t => t.task_id === taskId ? { ...t, status: newStatus } : t));
+        if (previewTask?.task_id === taskId) {
+            setPreviewTask({ ...previewTask, status: newStatus });
+        }
+        try {
+            const token = localStorage.getItem('auth_token');
+            await fetch(`/api/tasks/${taskId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ status: newStatus })
+            });
+        } catch (error) {
+            console.error("Status update failed", error);
+            // Optionally could re-fetch tasks here on failure
+        }
+    };
+
+    const handleToggleStatus = async (task: any) => {
+        const newStatus = task.status === 'approved' ? 'pending' : 'approved';
+        handleUpdateStatus(task.task_id, newStatus);
+    };
+
+    const handleDeleteTask = async (taskId: number) => {
+        if (!window.confirm("Delete this task?")) return;
+        try {
+            const token = localStorage.getItem('auth_token');
+            await fetch(`/api/tasks/${taskId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setTasks(tasks.filter(t => t.task_id !== taskId));
+        } catch (error) {
+            console.error("Delete failed", error);
+        }
+    };
+
+    const handleDeleteProof = async (taskId: number, type: 'before' | 'after') => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) throw new Error("No token found");
+
+            const res = await fetch(`/api/tasks/${taskId}/evidence?type=${type}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (res.ok) {
+                setTasks(tasks.map(t => t.task_id === taskId ? {
+                    ...t,
+                    ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                } : t));
+                if (previewTask?.task_id === taskId) {
+                    setPreviewTask({
+                        ...previewTask,
+                        ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                    });
+                }
+            } else {
+                alert('Failed to delete image.');
+            }
+        } catch (error) {
+            console.error('Error deleting image:', error);
+            alert('An error occurred.');
+        }
+    };
+
     const handleViewPhoto = (task: any) => {
         setPreviewTask(task);
-        setIsPreviewOpen(true);
+        setIsEvidenceListOpen(true);
     };
 
     // Calendar Logic
@@ -135,12 +216,31 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
             onBack={onBack}
             allowScroll={false}
         >
+            <MobileEvidenceListModal
+                isOpen={isEvidenceListOpen}
+                onClose={() => setIsEvidenceListOpen(false)}
+                task={previewTask}
+                onSelectImage={(type) => {
+                    setIsPreviewOpen(true);
+                }}
+                onDelete={!isToday(selectedDate) ? undefined : (type) => {
+                    if (previewTask && (type === 'before' || type === 'after')) {
+                        handleDeleteProof(previewTask.task_id, type);
+                    }
+                }}
+                readOnly={!isToday(selectedDate)}
+            />
+
             <MobileTaskPreview
                 isOpen={isPreviewOpen}
                 onClose={() => setIsPreviewOpen(false)}
                 task={previewTask}
-                onDeleteProof={() => { }}
-                readOnly={true} // History is always read-only
+                onDeleteProof={(taskId, type) => {
+                    handleDeleteProof(taskId, type);
+                    setIsPreviewOpen(false); // Close preview immediately on delete, returning to EvidenceList
+                }}
+                onUpdateStatus={(status) => handleUpdateStatus(previewTask?.task_id, status)}
+                readOnly={!isToday(selectedDate)}
             />
 
             <div className="flex flex-col h-full">
@@ -267,27 +367,45 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                         ) : (
                             // Task History
                             tasks.length > 0 ? (
-                                tasks.map((task) => (
-                                    <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between gap-3 border border-transparent hover:border-gray-200 transition">
-                                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${task.status === 'approved' ? 'bg-blue-100 border-blue-500 text-blue-600' : 'border-gray-300 bg-white'
-                                                }`}>
-                                                {task.status === 'approved' && <span className="font-bold text-xs">✓</span>}
+                                tasks.map((task) => {
+                                    const isApproved = task.status === 'approved';
+                                    const isPastDue = !isToday(selectedDate);
+
+                                    return (
+                                        <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between group border border-transparent hover:border-gray-200 transition">
+                                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                                                <div
+                                                    onClick={() => !isPastDue && handleToggleStatus(task)}
+                                                    className={`w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer ${isApproved ? 'bg-blue-100 border-blue-500 text-blue-600' : isPastDue ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : 'border-gray-300 bg-white hover:border-blue-500'}`}
+                                                >
+                                                    {isApproved && <span className="font-bold text-xs">✓</span>}
+                                                </div>
+                                                <div className="flex-1 min-w-0 pr-2">
+                                                    <p className={`font-bold text-sm line-clamp-1 mb-0.5 ${isApproved ? 'text-gray-500' : 'text-gray-800'}`}>{task.title}</p>
+                                                    <p className="text-[10px] text-gray-400">{new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                    {task.note && <div className="text-[10px] text-gray-500 italic truncate">{task.note}</div>}
+                                                </div>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-gray-800 text-sm line-clamp-1 mb-0.5">{task.title}</p>
-                                                <p className="text-[10px] text-gray-400">{new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                            <div className="flex flex-col gap-2 items-end">
+                                                <button
+                                                    onClick={() => handleViewPhoto(task)}
+                                                    className="bg-blue-600 text-white shadow-blue-200 text-[10px] font-bold py-2 px-4 rounded-xl shadow-md active:scale-95 transition-transform flex items-center gap-1"
+                                                >
+                                                    <Camera size={14} />
+                                                    Foto
+                                                </button>
+                                                {!isPastDue && (
+                                                    <button
+                                                        onClick={() => handleDeleteTask(task.task_id)}
+                                                        className="text-red-300 hover:text-red-500 p-1 transition"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
-                                        <button
-                                            onClick={() => handleViewPhoto(task)}
-                                            className="bg-blue-600 text-white shadow-blue-200 text-[10px] font-bold py-2 px-4 rounded-xl shadow-md active:scale-95 transition-transform flex items-center gap-1"
-                                        >
-                                            <Camera size={14} />
-                                            Foto
-                                        </button>
-                                    </div>
-                                ))
+                                    )
+                                })
                             ) : (
                                 <div className="text-center py-8 text-gray-400 text-xs">
                                     No tasks recorded for this date.

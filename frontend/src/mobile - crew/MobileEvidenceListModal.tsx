@@ -74,7 +74,9 @@ export default function MobileEvidenceListModal({
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`Delete ${label}?`)) onDelete(type);
+                                if (window.confirm(`Delete ${label}?`)) {
+                                    onDelete(type);
+                                }
                             }}
                             className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition"
                         >

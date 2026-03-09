@@ -4,7 +4,7 @@ import { Trash2, X } from 'lucide-react';
 interface TaskPreviewProps {
     task: any;
     onClose: () => void;
-    onDeleteProof?: (taskId: number) => void;
+    onDeleteProof?: (taskId: number, type: 'before' | 'after') => void;
     readOnly?: boolean;
 }
 
@@ -54,7 +54,7 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
             </div>
 
             {/* Information */}
-            <div className="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-3 shadow-sm">
+            <div className="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-3 shadow-sm mb-4">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden flex items-center justify-center">
                     {currentImage ? (
                         <img src={currentImage} alt="Thumb" className="w-full h-full object-cover" />
@@ -70,6 +70,23 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
                     </p>
                 </div>
             </div>
+
+            {/* Action Buttons */}
+            {(!readOnly && onDeleteProof && currentImage) && (
+                <div>
+                    <button
+                        onClick={() => {
+                            if (window.confirm('Delete this image?')) {
+                                onDeleteProof(task.task_id, activeTab);
+                            }
+                        }}
+                        className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold py-3 px-4 rounded-xl transition"
+                    >
+                        <Trash2 size={16} />
+                        Delete Evidence
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

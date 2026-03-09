@@ -6,7 +6,7 @@ interface MobileTaskPreviewProps {
     task: any;
     isOpen: boolean;
     onClose: () => void;
-    onDeleteProof?: (taskId: number) => void;
+    onDeleteProof?: (taskId: number, type: 'before' | 'after') => void;
     onUpdateStatus?: (status: string) => void;
     showHistoryLabel?: boolean;
     readOnly?: boolean;
@@ -39,14 +39,14 @@ export default function MobileTaskPreview({ task, isOpen, onClose, onDeleteProof
         return `/storage/${url}`;
     };
 
-    const images: { type: string; url: string }[] = [];
+    const images: { type: string; url: string; backendType: 'before' | 'after' }[] = [];
     const beforeFull = getFullUrl(task.before_image);
     const afterFull = getFullUrl(task.after_image);
-    const proofFull = getFullUrl(task.proof_image);
+    const proofFull = getFullUrl(task.proof_image); // Keeping for legacy safety
 
-    if (beforeFull) images.push({ type: 'Before Work', url: beforeFull });
-    if (afterFull) images.push({ type: 'After Work', url: afterFull });
-    if (proofFull) images.push({ type: 'Proof', url: proofFull });
+    if (beforeFull) images.push({ type: 'Before Work', url: beforeFull, backendType: 'before' });
+    if (afterFull) images.push({ type: 'After Work', url: afterFull, backendType: 'after' });
+    if (proofFull && !afterFull) images.push({ type: 'Proof', url: proofFull, backendType: 'after' }); // fallback for legacy proof_image
 
     const currentImage = images.length > 0 ? images[currentIndex] : null;
 
@@ -153,31 +153,19 @@ export default function MobileTaskPreview({ task, isOpen, onClose, onDeleteProof
                         </p>
                     )}
 
-                    {(!readOnly && onUpdateStatus && task.status !== 'approved' && task.status !== 'rejected') ? (
-                        <div className="flex gap-3 mt-2">
-                            <button
-                                onClick={() => {
-                                    if (window.confirm('Reject this task?')) {
-                                        onUpdateStatus('rejected');
-                                        handleClose();
-                                    }
-                                }}
-                                className="flex-1 flex items-center justify-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 font-bold py-3 px-4 rounded-xl transition"
-                            >
-                                Reject
-                            </button>
-                            <button
-                                onClick={() => {
-                                    if (window.confirm('Approve this task?')) {
-                                        onUpdateStatus('approved');
-                                        handleClose();
-                                    }
-                                }}
-                                className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white shadow-lg shadow-green-200 hover:bg-green-600 font-bold py-3 px-4 rounded-xl transition"
-                            >
-                                Approve
-                            </button>
-                        </div>
+                    {(!readOnly && onDeleteProof && currentImage) ? (
+                        <button
+                            onClick={() => {
+                                if (window.confirm('Delete this image?')) {
+                                    onDeleteProof(task.task_id, currentImage.backendType);
+                                    handleClose();
+                                }
+                            }}
+                            className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold py-3 px-4 rounded-xl transition"
+                        >
+                            <Trash2 size={16} />
+                            Delete Image
+                        </button>
                     ) : (
                         <div className="py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium mt-2">
                             Evidence View Only
