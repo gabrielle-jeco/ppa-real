@@ -478,8 +478,8 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                                 <button onClick={() => handleViewPhoto(task)} className="bg-primary text-white text-[10px] font-bold py-1.5 px-4 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center gap-1">
                                                     <Camera size={12} /> Foto
                                                 </button>
-                                                {/* Only allow deleting Crew's tasks */}
-                                                {(isToday(selectedDate)) && (
+                                                {/* Only allow deleting Crew's tasks if not approved */}
+                                                {(isToday(selectedDate) && task.status !== 'approved') && (
                                                     <button onClick={() => handleDeleteTask(task.task_id)} className="text-red-400 hover:text-red-600 p-1 opacity-50 group-hover:opacity-100 transition">
                                                         <Trash2 size={14} />
                                                     </button>
