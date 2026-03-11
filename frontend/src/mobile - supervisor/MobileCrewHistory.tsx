@@ -396,7 +396,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                     <Camera size={14} />
                                                     Foto
                                                 </button>
-                                                {!isPastDue && (
+                                                {(!isPastDue && !isApproved) && (
                                                     <button
                                                         onClick={() => handleDeleteTask(task.task_id)}
                                                         className="text-red-300 hover:text-red-500 p-1 transition"
