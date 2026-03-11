@@ -172,6 +172,10 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
             t.task_id === task.task_id ? { ...t, status: newStatus } : t
         ));
 
+        if (previewTask?.task_id === task.task_id) {
+            setPreviewTask({ ...previewTask, status: newStatus });
+        }
+
         try {
             const token = localStorage.getItem('auth_token');
             await fetch(`/api/tasks/${task.task_id}/status`, {
@@ -190,25 +194,31 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
         }
     };
 
-    const handleDeleteProof = async (taskId: number, type: 'before' | 'after') => {
+    const handleDeleteProof = async (evidenceId: number) => {
+        if (!previewTask) return;
         try {
             const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/tasks/${taskId}/evidence?type=${type}`, {
+            const res = await fetch(`/api/tasks/${previewTask.task_id}/evidence`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ evidence_id: evidenceId })
             });
             if (res.ok) {
                 // Update local state by removing the specific image
-                setTasks(tasks.map(t => t.task_id === taskId ? {
+                const updateEvidences = (evs: any[]) => evs.filter((e: any) => e.id !== evidenceId);
+
+                setTasks(tasks.map(t => t.task_id === previewTask.task_id ? {
                     ...t,
-                    ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                    evidences: updateEvidences(t.evidences || [])
                 } : t));
-                if (previewTask?.task_id === taskId) {
-                    setPreviewTask({
-                        ...previewTask,
-                        ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
-                    });
-                }
+                setPreviewTask({
+                    ...previewTask,
+                    evidences: updateEvidences(previewTask.evidences || [])
+                });
             } else {
                 alert('Failed to delete image.');
             }

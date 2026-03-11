@@ -10,11 +10,10 @@ interface MobileTaskExecutionProps {
     task: any;
     onClose: () => void;
     onUpload: (formData: FormData) => Promise<void>;
-    onDelete?: (type: 'before' | 'after') => Promise<void>;
+    onDelete?: (evidenceId: number) => Promise<void>;
 }
 
 export default function MobileTaskExecution({ task, onClose, onUpload, onDelete }: MobileTaskExecutionProps) {
-    // Calculated State (Moved up for init)
     const isPastDue = new Date(task.due_at) < new Date(new Date().setHours(0, 0, 0, 0));
     const isReadOnly = task.status === 'approved' || isPastDue;
 
@@ -24,23 +23,16 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
     const [showHistory, setShowHistory] = useState(false); // Acts as "Preview Mode"
     const [showEvidenceList, setShowEvidenceList] = useState(isReadOnly); // Acts as "List Mode" (Init with ReadOnly)
 
-    // Upload State (Preview only, real data comes from task or fresh upload)
     const getInitialPreview = (imgUrl: string | null) => {
         if (!imgUrl) return null;
         return imgUrl.startsWith('http') || imgUrl.startsWith('blob:') || imgUrl.startsWith('/storage/') ? imgUrl : `/storage/${imgUrl}`;
     };
 
-    const [beforePreview, setBeforePreview] = useState<string | null>(getInitialPreview(task.before_image));
-    const [afterPreview, setAfterPreview] = useState<string | null>(getInitialPreview(task.after_image));
+    const beforeEvidences = task.evidences?.filter((e: any) => e.type === 'before') || [];
+    const afterEvidences = task.evidences?.filter((e: any) => e.type === 'after') || [];
 
-    // Sync state with upstream task changes (e.g., after successful API upload/delete)
-    useEffect(() => {
-        if (task.before_image && !task.before_image.startsWith('blob:')) setBeforePreview(getInitialPreview(task.before_image));
-        else if (!task.before_image) setBeforePreview(null);
-
-        if (task.after_image && !task.after_image.startsWith('blob:')) setAfterPreview(getInitialPreview(task.after_image));
-        else if (!task.after_image) setAfterPreview(null);
-    }, [task.before_image, task.after_image]);
+    const beforePreview = beforeEvidences.length > 0 ? getInitialPreview(beforeEvidences[beforeEvidences.length - 1].file_path) : null;
+    const afterPreview = afterEvidences.length > 0 ? getInitialPreview(afterEvidences[afterEvidences.length - 1].file_path) : null;
 
     // Loading State
     const [isUploading, setIsUploading] = useState(false);
@@ -51,13 +43,13 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
     // Modal State
     const [showActionModal, setShowActionModal] = useState(false);
     const [activeUploadType, setActiveUploadType] = useState<'before' | 'after' | null>(null);
+    const [initialPreviewIndex, setInitialPreviewIndex] = useState(0);
 
     // Camera State
     const [showCamera, setShowCamera] = useState(false);
 
     // Hidden Input Refs
     const galleryInputRef = React.useRef<HTMLInputElement>(null);
-
 
     useEffect(() => {
         setAnimateIn(true);
@@ -82,16 +74,12 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
         setShowCamera(false);
         if (!activeUploadType) return;
 
-        const previewUrl = URL.createObjectURL(file);
-        if (activeUploadType === 'before') setBeforePreview(previewUrl);
-        else setAfterPreview(previewUrl);
-
         // Immediate Upload with Compression
         setIsUploading(true);
         try {
             const compressedFile = await compressImage(file, 1200, 1200, 0.7);
             const formData = new FormData();
-            formData.append(activeUploadType, compressedFile);
+            formData.append(`${activeUploadType}[]`, compressedFile);
 
             await onUpload(formData);
         } catch (error) {
@@ -127,17 +115,13 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
 
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            const previewUrl = URL.createObjectURL(file);
-
-            if (activeUploadType === 'before') setBeforePreview(previewUrl);
-            else setAfterPreview(previewUrl);
 
             // Immediate Upload with Compression
             setIsUploading(true);
             try {
                 const compressedFile = await compressImage(file, 1200, 1200, 0.7);
                 const formData = new FormData();
-                formData.append(activeUploadType, compressedFile);
+                formData.append(`${activeUploadType}[]`, compressedFile);
 
                 await onUpload(formData);
             } catch (error) {
@@ -151,13 +135,11 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
         }
     };
 
-    const handleDeleteEvidence = async (type: 'before' | 'after') => {
+    const handleDeleteEvidence = async (evidenceId: number) => {
         if (isReadOnly || !onDelete) return; // Prevent delete in read-only mode
 
         try {
-            await onDelete(type);
-            if (type === 'before') setBeforePreview(null);
-            else setAfterPreview(null);
+            await onDelete(evidenceId);
         } catch (error) {
             console.error("Delete failed", error);
         }
@@ -209,9 +191,14 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
                                 >
                                     {beforePreview ? (
                                         <div className="relative w-full h-full">
-                                            <img src={beforePreview} alt="Before" className="w-full h-full object-cover rounded-3xl shadow-sm" />
-                                            <div className="absolute bottom-2 right-2 bg-white/80 p-1.5 rounded-full backdrop-blur-sm">
-                                                <CheckCircle size={16} className="text-green-500" />
+                                            <img src={beforePreview} alt="Before" className="w-full h-full object-cover rounded-3xl shadow-sm opacity-60" />
+                                            {/* Count Badge Overlay */}
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/10 rounded-3xl backdrop-blur-[1px]">
+                                                <div className="bg-blue-500/90 text-white font-bold text-xl px-4 py-2 rounded-2xl shadow flex items-center gap-2">
+                                                    <Camera size={20} />
+                                                    +{beforeEvidences.length}
+                                                </div>
+                                                <span className="text-white font-bold text-xs mt-2 drop-shadow-md">Before</span>
                                             </div>
                                         </div>
                                     ) : (
@@ -233,9 +220,14 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
                                 >
                                     {afterPreview ? (
                                         <div className="relative w-full h-full">
-                                            <img src={afterPreview} alt="After" className="w-full h-full object-cover rounded-3xl shadow-sm" />
-                                            <div className="absolute bottom-2 right-2 bg-white/80 p-1.5 rounded-full backdrop-blur-sm">
-                                                <CheckCircle size={16} className="text-green-500" />
+                                            <img src={afterPreview} alt="After" className="w-full h-full object-cover rounded-3xl shadow-sm opacity-60" />
+                                            {/* Count Badge Overlay */}
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/10 rounded-3xl backdrop-blur-[1px]">
+                                                <div className="bg-purple-500/90 text-white font-bold text-xl px-4 py-2 rounded-2xl shadow flex items-center gap-2">
+                                                    <ImageIcon size={20} />
+                                                    +{afterEvidences.length}
+                                                </div>
+                                                <span className="text-white font-bold text-xs mt-2 drop-shadow-md">After</span>
                                             </div>
                                         </div>
                                     ) : (
@@ -279,34 +271,28 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
             />
 
 
-            {/* 2. Evidence List Overlay (Portaled on top) */}
+            {/* 2. Overlying List View */}
             <MobileEvidenceListModal
                 isOpen={showEvidenceList}
                 onClose={handleClose}
-                task={{
-                    ...task,
-                    before_image: beforePreview,
-                    after_image: afterPreview
-                }}
-                onSelectImage={(type) => {
+                task={task}
+                onSelectImage={(type, index = 0) => {
                     setActiveTab(type as 'before' | 'after');
+                    setInitialPreviewIndex(index);
                     setShowHistory(true);
                 }}
-                onDelete={(type) => {
-                    if (type === 'before' || type === 'after') handleDeleteEvidence(type);
-                }}
+                onDelete={handleDeleteEvidence}
                 readOnly={isReadOnly}
             />
 
-            {/* 3. Preview Overlay */}
+            {/* 3. Deepest History Preview */}
             <MobileCrewTaskPreview
                 task={task}
                 isOpen={showHistory}
                 onClose={() => setShowHistory(false)}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                beforeImage={beforePreview}
-                afterImage={afterPreview}
+                initialIndex={initialPreviewIndex}
                 onDelete={handleDeleteEvidence}
                 readOnly={isReadOnly}
             />

@@ -19,8 +19,21 @@ class TaskController extends Controller
     {
         $user = Auth::user();
 
-        // Security check (if Manager, allow if in same location or RM. If Supervisor, allow only self)
-        // For simplicity now, assuming Manager context
+        // Security check: Only Managers/Supervisors can view tasks assigned to others
+        if ($user->role_type !== 'manager' && $user->role_type !== 'supervisor') {
+            if ($user->id != $supervisorId) { // Prevent Crews from viewing other Crew's tasks
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+        } else {
+            // If it's a Manager/Supervisor trying to view someone else's tasks, verify hierarchy
+            if ($user->id != $supervisorId) {
+                // Ensure the requested $supervisorId is a valid subordinate
+                $isSubordinate = $user->subordinateLines()->where('subordinate_id', $supervisorId)->where('status', 'active')->exists();
+                if (!$isSubordinate) {
+                    return response()->json(['message' => 'Unauthorized. This user is not your subordinate.'], 403);
+                }
+            }
+        }
 
         $query = Task::where('employee_id', $supervisorId);
 
@@ -28,7 +41,7 @@ class TaskController extends Controller
             $query->whereDate('due_at', $request->date);
         }
 
-        $tasks = $query->orderBy('due_at', 'asc')->get();
+        $tasks = $query->with('evidences')->orderBy('due_at', 'asc')->get();
 
         return response()->json($tasks);
     }
@@ -45,6 +58,16 @@ class TaskController extends Controller
             'due_at' => 'required|date',
             'note' => 'nullable|string',
         ]);
+
+        $employer = Auth::user();
+
+        // Hierarchy Check: Prevent user from creating tasks for someone who is not their subordinate
+        if ($employer->id != $request->supervisor_id) { // Allow self-assigned tasks for Supervisor's own checklist
+            $isSubordinate = $employer->subordinateLines()->where('subordinate_id', $request->supervisor_id)->where('status', 'active')->exists();
+            if (!$isSubordinate) {
+                return response()->json(['message' => 'Unauthorized. You can only assign tasks to your direct subordinates.'], 403);
+            }
+        }
 
         $task = Task::create([
             'employee_id' => $request->supervisor_id, // Who is doing the task
@@ -63,11 +86,18 @@ class TaskController extends Controller
      */
     public function destroy($id)
     {
-        $task = Task::findOrFail($id);
+        $task = Task::with('evidences')->findOrFail($id);
 
         // Only the creator (employer) can delete a task
         if ($task->employer_id !== Auth::id()) {
             return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Delete all physical evidence files before deleting the task
+        foreach ($task->evidences as $evidence) {
+            if (\Illuminate\Support\Facades\Storage::disk('public')->exists($evidence->file_path)) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($evidence->file_path);
+            }
         }
 
         $task->delete();
@@ -84,6 +114,11 @@ class TaskController extends Controller
         ]);
 
         $task = Task::findOrFail($id);
+
+        if ($task->employer_id !== Auth::id()) {
+            return response()->json(['message' => 'Unauthorized. Only the task assigner can update its status.'], 403);
+        }
+
         $task->status = $request->status;
         $task->save();
 
@@ -98,11 +133,15 @@ class TaskController extends Controller
     public function uploadEvidence(Request $request, $id)
     {
         $request->validate([
-            'before' => 'nullable|image|max:10240', // Max 10MB
-            'after' => 'nullable|image|max:10240',
+            'before.*' => 'nullable|image|max:10240', // Max 10MB per file
+            'after.*' => 'nullable|image|max:10240',
         ]);
 
         $task = Task::findOrFail($id);
+
+        if ($task->status === 'approved') {
+            return response()->json(['message' => 'Cannot modify evidence on an approved task. Please reject/un-approve the task first.'], 400);
+        }
 
         // Security check: Ensure the authenticated user is the one assigned to the task
         // But also allow Supervisors to upload evidence on tasks they assigned
@@ -116,21 +155,42 @@ class TaskController extends Controller
             ], 400);
         }
 
-        if ($request->hasFile('before')) {
-            $path = $request->file('before')->store('tasks', 'public');
-            $task->before_image = $path;
+        // Explicitly start a transaction to ensure all files or no files are saved
+        \Illuminate\Support\Facades\DB::beginTransaction();
+
+        try {
+            if ($request->hasFile('before')) {
+                foreach ($request->file('before') as $file) {
+                    if ($file->isValid()) {
+                        $path = $file->store('tasks', 'public');
+                        $task->evidences()->create([
+                            'file_path' => $path,
+                            'type' => 'before'
+                        ]);
+                    }
+                }
+            }
+
+            if ($request->hasFile('after')) {
+                foreach ($request->file('after') as $file) {
+                    if ($file->isValid()) {
+                        $path = $file->store('tasks', 'public');
+                        $task->evidences()->create([
+                            'file_path' => $path,
+                            'type' => 'after'
+                        ]);
+                    }
+                }
+            }
+
+            // Do not update status here; status remains pending until approved by supervisor.
+            \Illuminate\Support\Facades\DB::commit();
+
+            return response()->json($task->load('evidences'));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return response()->json(['message' => 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.'], 500);
         }
-
-        if ($request->hasFile('after')) {
-            $path = $request->file('after')->store('tasks', 'public');
-            $task->after_image = $path;
-        }
-
-        // Do not update status here; status remains pending until approved by supervisor.
-
-        $task->save();
-
-        return response()->json($task);
     }
     /**
      * Remove evidence image (before/after) from a task.
@@ -139,21 +199,33 @@ class TaskController extends Controller
     public function removeEvidence(Request $request, $id)
     {
         $request->validate([
-            'type' => 'required|in:before,after'
+            'evidence_id' => 'required|integer|exists:task_evidences,id'
         ]);
 
         $task = Task::findOrFail($id);
-        $type = $request->input('type');
 
-        if ($type === 'before') {
-            $task->before_image = null;
-        } elseif ($type === 'after') {
-            $task->after_image = null;
+        if ($task->status === 'approved') {
+            return response()->json(['message' => 'Cannot delete evidence from an approved task. Please reject/un-approve the task first.'], 400);
         }
 
-        $task->save();
+        // Security check: Ensure the authenticated user is authorized to delete
+        if ($task->employee_id !== Auth::id() && $task->employer_id !== Auth::id()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
 
-        return response()->json(['message' => 'Evidence removed', 'task' => $task]);
+        $evidence = $task->evidences()->find($request->input('evidence_id'));
+        if (!$evidence) {
+            return response()->json(['message' => 'Evidence not found for this task'], 404);
+        }
+
+        // Delete physical file
+        if (\Illuminate\Support\Facades\Storage::disk('public')->exists($evidence->file_path)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($evidence->file_path);
+        }
+
+        $evidence->delete();
+
+        return response()->json(['message' => 'Evidence removed', 'task' => $task->load('evidences')]);
     }
 
     /**

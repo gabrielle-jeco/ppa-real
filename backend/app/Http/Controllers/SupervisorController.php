@@ -127,6 +127,12 @@ class SupervisorController extends Controller
             return response()->json(['message' => 'Crew not found'], 404);
         }
 
+        // Hierarchy Check: Ensure the requested crew is a subordinate
+        $isSubordinate = $user->subordinateLines()->where('subordinate_id', $id)->where('status', 'active')->exists();
+        if (!$isSubordinate) {
+            return response()->json(['message' => 'Unauthorized. You can only view stats for your direct subordinates.'], 403);
+        }
+
         $month = $request->query('month', Carbon::now()->month);
         $year = $request->query('year', Carbon::now()->year);
 

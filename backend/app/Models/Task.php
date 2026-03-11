@@ -16,8 +16,6 @@ class Task extends Model
         'description',
         'due_at',
         'status',
-        'before_image',
-        'after_image'
     ];
 
     protected $casts = [
@@ -49,5 +47,10 @@ class Task extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'employer_id');
+    }
+
+    public function evidences()
+    {
+        return $this->hasMany(TaskEvidence::class);
     }
 }

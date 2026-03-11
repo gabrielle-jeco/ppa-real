@@ -20,6 +20,19 @@ class EvaluationController extends Controller
                 'notes' => 'nullable|string'
             ]);
 
+            $evaluator = Auth::user();
+
+            // Security Check: Only managers and supervisors can evaluate
+            if ($evaluator->role_type !== 'manager' && $evaluator->role_type !== 'supervisor') {
+                return response()->json(['error' => 'Unauthorized. Only superiors can evaluate.'], 403);
+            }
+
+            // Hierarchy Check: Ensure the target user is a subordinate
+            $isSubordinate = $evaluator->subordinateLines()->where('subordinate_id', $request->user_id)->where('status', 'active')->exists();
+            if (!$isSubordinate) {
+                return response()->json(['error' => 'Unauthorized. You can only evaluate your direct subordinates.'], 403);
+            }
+
             $date = \Carbon\Carbon::parse($request->date)->startOfMonth()->format('Y-m-d');
 
             $evaluation = MonthlyPersonalityEvaluation::updateOrCreate(

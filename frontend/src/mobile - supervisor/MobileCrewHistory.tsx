@@ -118,29 +118,31 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
         }
     };
 
-    const handleDeleteProof = async (taskId: number, type: 'before' | 'after') => {
+    const handleDeleteProof = async (evidenceId: number) => {
+        if (!previewTask) return;
+        const taskId = previewTask.task_id;
         try {
             const token = localStorage.getItem('auth_token');
             if (!token) throw new Error("No token found");
 
-            const res = await fetch(`/api/tasks/${taskId}/evidence?type=${type}`, {
+            const res = await fetch(`/api/tasks/${taskId}/evidence`, {
                 method: 'DELETE',
                 headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ evidence_id: evidenceId })
             });
 
             if (res.ok) {
                 setTasks(tasks.map(t => t.task_id === taskId ? {
                     ...t,
-                    ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                    evidences: (t.evidences || []).filter((e: any) => e.id !== evidenceId)
                 } : t));
-                if (previewTask?.task_id === taskId) {
-                    setPreviewTask({
-                        ...previewTask,
-                        ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
-                    });
-                }
+                setPreviewTask({
+                    ...previewTask,
+                    evidences: (previewTask.evidences || []).filter((e: any) => e.id !== evidenceId)
+                });
             } else {
                 alert('Failed to delete image.');
             }
@@ -149,6 +151,8 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
             alert('An error occurred.');
         }
     };
+    const [activeEvidenceTab, setActiveEvidenceTab] = useState<'before' | 'after'>('before');
+    const [initialPreviewIndex, setInitialPreviewIndex] = useState(0);
 
     const handleViewPhoto = (task: any) => {
         setPreviewTask(task);
@@ -220,27 +224,25 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 isOpen={isEvidenceListOpen}
                 onClose={() => setIsEvidenceListOpen(false)}
                 task={previewTask}
-                onSelectImage={(type) => {
+                onSelectImage={(type, index = 0) => {
+                    setActiveEvidenceTab(type as 'before' | 'after');
+                    setInitialPreviewIndex(index);
                     setIsPreviewOpen(true);
                 }}
-                onDelete={!isToday(selectedDate) ? undefined : (type) => {
-                    if (previewTask && (type === 'before' || type === 'after')) {
-                        handleDeleteProof(previewTask.task_id, type);
-                    }
-                }}
-                readOnly={!isToday(selectedDate)}
+                onDelete={!isToday(selectedDate) ? undefined : (evidenceId) => handleDeleteProof(evidenceId)}
+                readOnly={previewTask?.status === 'approved' || !isToday(selectedDate)}
             />
 
             <MobileTaskPreview
                 isOpen={isPreviewOpen}
                 onClose={() => setIsPreviewOpen(false)}
                 task={previewTask}
-                onDeleteProof={(taskId, type) => {
-                    handleDeleteProof(taskId, type);
-                    setIsPreviewOpen(false); // Close preview immediately on delete, returning to EvidenceList
-                }}
+                activeTab={activeEvidenceTab}
+                onTabChange={setActiveEvidenceTab}
+                initialIndex={initialPreviewIndex}
+                onDeleteProof={(evidenceId) => handleDeleteProof(evidenceId)}
                 onUpdateStatus={(status) => handleUpdateStatus(previewTask?.task_id, status)}
-                readOnly={!isToday(selectedDate)}
+                readOnly={previewTask?.status === 'approved' || !isToday(selectedDate)}
             />
 
             <div className="flex flex-col h-full">
