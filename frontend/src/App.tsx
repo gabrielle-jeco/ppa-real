@@ -12,13 +12,45 @@ function App() {
   const [user, setUser] = useState<any>(null);
   const [activeSupervisorPage, setActiveSupervisorPage] = useState<'employees' | 'performance'>('employees');
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [isVerifying, setIsVerifying] = useState(true);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user_data');
     const token = localStorage.getItem('auth_token');
+
+    // Preliminary set to allow immediate initial render (UX)
     if (storedUser && token) {
       setUser(JSON.parse(storedUser));
     }
+
+    // Security Audit Fix: Validate token immediately
+    const verifyToken = async () => {
+      if (!token) {
+        setIsVerifying(false);
+        return;
+      }
+      try {
+        const response = await fetch('/api/user', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const verifiedUser = await response.json();
+          // Overwrite local storage to block tampering
+          localStorage.setItem('user_data', JSON.stringify(verifiedUser));
+          setUser(verifiedUser);
+        } else {
+          // Token is invalid, expired, or user data was tampered and backend rejected
+          handleLogout();
+        }
+      } catch (error) {
+        console.error("Token verification failed", error);
+      } finally {
+        setIsVerifying(false);
+      }
+    };
+
+    verifyToken();
 
     // Dynamic PWA Theme Color Logic
     const updateThemeColor = () => {
@@ -59,6 +91,10 @@ function App() {
     setUser(null);
     setActiveSupervisorPage('employees'); // Reset
   };
+
+  if (isVerifying && !user) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400">Verifying session...</div>;
+  }
 
   if (!user) {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;

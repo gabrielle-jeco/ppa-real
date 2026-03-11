@@ -140,25 +140,31 @@ export default function SupervisorPerformance() {
     // Since supervisors can't delete proofs on desktop, we pass a dummy function or hide the delete button in TaskPreview via props if supported.
     // However, TaskPreview expects onDeleteProof. Let's provide a dummy one that alerts or does nothing, as the requirement is view-only.
     // Or better, implement it but maybe restrict it? For now, let's keep it simple.
-    const handleDeleteProof = async (taskId: number, type: 'before' | 'after') => {
+    const handleDeleteProof = async (evidenceId: number) => {
+        if (!previewTask) return;
         try {
             const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/tasks/${taskId}/evidence?type=${type}`, {
+            const res = await fetch(`/api/tasks/${previewTask.task_id}/evidence`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ evidence_id: evidenceId })
             });
             if (res.ok) {
                 // Update local state by removing the specific image
-                setMyTasks(myTasks.map(t => t.task_id === taskId ? {
+                const updateEvidences = (evs: any[]) => evs.filter((e: any) => e.id !== evidenceId);
+
+                setMyTasks(myTasks.map(t => t.task_id === previewTask.task_id ? {
                     ...t,
-                    ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
+                    evidences: updateEvidences(t.evidences || [])
                 } : t));
-                if (previewTask?.task_id === taskId) {
-                    setPreviewTask({
-                        ...previewTask,
-                        ...(type === 'before' ? { before_image: null } : { after_image: null, proof_image: null })
-                    });
-                }
+                setPreviewTask({
+                    ...previewTask,
+                    evidences: updateEvidences(previewTask.evidences || [])
+                });
             } else {
                 alert('Failed to delete image.');
             }
@@ -461,6 +467,7 @@ export default function SupervisorPerformance() {
                                 task={previewTask}
                                 onClose={handleClosePreview}
                                 onDeleteProof={handleDeleteProof}
+                                readOnly={previewTask.status === 'approved' || new Date(previewTask.due_at) < new Date(new Date().setHours(0, 0, 0, 0))}
                             />
                         ) : (
                             <div className="flex flex-col h-full">

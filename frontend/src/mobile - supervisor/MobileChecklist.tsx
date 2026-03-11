@@ -287,11 +287,15 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                         setSelectedTaskForUpload(data);
                         fetchMyTasks();
                     }}
-                    onDelete={async (type) => {
+                    onDelete={async (evidenceId) => {
                         const token = localStorage.getItem('auth_token');
-                        const res = await fetch(`/api/tasks/${selectedTaskForUpload.task_id}/evidence?type=${type}`, {
+                        const res = await fetch(`/api/tasks/${selectedTaskForUpload.task_id}/evidence`, {
                             method: 'DELETE',
-                            headers: { 'Authorization': `Bearer ${token}` }
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ evidence_id: evidenceId })
                         });
                         if (!res.ok) {
                             const errText = await res.text();

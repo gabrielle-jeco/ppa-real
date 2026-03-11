@@ -119,15 +119,17 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
         }
     };
 
-    const handleDeleteEvidence = async (type: 'before' | 'after') => {
+    const handleDeleteEvidence = async (evidenceId: number) => {
         if (!selectedTask) return;
 
         try {
-            const response = await fetch(`/api/tasks/${selectedTask.task_id}/evidence?type=${type}`, {
+            const response = await fetch(`/api/tasks/${selectedTask.task_id}/evidence`, {
                 method: 'DELETE',
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-                }
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ evidence_id: evidenceId })
             });
 
             if (!response.ok) {
