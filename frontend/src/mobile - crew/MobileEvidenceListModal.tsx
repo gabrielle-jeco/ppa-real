@@ -6,8 +6,8 @@ interface MobileEvidenceListModalProps {
     isOpen: boolean;
     onClose: () => void;
     task: any;
-    onSelectImage: (imageType: 'before' | 'after' | 'proof') => void;
-    onDelete?: (imageType: 'before' | 'after' | 'proof') => void; // Optional delete capability
+    onSelectImage: (imageType: 'before' | 'after' | 'proof', index?: number) => void;
+    onDelete?: (evidenceId: number) => void; // Optional delete capability
     readOnly?: boolean;
 }
 
@@ -34,24 +34,24 @@ export default function MobileEvidenceListModal({
     };
 
     // Helper to render list item
-    const renderItem = (type: 'before' | 'after' | 'proof', label: string, imageUrl: string | null) => {
-        if (!imageUrl) return null;
+    const renderItem = (evidence: any, type: 'before' | 'after' | 'proof', label: string, index: number) => {
+        if (!evidence?.file_path) return null;
 
         // Ensure full URL
         const getFullUrl = (url: string) => {
             if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('/storage/')) return url;
             return `/storage/${url}`;
         };
-        const fullUrl = getFullUrl(imageUrl);
+        const fullUrl = getFullUrl(evidence.file_path);
 
         return (
             <div
-                key={type}
+                key={evidence.id || fullUrl}
                 className="bg-gray-100 rounded-2xl p-3 flex items-center justify-between transition-transform active:scale-[0.98] mb-3 shadow-sm"
             >
                 <div
                     className="flex items-center gap-4 flex-1 cursor-pointer"
-                    onClick={() => onSelectImage(type)}
+                    onClick={() => onSelectImage(type, index)}
                 >
                     {/* Thumbnail */}
                     <div className="w-12 h-12 rounded-xl bg-gray-600 overflow-hidden shrink-0 shadow-md">
@@ -63,19 +63,19 @@ export default function MobileEvidenceListModal({
                         <p className="font-bold text-gray-700 text-sm mb-0.5 truncate">{label}</p>
                         <p className="text-[10px] text-gray-400 flex items-center gap-1">
                             <Calendar size={10} />
-                            {new Date(task.updated_at || new Date()).toLocaleDateString()}
+                            {new Date(evidence.created_at || task.updated_at || new Date()).toLocaleDateString()}
                         </p>
                     </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
-                    {onDelete && !readOnly && (
+                    {onDelete && !readOnly && evidence.id && (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
                                 if (window.confirm(`Delete ${label}?`)) {
-                                    onDelete(type);
+                                    onDelete(evidence.id);
                                 }
                             }}
                             className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition"
@@ -84,7 +84,7 @@ export default function MobileEvidenceListModal({
                         </button>
                     )}
                     <button
-                        onClick={() => onSelectImage(type)}
+                        onClick={() => onSelectImage(type, index)}
                         className="p-2 text-gray-400 hover:text-blue-600 rounded-full transition"
                     >
                         <ChevronRight size={18} />
@@ -94,7 +94,9 @@ export default function MobileEvidenceListModal({
         );
     };
 
-    const hasImages = task?.before_image || task?.after_image;
+    const beforeEvidences = task?.evidences?.filter((e: any) => e.type === 'before') || [];
+    const afterEvidences = task?.evidences?.filter((e: any) => e.type === 'after') || [];
+    const hasImages = beforeEvidences.length > 0 || afterEvidences.length > 0;
 
     return createPortal(
         <div className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-colors duration-300 ${animateIn ? 'bg-black/50 backdrop-blur-sm' : 'bg-black/0 pointer-events-none'}`}>
@@ -121,22 +123,24 @@ export default function MobileEvidenceListModal({
                             <p className="text-sm">No evidence uploaded yet.</p>
                         </div>
                     ) : (
-                        <div className="space-y-4">
+                        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                             {/* Crew Task Images */}
-                            {task.before_image && (
+                            {beforeEvidences.length > 0 && (
                                 <div>
                                     <h3 className="text-gray-800 font-bold text-sm mb-2 ml-1">Before</h3>
-                                    {renderItem('before', 'Before Work', task.before_image)}
+                                    {beforeEvidences.map((e: any, idx: number) =>
+                                        renderItem(e, 'before', `Before Work ${beforeEvidences.length > 1 ? `#${idx + 1}` : ''}`, idx)
+                                    )}
                                 </div>
                             )}
-                            {task.after_image && (
+                            {afterEvidences.length > 0 && (
                                 <div>
                                     <h3 className="text-gray-800 font-bold text-sm mb-2 ml-1">After</h3>
-                                    {renderItem('after', 'After Work', task.after_image)}
+                                    {afterEvidences.map((e: any, idx: number) =>
+                                        renderItem(e, 'after', `After Work ${afterEvidences.length > 1 ? `#${idx + 1}` : ''}`, idx)
+                                    )}
                                 </div>
                             )}
-
-
                         </div>
                     )}
                 </div>

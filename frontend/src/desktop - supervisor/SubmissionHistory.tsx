@@ -14,8 +14,8 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
         return url.startsWith('http') || url.startsWith('blob:') || url.startsWith('/storage/') ? url : `/storage/${url}`;
     };
 
-    const beforeFull = getFullUrl(task.before_image);
-    const afterFull = getFullUrl(task.after_image);
+    const beforeEvidences = (task.evidences || []).filter((e: any) => e.type === 'before');
+    const afterEvidences = (task.evidences || []).filter((e: any) => e.type === 'after');
 
     return (
         <div className="flex flex-col h-full relative">
@@ -39,16 +39,18 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
                     </h3>
 
                     <div className="space-y-3">
-                        {beforeFull ? (
-                            <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
-                                <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
-                                    <img src={beforeFull} alt="Before" className="w-full h-full object-cover" />
+                        {beforeEvidences.length > 0 ? (
+                            beforeEvidences.map((evidence: any, index: number) => (
+                                <div key={evidence.id || index} className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
+                                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
+                                        <img src={getFullUrl(evidence.file_path)!} alt="Before" className="w-full h-full object-cover" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium text-gray-700 truncate">Before Evidence {beforeEvidences.length > 1 ? `#${index + 1}` : ''}</p>
+                                        <p className="text-[10px] text-gray-400">{new Date(evidence.created_at || task.updated_at).toLocaleString()}</p>
+                                    </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium text-gray-700 truncate">Before Evidence</p>
-                                    <p className="text-[10px] text-gray-400">{new Date(task.updated_at).toLocaleString()}</p>
-                                </div>
-                            </div>
+                            ))
                         ) : (
                             <div className="text-xs text-gray-400 italic">No submission yet.</div>
                         )}
@@ -62,16 +64,18 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
                     </h3>
 
                     <div className="space-y-3">
-                        {afterFull ? (
-                            <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
-                                <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
-                                    <img src={afterFull} alt="After" className="w-full h-full object-cover" />
+                        {afterEvidences.length > 0 ? (
+                            afterEvidences.map((evidence: any, index: number) => (
+                                <div key={evidence.id || index} className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
+                                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
+                                        <img src={getFullUrl(evidence.file_path)!} alt="After" className="w-full h-full object-cover" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium text-gray-700 truncate">After Evidence {afterEvidences.length > 1 ? `#${index + 1}` : ''}</p>
+                                        <p className="text-[10px] text-gray-400">{new Date(evidence.created_at || task.updated_at).toLocaleString()}</p>
+                                    </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium text-gray-700 truncate">After Evidence</p>
-                                    <p className="text-[10px] text-gray-400">{new Date(task.updated_at).toLocaleString()}</p>
-                                </div>
-                            </div>
+                            ))
                         ) : (
                             <div className="text-xs text-gray-400 italic">No submission yet.</div>
                         )}

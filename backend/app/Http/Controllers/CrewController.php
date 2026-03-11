@@ -38,6 +38,12 @@ class CrewController extends Controller
             if ($authUser->role_type !== 'supervisor' && $authUser->role_type !== 'manager') {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
+
+            // Hierarchy Check: The superior must be the direct manager/supervisor of the user
+            $isSubordinate = $authUser->subordinateLines()->where('subordinate_id', $user->id)->where('status', 'active')->exists();
+            if (!$isSubordinate) {
+                return response()->json(['message' => 'Unauthorized. This user is not your subordinate.'], 403);
+            }
         } else {
             // Allow both standard 'crew' and 'employee' alias for own stats
             if ($user->role_type !== 'employee' && $user->role_type !== 'crew') {
