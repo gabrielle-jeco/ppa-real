@@ -93,6 +93,11 @@ class TaskController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        // Prevent deletion of approved tasks to maintain historical/audit consistency
+        if ($task->status === 'approved') {
+            return response()->json(['message' => 'Cannot delete an approved task. Please un-approve it first if you must delete it.'], 400);
+        }
+
         // Delete all physical evidence files before deleting the task
         foreach ($task->evidences as $evidence) {
             if (\Illuminate\Support\Facades\Storage::disk('public')->exists($evidence->file_path)) {

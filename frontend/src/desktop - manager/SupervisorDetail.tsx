@@ -497,7 +497,7 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                                     <Camera size={12} />
                                                     Foto
                                                 </button>
-                                                {isToday(selectedDate) && (
+                                                {(isToday(selectedDate) && task.status !== 'approved') && (
                                                     <button
                                                         onClick={() => handleDeleteTask(task.task_id)}
                                                         className="text-red-400 hover:text-red-600 p-1 opacity-50 group-hover:opacity-100 transition"
