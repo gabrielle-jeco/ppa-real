@@ -30,6 +30,7 @@ COPY . /var/www
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
 # Set permissions for Laravel
+RUN chmod -R 775 /var/www/storage /var/www/bootstrap/cache
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
 
 # Copy entrypoint

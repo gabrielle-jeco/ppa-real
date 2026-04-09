@@ -22,7 +22,7 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
 
     // Shared State (Persisted to prevent reset on refresh)
     const [selectedRole, setSelectedRole] = useState(() => {
-        return localStorage.getItem('CREW_LAST_ROLE') || 'Cashier';
+        return localStorage.getItem('CREW_LAST_ROLE') || 'cashier';
     });
 
     // Initial Login Activity Log (Checks DB for duplicates)

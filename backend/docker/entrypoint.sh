@@ -15,10 +15,17 @@ echo "Postgres is up ✅"
 
 php artisan config:clear || true
 php artisan cache:clear || true
+php artisan route:clear || true
 
 php artisan migrate --force
 
-# Seed optional: jalanin kalau kamu set SEED=true
-php artisan db:seed --force
+# Seed only if table is empty
+USER_COUNT=$(php artisan tinker --execute="echo \App\Models\User::count();" 2>/dev/null | tail -1)
+if [ "$USER_COUNT" = "0" ]; then
+  php artisan db:seed --force
+else
+  echo "Database already seeded, skipping..."
+fi
 
+chmod -R 777 /var/www/storage /var/www/bootstrap/cache
 exec php-fpm

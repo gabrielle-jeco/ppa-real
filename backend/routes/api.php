@@ -20,10 +20,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [App\Http\Controllers\AuthController::class, 'me']);
     Route::post('/logout', [App\Http\Controllers\AuthController::class, 'logout']);
 
-    // Manager Routes
-    Route::get('/manager/supervisors', [App\Http\Controllers\ManagerController::class, 'getSupervisors']);
-    Route::get('/manager/supervisors/{id}/stats', [App\Http\Controllers\ManagerController::class, 'getSupervisorStats']);
-
     // Task Routes
     Route::get('/supervisor/{id}/tasks', [App\Http\Controllers\TaskController::class, 'index']);
     Route::get('/crews/{id}/tasks', [App\Http\Controllers\TaskController::class, 'index']);
