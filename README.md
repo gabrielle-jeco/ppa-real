@@ -5,8 +5,8 @@ Follow the steps below to run the project locally using Docker.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/gabrielle-jeco/personal-performance-app.git
-cd personal-performance-app
+git clone https://github.com/gabrielle-jeco/ppa-real.git
+cd ppa-real
 ```
 
 ### 2. Build and Run Containers
@@ -33,7 +33,6 @@ All accounts below use the same password:
 
 **Available Users:**
 
-* `anton_mgr`
 * `surya_spv`
 * `andi_spv`
 * `budi_crew`
