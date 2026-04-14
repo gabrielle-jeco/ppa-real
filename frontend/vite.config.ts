@@ -14,7 +14,9 @@ export default defineConfig({
         'favicon-32x32.png',
         'apple-touch-icon.png',
         'safari-pinned-tab.svg',
-        'android-chrome-96x96.png'
+        'android-chrome-96x96.png',
+        'pwa-192x192.png',
+        'pwa-512x512.png'
       ],
       manifest: {
         name: 'PPA - Ceklis',
@@ -26,18 +28,13 @@ export default defineConfig({
         orientation: 'portrait',
         icons: [
           {
-            src: 'android-chrome-96x96.png',
-            sizes: '96x96',
-            type: 'image/png'
-          },
-          {
-            src: 'android-icon-192x192.png',
+            src: 'pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'apple-touch-icon.png',
-            sizes: '180x180',
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
             type: 'image/png'
           }
         ]
