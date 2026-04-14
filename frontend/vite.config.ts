@@ -8,24 +8,36 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: [
+        'favicon.ico',
+        'favicon-16x16.png',
+        'favicon-32x32.png',
+        'apple-touch-icon.png',
+        'safari-pinned-tab.svg',
+        'android-chrome-96x96.png'
+      ],
       manifest: {
-        name: 'Personal Performance App',
-        short_name: 'PerformanceApp',
-        description: 'Track your work performance efficiently via Mobile & Desktop.',
+        name: 'PPA - Ceklis',
+        short_name: 'PPA Ceklis',
+        description: 'Checklist dashboard for the Personal Performance Application.',
         theme_color: '#2563EB',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'android-chrome-96x96.png',
+            sizes: '96x96',
+            type: 'image/png'
+          },
+          {
+            src: 'android-icon-192x192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
+            src: 'apple-touch-icon.png',
+            sizes: '180x180',
             type: 'image/png'
           }
         ]
