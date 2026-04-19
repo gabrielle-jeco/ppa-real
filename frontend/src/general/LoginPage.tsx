@@ -25,7 +25,13 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.message || 'Login failed');
+                const apiError =
+                    data?.errors?.username?.[0] ||
+                    data?.errors?.password?.[0] ||
+                    data?.message ||
+                    'Login failed';
+
+                throw new Error(apiError);
             }
 
             // Success

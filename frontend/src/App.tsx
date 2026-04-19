@@ -76,6 +76,14 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (user?.role_type === 'manager') {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
+      setUser(null);
+    }
+  }, [user]);
+
   // Simplified Auth Flow for Phase 2 Verification
   const handleLoginSuccess = (userData: any) => {
     setUser(userData);
@@ -95,26 +103,6 @@ function App() {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
-  if (user.role_type === 'manager') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
-        <div className="max-w-lg w-full bg-white border border-gray-200 rounded-3xl p-8 shadow-sm text-center">
-          <p className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400 mb-3">Milestone Build</p>
-          <h1 className="text-2xl font-bold text-gray-900 mb-3">Manager flow is hidden in this timeline</h1>
-          <p className="text-sm text-gray-500 mb-6">
-            This rollback build only keeps mobile crew, mobile supervisor, and the desktop supervisor dashboard.
-          </p>
-          <button
-            onClick={handleLogout}
-            className="inline-flex items-center justify-center rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800 transition"
-          >
-            Back to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Supervisor Flow
   if (user.role_type === 'supervisor') {
     if (isMobile) {
@@ -123,7 +111,7 @@ function App() {
 
     return (
       <SupervisorLayout onLogout={handleLogout}>
-        <SupervisorDashboard user={user} />
+        <SupervisorDashboard />
       </SupervisorLayout>
     );
   }

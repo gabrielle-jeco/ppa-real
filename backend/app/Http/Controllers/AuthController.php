@@ -37,30 +37,11 @@ class AuthController extends Controller
             ]);
         }
 
-        // Manager Logic: Location Lock
         if ($user->role_type === 'manager') {
-
-            // Store Manager (SM) must be locked to their assigned location
-            if ($user->manager_type === 'SM') {
-                if (!$user->location_id) {
-                    // Safety check: SM must have a location assigned in DB
-                    Auth::logout();
-                    return response()->json(['message' => 'System Error: SM has no assigned location.'], 403);
-                }
-
-                // In a real PWA on-site, we might verify IP or geolocation here.
-                // For now, we assume the location_id passed (or lack thereof) implies checking the backend assignment
-                // Getting stricter: If the request includes a location_id (e.g. from a site kiosk), it must match.
-                if ($request->has('location_id') && $request->location_id != $user->location_id) {
-                    Auth::logout();
-                    throw ValidationException::withMessages([
-                        'location_id' => ['Access denied: You are locked to a different location.'],
-                    ]);
-                }
-            }
-
-            // Regional Manager (RM) - No Lock
-            // Can access from anywhere.
+            Auth::logout();
+            throw ValidationException::withMessages([
+                'username' => ['Invalid credentials.'],
+            ]);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
