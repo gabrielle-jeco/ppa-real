@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\User;
-use App\Models\Task;
 use App\Models\ActivityLog;
-use Illuminate\Support\Facades\Auth;
+use App\Models\Task;
+use App\Models\User;
 use App\Services\ScoringService;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class SupervisorController extends Controller
 {
@@ -16,46 +16,45 @@ class SupervisorController extends Controller
      * Get list of Crews under this Supervisor.
      * Logic: Crews in the same location (since Supervisor location is locked).
      */
-    public function index(Request $request)
+    public function index(Request $request, ScoringService $scoringService)
     {
         $user = Auth::user();
 
-        // Security Check
         if ($user->role_type !== 'supervisor') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Fetch Crews via Reporting Lines relation
         $subordinates = $user->subordinateLines()->with('subordinate.locations')->get();
-        $startOfMonth = Carbon::now()->startOfMonth();
-        $endOfMonth = Carbon::now()->endOfMonth();
+        $today = Carbon::today();
 
         $crews = $subordinates->pluck('subordinate')->filter(function ($crew) {
             return $crew && $crew->active;
         })
             ->values()
-            ->map(function ($crew) use ($user, $startOfMonth, $endOfMonth) {
-                $score = (($crew->user_id * 7 + 13) % 39) + 60; // Deterministic dummy (60-98) — waiting for YoAbsen
-    
-                // Real task completion for this crew (approved / total tasks this month)
+            ->map(function ($crew) use ($user, $today, $scoringService) {
+                $crewStats = $scoringService->getCrewMonthlyDetailedStats($crew, Carbon::now());
+                $score = $crewStats['active_percentage'] ?? 0;
+
                 $totalTasks = Task::where('employee_id', $crew->user_id)
                     ->where('employer_id', $user->id)
-                    ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+                    ->whereDate('due_at', $today->toDateString())
                     ->count();
+
                 $approvedTasks = Task::where('employee_id', $crew->user_id)
                     ->where('employer_id', $user->id)
-                    ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+                    ->whereDate('due_at', $today->toDateString())
                     ->whereIn('status', ['approved', 'completed'])
                     ->count();
+
                 $taskProgress = $totalTasks > 0 ? round(($approvedTasks / $totalTasks) * 100, 1) : 0;
                 $hasTasks = $totalTasks > 0;
 
-                // Current workstation from today's latest ActivityLog
                 $latestLog = ActivityLog::with('workStation')
                     ->where('user_id', $crew->user_id)
                     ->whereDate('created_at', Carbon::today())
                     ->orderBy('created_at', 'desc')
                     ->first();
+
                 $currentWorkstation = $latestLog && $latestLog->workStation
                     ? $latestLog->workStation->name
                     : null;
@@ -67,11 +66,11 @@ class SupervisorController extends Controller
                     'current_workstation' => $currentWorkstation,
                     'location' => $crew->locations->first() ? $crew->locations->first()->name : 'N/A',
                     'status' => 'active',
-                    'score' => $score, // Dummy — attendance, waiting for YoAbsen
-                    'activity_percentage' => $score, // Dummy — attendance, waiting for YoAbsen
+                    'score' => $score,
+                    'activity_percentage' => $score,
                     'task_progress' => $taskProgress,
                     'has_tasks' => $hasTasks,
-                    'is_top_performer' => $score > 90 // Dummy — attendance, waiting for YoAbsen
+                    'is_top_performer' => $score > 90,
                 ];
             });
 
@@ -84,7 +83,7 @@ class SupervisorController extends Controller
             ],
             'location_name' => $user->locations->first() ? $user->locations->first()->name : 'All Locations',
             'location_avg_progress' => round($crews->where('has_tasks', true)->avg('task_progress') ?? 0, 1),
-            'crews' => $crews
+            'crews' => $crews,
         ]);
     }
 
@@ -95,8 +94,6 @@ class SupervisorController extends Controller
     public function myStats(Request $request, ScoringService $scoringService)
     {
         $user = Auth::user();
-
-        // Calculate REAL Supervisor Detailed Score
         $month = $request->query('month', Carbon::now()->month);
         $year = $request->query('year', Carbon::now()->year);
 
@@ -127,7 +124,6 @@ class SupervisorController extends Controller
             return response()->json(['message' => 'Crew not found'], 404);
         }
 
-        // Hierarchy Check: Ensure the requested crew is a subordinate
         $isSubordinate = $user->subordinateLines()->where('subordinate_id', $id)->where('status', 'active')->exists();
         if (!$isSubordinate) {
             return response()->json(['message' => 'Unauthorized. You can only view stats for your direct subordinates.'], 403);
@@ -147,6 +143,7 @@ class SupervisorController extends Controller
 
         return response()->json([
             'activity_monitor' => $detailedStats['activity_monitor'],
+            'active_percentage' => $detailedStats['active_percentage'],
             'personality_score' => $detailedStats['personality_score'],
             'yearly_score' => $yearlyScore,
         ]);

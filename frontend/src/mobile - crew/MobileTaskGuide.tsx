@@ -45,7 +45,7 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
             }
         };
         fetchGuidesAndStatus();
-    }, []);
+    }, [role]);
 
     const station = dbGuides.find(g => g.name.toLowerCase() === role.toLowerCase());
 

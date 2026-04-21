@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Image as ImageIcon, Trash2, ChevronRight, Calendar } from 'lucide-react';
+import { X, Image as ImageIcon, ChevronRight, Calendar } from 'lucide-react';
 
 interface MobileEvidenceListModalProps {
     isOpen: boolean;
@@ -63,26 +63,13 @@ export default function MobileEvidenceListModal({
                         <p className="font-bold text-gray-700 text-sm mb-0.5 truncate">{label}</p>
                         <p className="text-[10px] text-gray-400 flex items-center gap-1">
                             <Calendar size={10} />
-                            {new Date(evidence.created_at || task.updated_at || new Date()).toLocaleDateString()}
+                            {new Date(evidence.created_at || task.updated_at || new Date()).toLocaleString()}
                         </p>
                     </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
-                    {onDelete && !readOnly && evidence.id && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (window.confirm(`Delete ${label}?`)) {
-                                    onDelete(evidence.id);
-                                }
-                            }}
-                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition"
-                        >
-                            <Trash2 size={16} />
-                        </button>
-                    )}
                     <button
                         onClick={() => onSelectImage(type, index)}
                         className="p-2 text-gray-400 hover:text-blue-600 rounded-full transition"

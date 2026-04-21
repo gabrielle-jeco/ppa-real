@@ -2,259 +2,102 @@
 
 namespace App\Services;
 
-use App\Models\User;
-use App\Models\Task;
 use App\Models\Attendance;
 use App\Models\GuideRead;
+use App\Models\MonthlyOverallScore;
 use App\Models\MonthlyPersonalityEvaluation;
-use App\Models\ReportingLine;
+use App\Models\Task;
+use App\Models\User;
 use Carbon\Carbon;
 
 class ScoringService
 {
-    /**
-     * Calculate Daily Score for a Crew
-     */
     public function getCrewDailyScore(User $crew, Carbon $date): int
     {
-        // 1. Guide (100 if read today, 0 otherwise)
-        $guideRead = GuideRead::where('user_id', $crew->id)
-            ->whereDate('read_date', $date->toDateString())
-            ->exists();
-        $guideScore = $guideRead ? 100 : 0;
-
-        // 2. Attendance (100 if Present 'H' today, else 0)
-        $attendance = Attendance::where('user_id', $crew->id)
-            ->whereDate('date', $date->toDateString())
-            ->first();
-        // H = Hadir
-        $attendanceScore = ($attendance && $attendance->status_code === 'H') ? 100 : 0;
-
-        // 3. Task Completion
-        $tasks = Task::where('employee_id', $crew->id)
-            ->whereDate('due_at', $date->toDateString())
-            ->get();
-
-        $totalGiven = $tasks->count();
-        $totalCompleted = $tasks->whereIn('status', ['approved', 'completed'])->count();
-
-        if ($totalGiven == 0) {
-            $taskScore = 0;
-        } else {
-            if ($totalCompleted <= $totalGiven) {
-                $taskScore = ($totalCompleted / $totalGiven) * 100;
-            } else {
-                // If Selesai > Target (Spamming)
-                $taskScore = 100 - ((($totalCompleted - $totalGiven) / $totalGiven) * 100);
-            }
+        if (!$this->isScoringDay($crew, $date)) {
+            return 0;
         }
 
-        // 4. Personality (Monthly)
-        $personality = MonthlyPersonalityEvaluation::where('evaluatee_id', $crew->id)
-            ->whereYear('evaluation_period', $date->year)
-            ->whereMonth('evaluation_period', $date->month)
-            ->first();
-        $personalityScore = $personality ? $personality->score : 0;
+        $taskScore = $this->getCrewTaskScoreForDate($crew, $date);
+        $attendanceScore = $this->getAttendanceScoreForDate($crew, $date);
 
-        return (int) round(($guideScore + $attendanceScore + $taskScore + $personalityScore) / 4);
+        return (int) round(($taskScore * 0.6) + ($attendanceScore * 0.4));
     }
 
-    /**
-     * Calculate Monthly Score for a Crew
-     */
     public function getCrewMonthlyScore(User $crew, Carbon $month): array
     {
-        $startOfMonth = $month->copy()->startOfMonth();
-        $endOfMonth = $month->copy()->endOfMonth();
-        $today = Carbon::now();
-        $calcEndDate = $endOfMonth->lt($today) ? $endOfMonth : $today;
+        [$startOfMonth, $endOfRange] = $this->getScoringRangeForMonth($month);
 
-        $guideElapsedWorkingDays = 0;
-        $attendanceElapsedWorkingDays = 0;
-        $guideScoreAccumulator = 0;
-
-        // Fetch user attendances for the entire month
-        $attendances = \App\Models\Attendance::where('user_id', $crew->id)
-            ->whereBetween('date', [$startOfMonth->toDateString(), $calcEndDate->toDateString()])
-            ->get()
-            ->keyBy(function ($item) {
-                return Carbon::parse($item->date)->toDateString();
-            });
-
-        // Bulk-fetch ActivityLogs and GuideReads for the entire month (avoids N+1 per-day queries)
-        $allActivityLogs = \App\Models\ActivityLog::where('user_id', $crew->id)
-            ->whereBetween('created_at', [$startOfMonth, $calcEndDate->copy()->endOfDay()])
-            ->whereNotNull('work_station_id')
-            ->get();
-
-        $allGuideReads = \App\Models\GuideRead::where('user_id', $crew->id)
-            ->whereBetween('read_date', [$startOfMonth->toDateString(), $calcEndDate->toDateString()])
-            ->get();
-
-        // 1. Guide Average & Attendance Denominator (Daily Check)
-        for ($date = $startOfMonth->copy(); $date->lte($calcEndDate); $date->addDay()) {
-            if ($date->isWeekend()) {
-                continue; // Skip weekends
-            }
-            $dateString = $date->toDateString();
-            $att = $attendances->get($dateString);
-
-            // If day is officially marked as Sick (S), Leave (C), Holiday (L), it doesn't count against ANY score
-            if ($att && in_array($att->status_code, ['S', 'C', 'L'])) {
-                continue;
-            }
-
-            // Standard working day (or Absent 'A'), counts against Attendance Score
-            $attendanceElapsedWorkingDays++;
-
-            // Find Unique WorkStations from pre-fetched ActivityLogs for this day
-            $assignedStations = $allActivityLogs
-                ->filter(fn($log) => $log->created_at->toDateString() === $dateString)
-                ->pluck('work_station_id')
-                ->unique()
-                ->toArray();
-
-            // Opsi B: Only obligate guide reading if Present/Late ('H', 'T') OR if they somehow worked (activity log > 0)
-            $isWorking = ($att && in_array($att->status_code, ['H', 'T'])) || (count($assignedStations) > 0);
-
-            if ($isWorking) {
-                $guideElapsedWorkingDays++;
-
-                if (count($assignedStations) > 0) {
-                    // Filter from pre-fetched GuideReads for this day
-                    // Note: read_date is cast to Carbon by Eloquent, so we must use ->toDateString()
-                    $readStations = $allGuideReads
-                        ->filter(fn($gr) => $gr->read_date->toDateString() === $dateString)
-                        ->pluck('work_station_id')
-                        ->toArray();
-
-                    // Calculate matching
-                    $matched = 0;
-                    foreach ($assignedStations as $stationId) {
-                        if (in_array($stationId, $readStations)) {
-                            $matched++;
-                        }
-                    }
-                    $dailyGuideScore = ($matched / count($assignedStations)) * 100;
-                    $guideScoreAccumulator += $dailyGuideScore;
-                }
-            }
+        if ($endOfRange->lt($startOfMonth)) {
+            return [
+                'daily_average_score' => 0,
+                'task_score' => 0,
+                'attendance_score' => 0,
+                'personality_score' => 0,
+                'total_score' => 0,
+            ];
         }
 
-        if ($guideElapsedWorkingDays == 0)
-            $guideElapsedWorkingDays = 1;
-        if ($attendanceElapsedWorkingDays == 0)
-            $attendanceElapsedWorkingDays = 1;
-
-        $guideScore = min(100, $guideScoreAccumulator / $guideElapsedWorkingDays);
-
-        // 2. Attendance Average
-        $attendancesCount = $attendances->filter(function ($att) {
-            return in_array($att->status_code, ['H', 'T']);
-        })->count();
-
-        $attendanceScore = min(100, ($attendancesCount / $attendanceElapsedWorkingDays) * 100);
-
-        // 3. Task Average (Monthly Accumulation to avoid volatile daily jumps)
-        $tasks = Task::where('employee_id', $crew->id)
-            ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
-            ->get();
-        $totalGiven = $tasks->count();
-        $totalCompleted = $tasks->whereIn('status', ['approved', 'completed'])->count();
-
-        if ($totalGiven == 0) {
-            $taskScore = 0;
-        } else if ($totalCompleted <= $totalGiven) {
-            $taskScore = ($totalCompleted / $totalGiven) * 100;
-        } else {
-            $taskScore = 100 - ((($totalCompleted - $totalGiven) / $totalGiven) * 100);
-        }
-
-        // 4. Personality Score
-        $personality = \App\Models\MonthlyPersonalityEvaluation::where('evaluatee_id', $crew->id)
-            ->whereYear('evaluation_period', $month->year)
-            ->whereMonth('evaluation_period', $month->month)
-            ->first();
-        $personalityScore = $personality ? $personality->score : 0;
-
-        $totalScore = (int) round(($guideScore + $attendanceScore + $taskScore + $personalityScore) / 4);
+        $dailyBreakdown = $this->collectDailyBreakdown($crew, $startOfMonth, $endOfRange);
+        $dailyAverage = $this->average($dailyBreakdown['daily_scores']);
+        $taskAverage = $this->average($dailyBreakdown['task_scores']);
+        $attendanceAverage = $this->average($dailyBreakdown['attendance_scores']);
+        $personalityScore = $this->getPersonalityScoreForMonth($crew, $month);
+        $totalScore = (int) round(($dailyAverage * 0.7) + ($personalityScore * 0.3));
 
         return [
-            'guide_score' => $guideScore,
-            'attendance_score' => $attendanceScore,
-            'task_score' => $taskScore,
+            'daily_average_score' => round($dailyAverage, 2),
+            'task_score' => round($taskAverage, 2),
+            'attendance_score' => round($attendanceAverage, 2),
             'personality_score' => $personalityScore,
-            'total_score' => $totalScore
+            'total_score' => $totalScore,
         ];
     }
 
-    /**
-     * Get Detailed Monthly Stats for a Crew (Active %, Point Sikap, Activity Monitor)
-     */
     public function getCrewMonthlyDetailedStats(User $crew, Carbon $month): array
     {
-        $startOfMonth = $month->copy()->startOfMonth();
-        $endOfMonth = $month->copy()->endOfMonth();
+        [$startOfMonth, $endOfRange] = $this->getScoringRangeForMonth($month);
+        $dailyBreakdown = $endOfRange->lt($startOfMonth)
+            ? ['daily_scores' => []]
+            : $this->collectDailyBreakdown($crew, $startOfMonth, $endOfRange);
 
-        // 1. Active Percentage (Attendance)
-        $totalDays = $startOfMonth->diffInDaysFiltered(function (Carbon $date) {
-            return !$date->isWeekend();
-        }, $endOfMonth);
-        if ($totalDays == 0)
-            $totalDays = 1;
-
-        $attendancesCount = Attendance::where('user_id', $crew->id)
-            ->whereBetween('date', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
-            ->where('status_code', 'H')
-            ->count();
-        $activePercentage = min(100, ($attendancesCount / $totalDays) * 100);
-
-        // 2. Personality Point
-        $personality = MonthlyPersonalityEvaluation::where('evaluatee_id', $crew->id)
-            ->whereYear('evaluation_period', $month->year)
-            ->whereMonth('evaluation_period', $month->month)
-            ->first();
-        $personalityScore = $personality ? $personality->score : 0;
-
-        // 3. Activity Monitor (Role Ratios)
-        $logs = \App\Models\ActivityLog::with('workStation')
-            ->where('user_id', $crew->id)
-            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
-            ->get();
+        $guideReads = $endOfRange->lt($startOfMonth)
+            ? collect()
+            : GuideRead::with('workStation')
+                ->where('user_id', $crew->id)
+                ->whereBetween('read_date', [$startOfMonth->toDateString(), $endOfRange->toDateString()])
+                ->get();
 
         $roleCounts = [];
-        $totalRoles = 0;
-        foreach ($logs as $log) {
-            if ($log->workStation) {
-                $roleName = $log->workStation->name;
-                if (!isset($roleCounts[$roleName])) {
-                    $roleCounts[$roleName] = 0;
-                }
-                $roleCounts[$roleName]++;
-                $totalRoles++;
+        $totalReads = 0;
+
+        foreach ($guideReads as $guideRead) {
+            if (!$guideRead->workStation) {
+                continue;
             }
+
+            $roleName = $guideRead->workStation->name;
+            $roleCounts[$roleName] = ($roleCounts[$roleName] ?? 0) + 1;
+            $totalReads++;
         }
 
         $activityMonitor = [];
-        if ($totalRoles > 0) {
+        if ($totalReads > 0) {
             foreach ($roleCounts as $role => $count) {
                 $activityMonitor[] = [
                     'label' => $role,
-                    'percentage' => (int) round(($count / $totalRoles) * 100)
+                    'percentage' => (int) round(($count / $totalReads) * 100),
                 ];
             }
         }
 
         return [
-            'active_percentage' => (int) round($activePercentage),
-            'personality_score' => $personalityScore,
-            'activity_monitor' => $activityMonitor
+            'active_percentage' => (int) round($this->average($dailyBreakdown['daily_scores'] ?? [])),
+            'personality_score' => $this->getPersonalityScoreForMonth($crew, $month),
+            'activity_monitor' => $activityMonitor,
         ];
     }
 
-    /**
-     * Calculate Yearly Score for a Crew
-     */
     public function getCrewYearlyScore(User $crew, Carbon $yearDate): int
     {
         $currentMonth = Carbon::now()->month;
@@ -262,13 +105,12 @@ class ScoringService
         $targetYear = $yearDate->year;
 
         if ($targetYear > $currentYear) {
-            return 0; // Future year
+            return 0;
         }
 
         $monthsToCalculate = ($targetYear === $currentYear) ? $currentMonth : 12;
 
-        // 1. Fetch locked snapshots from the Database
-        $snapshots = \App\Models\MonthlyOverallScore::where('user_id', $crew->id)
+        $snapshots = MonthlyOverallScore::where('user_id', $crew->id)
             ->whereYear('period', $targetYear)
             ->get()
             ->keyBy(function ($item) {
@@ -279,13 +121,12 @@ class ScoringService
 
         for ($month = 1; $month <= $monthsToCalculate; $month++) {
             $monthDate = Carbon::create($targetYear, $month, 1);
-            $periodKey = $monthDate->toDateString(); // 'YYYY-MM-01'
+            $periodKey = $monthDate->toDateString();
 
             if ($monthDate->format('Y-m') === Carbon::now()->format('Y-m')) {
-                // Current live month
                 $monthlyScoreData = $this->getCrewMonthlyScore($crew, $monthDate);
                 $totalScore += $monthlyScoreData['total_score'];
-            } else if ($snapshots->has($periodKey)) {
+            } elseif ($snapshots->has($periodKey)) {
                 $totalScore += $snapshots->get($periodKey)->final_score;
             } else {
                 $monthlyScoreData = $this->getCrewMonthlyScore($crew, $monthDate);
@@ -296,30 +137,22 @@ class ScoringService
         return $monthsToCalculate > 0 ? (int) round($totalScore / $monthsToCalculate) : 0;
     }
 
-    /**
-     * Calculate Monthly Score for a Supervisor
-     * Delegates to getDetailedScore to avoid duplicated query logic.
-     */
     public function getSupervisorMonthlyScore(User $supervisor, Carbon $month): int
     {
         $details = $this->getSupervisorMonthlyDetailedScore($supervisor, $month);
         return $details['my_avg_point'];
     }
-    /**
-     * Calculate Detailed Monthly Score for a Supervisor
-     */
+
     public function getSupervisorMonthlyDetailedScore(User $supervisor, Carbon $month): array
     {
         $startOfMonth = $month->copy()->startOfMonth();
         $endOfMonth = $month->copy()->endOfMonth();
 
-        // 1. Penugasan SC
         $subordinateLines = $supervisor->subordinateLines()->where('status', 'active')->get();
         $scScores = [];
         $totalTaskGiven = 0;
 
-        // Daily calculation vars
-        $targetDate = $month->copy(); // $month parameter acts as the target date
+        $targetDate = $month->copy();
         $startOfDay = $targetDate->copy()->startOfDay();
         $endOfDay = $targetDate->copy()->endOfDay();
         $dailyTaskGiven = 0;
@@ -331,15 +164,14 @@ class ScoringService
         foreach ($subordinateLines as $line) {
             $monthlyTasks = Task::where('employer_id', $supervisor->id)
                 ->where('employee_id', $line->subordinate_id)
-                ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->endOfDay()])
+                ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->copy()->endOfDay()])
                 ->get();
 
             $tasksGivenCount = $monthlyTasks->count();
             $totalTaskGiven += $tasksGivenCount;
 
-            // Count tasks specific to the target day
-            $dailyTaskGiven += $monthlyTasks->filter(function ($t) use ($startOfDay, $endOfDay) {
-                return Carbon::parse($t->due_at)->between($startOfDay, $endOfDay);
+            $dailyTaskGiven += $monthlyTasks->filter(function ($task) use ($startOfDay, $endOfDay) {
+                return Carbon::parse($task->due_at)->between($startOfDay, $endOfDay);
             })->count();
 
             if ($tasksGivenCount >= 3) {
@@ -352,9 +184,9 @@ class ScoringService
 
             $crewUser = User::find($line->subordinate_id);
             if ($crewUser) {
-                $monthlyScoreData = $this->getCrewMonthlyScore($crewUser, $month); // $month is actually target date
+                $monthlyScoreData = $this->getCrewMonthlyScore($crewUser, $month);
                 $crewTotalPoints += $monthlyScoreData['total_score'];
-                $dailyCrewTotalPoints += $monthlyScoreData['total_score']; // In Option A, Running Score = Daily Score
+                $dailyCrewTotalPoints += $monthlyScoreData['total_score'];
             }
         }
 
@@ -362,7 +194,6 @@ class ScoringService
         $avgServiceCrewPoint = $scCount > 0 ? $crewTotalPoints / $scCount : 0;
         $dailyAvgServiceCrewPoint = $scCount > 0 ? $dailyCrewTotalPoints / $scCount : 0;
 
-        // 2. Penugasan Project SPV dari Manager
         $managerLine = $supervisor->leaderLines()->where('status', 'active')->first();
         $managerId = $managerLine ? $managerLine->leader_id : null;
 
@@ -374,12 +205,7 @@ class ScoringService
 
             $totalProjects = $projects->count();
             $completedProjects = $projects->whereIn('status', ['approved', 'completed'])->count();
-
-            if ($totalProjects == 0) {
-                $projectScore = 0;
-            } else {
-                $projectScore = ($completedProjects / $totalProjects) * 100;
-            }
+            $projectScore = $totalProjects === 0 ? 0 : ($completedProjects / $totalProjects) * 100;
         } else {
             $projectScore = 0;
         }
@@ -391,18 +217,158 @@ class ScoringService
             'task_for_sc' => [
                 'completed' => (int) round($scAverageScore),
                 'total' => 100,
-                'label' => 'Task for SC'
+                'label' => 'Task for SC',
             ],
             'task_from_manager' => [
                 'completed' => (int) round($projectScore),
                 'total' => 100,
-                'label' => 'Task Completed From SM/RM'
+                'label' => 'Task Completed From SM/RM',
             ],
             'monthly_task_given' => "{$totalTaskGiven} / {$scCount} People",
             'avg_service_crew_point' => (int) round($avgServiceCrewPoint),
-            // New Daily Stats
             'daily_task_given' => "{$dailyTaskGiven} / {$scCount} People",
-            'avg_sc_point_today' => (int) round($dailyAvgServiceCrewPoint)
+            'avg_sc_point_today' => (int) round($dailyAvgServiceCrewPoint),
         ];
+    }
+
+    private function collectDailyBreakdown(User $crew, Carbon $startDate, Carbon $endDate): array
+    {
+        $dailyScores = [];
+        $taskScores = [];
+        $attendanceScores = [];
+
+        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
+            if (!$this->isScoringDay($crew, $date)) {
+                continue;
+            }
+
+            $taskScore = $this->getCrewTaskScoreForDate($crew, $date);
+            $attendanceScore = $this->getAttendanceScoreForDate($crew, $date);
+            $dailyScores[] = ($taskScore * 0.6) + ($attendanceScore * 0.4);
+            $taskScores[] = $taskScore;
+            $attendanceScores[] = $attendanceScore;
+        }
+
+        return [
+            'daily_scores' => $dailyScores,
+            'task_scores' => $taskScores,
+            'attendance_scores' => $attendanceScores,
+        ];
+    }
+
+    private function getCrewTaskScoreForDate(User $crew, Carbon $date): float
+    {
+        $tasks = Task::with('evidences')
+            ->where('employee_id', $crew->id)
+            ->whereDate('due_at', $date->toDateString())
+            ->get();
+
+        if ($tasks->isEmpty()) {
+            return 0;
+        }
+
+        $taskScores = $tasks->map(function (Task $task) {
+            return $this->getTaskScore($task);
+        })->all();
+
+        return $this->average($taskScores);
+    }
+
+    private function getTaskScore(Task $task): float
+    {
+        if (!in_array($task->status, ['approved', 'completed'], true)) {
+            return 0;
+        }
+
+        $beforeCount = $task->evidences->where('type', 'before')->count();
+        $afterCount = $task->evidences->where('type', 'after')->count();
+
+        if ($beforeCount !== 1 || $afterCount < 1 || $afterCount > 3) {
+            return 0;
+        }
+
+        return round(100 / $afterCount, 2);
+    }
+
+    private function getAttendanceScoreForDate(User $crew, Carbon $date): float
+    {
+        $status = $this->getAttendanceStatusForDate($crew, $date);
+
+        return in_array($status, ['H', 'T'], true) ? 100 : 0;
+    }
+
+    private function getAttendanceStatusForDate(User $crew, Carbon $date): string
+    {
+        $attendance = Attendance::where('user_id', $crew->id)
+            ->whereDate('date', $date->toDateString())
+            ->first();
+
+        if ($attendance) {
+            return strtoupper((string) $attendance->status_code);
+        }
+
+        return $this->getDummyAttendanceStatus($date);
+    }
+
+    private function getDummyAttendanceStatus(Carbon $date): string
+    {
+        if ($date->isWeekend()) {
+            return 'L';
+        }
+
+        $hash = ($date->day + ($date->month * 31)) % 7;
+
+        if ($hash === 5) {
+            return 'A';
+        }
+
+        if ($hash === 4) {
+            return 'T';
+        }
+
+        return 'H';
+    }
+
+    private function isScoringDay(User $crew, Carbon $date): bool
+    {
+        $status = $this->getAttendanceStatusForDate($crew, $date);
+
+        return !in_array($status, ['S', 'C', 'L'], true);
+    }
+
+    private function getPersonalityScoreForMonth(User $crew, Carbon $month): int
+    {
+        $personality = MonthlyPersonalityEvaluation::where('evaluatee_id', $crew->id)
+            ->whereYear('evaluation_period', $month->year)
+            ->whereMonth('evaluation_period', $month->month)
+            ->first();
+
+        return $personality ? (int) round($personality->score) : 0;
+    }
+
+    private function getScoringRangeForMonth(Carbon $month): array
+    {
+        $startOfMonth = $month->copy()->startOfMonth();
+        $endOfMonth = $month->copy()->endOfMonth();
+        $today = Carbon::now()->endOfDay();
+
+        if ($startOfMonth->isSameMonth($today) && $startOfMonth->isSameYear($today)) {
+            return [$startOfMonth, $today];
+        }
+
+        if ($startOfMonth->greaterThan($today)) {
+            return [$startOfMonth, $startOfMonth->copy()->subDay()];
+        }
+
+        return [$startOfMonth, $endOfMonth];
+    }
+
+    private function average(array $values): float
+    {
+        if (count($values) === 0) {
+            return 0;
+        }
+
+        return array_sum($values) / count($values);
     }
 }

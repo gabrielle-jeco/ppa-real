@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Trash2, Calendar, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Calendar, User, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface MobileTaskPreviewProps {
     task: any;
@@ -43,13 +43,6 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
     const safeIndex = selectedIndex >= currentEvidences.length ? Math.max(0, currentEvidences.length - 1) : selectedIndex;
     const currentEvidence = currentEvidences[safeIndex];
     const currentImage = currentEvidence ? getFullUrl(currentEvidence.file_path) : null;
-
-    // Smart close when the last image of this tab is deleted
-    useEffect(() => {
-        if (isOpen && currentEvidences.length === 0) {
-            handleClose();
-        }
-    }, [currentEvidences.length, isOpen]);
 
     if (!isOpen || !task) return null;
 
@@ -134,7 +127,7 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
                             <div className="flex items-center gap-3 text-white/80 text-xs">
                                 <span className="flex items-center gap-1">
                                     <Calendar size={12} />
-                                    {new Date(currentEvidence?.created_at || task.due_at || Date.now()).toLocaleDateString()}
+                                    {new Date(currentEvidence?.created_at || task.due_at || Date.now()).toLocaleString()}
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <User size={12} />
@@ -160,26 +153,13 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
                         {activeTab === 'before' ? 'Before Work' : 'After Work'} Evidence {currentEvidences.length > 1 ? `(${safeIndex + 1}/${currentEvidences.length})` : ''}
                     </p>
 
-                    {(!readOnly && onDeleteProof && currentEvidence?.id) ? (
-                        <button
-                            onClick={() => {
-                                if (window.confirm('Delete this image?')) {
-                                    onDeleteProof(currentEvidence.id!);
-                                    if (currentEvidences.length <= 1) {
-                                        handleClose(); // Instant smooth animation
-                                    } else {
-                                        setSelectedIndex(prev => Math.max(0, prev - 1));
-                                    }
-                                }
-                            }}
-                            className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold py-3 px-4 rounded-xl transition"
-                        >
-                            <Trash2 size={16} />
-                            Delete Image
-                        </button>
-                    ) : (
+                    {currentEvidence ? (
                         <div className="py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium mt-2">
                             Evidence View Only
+                        </div>
+                    ) : (
+                        <div className="py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium mt-2">
+                            No image uploaded for this section.
                         </div>
                     )}
                 </div>

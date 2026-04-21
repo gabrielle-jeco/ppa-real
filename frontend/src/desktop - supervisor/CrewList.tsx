@@ -9,12 +9,19 @@ interface CrewListProps {
 
 export default function CrewList({ data, selectedId, onSelect }: CrewListProps) {
     const { supervisor, location_name, location_avg_progress, crews } = data;
+    const maxScore = Math.max(...(crews?.map((crew: any) => crew.score || 0) ?? [0]));
 
     // Helper for Color Logic
     const getProgressColor = (score: number) => {
         if (score > 90) return 'bg-green-500';
         if (score > 75) return 'bg-yellow-400';
         return 'bg-red-500';
+    };
+
+    const getStarColor = (score: number) => {
+        if (score > 90) return 'text-green-500';
+        if (score >= 75.5) return 'text-yellow-400';
+        return 'text-red-500';
     };
 
     return (
@@ -63,8 +70,8 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                         style={{ boxShadow: selectedId === crew.id ? '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' : '' }}
                     >
                         {/* Top Performer Star */}
-                        {crew.is_top_performer && (
-                            <div className="absolute top-4 right-4 text-green-500">
+                        {(crew.score || 0) === maxScore && maxScore > 0 && (
+                            <div className={`absolute top-4 right-4 ${getStarColor(crew.score || 0)}`}>
                                 <Star size={18} fill="currentColor" className="drop-shadow-sm" />
                             </div>
                         )}

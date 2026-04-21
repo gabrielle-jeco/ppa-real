@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface TaskPreviewProps {
     task: any;
@@ -37,6 +37,9 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
                 <div>
                     <h2 className="font-bold text-gray-800 text-lg">Task Proof</h2>
                     <p className="text-sm text-gray-400">{task.title}</p>
+                    <p className="text-xs text-gray-400 mt-1 min-h-[20px]">
+                        Uploaded: {currentEvidence?.created_at ? new Date(currentEvidence.created_at).toLocaleString() : '-'}
+                    </p>
                 </div>
                 <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition">
                     <X size={20} className="text-gray-500" />
@@ -101,22 +104,7 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
                 </div>
             )}
 
-            {/* Action Buttons */}
-            {(!readOnly && onDeleteProof && currentEvidence) && (
-                <div>
-                    <button
-                        onClick={() => {
-                            if (window.confirm('Delete this image?')) {
-                                onDeleteProof(currentEvidence.id);
-                            }
-                        }}
-                        className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold py-3 px-4 rounded-xl transition"
-                    >
-                        <Trash2 size={16} />
-                        Delete Evidence
-                    </button>
-                </div>
-            )}
+            <div className="min-h-[52px]"></div>
         </div>
     );
 }
