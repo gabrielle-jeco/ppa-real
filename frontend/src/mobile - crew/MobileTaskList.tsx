@@ -7,12 +7,15 @@ interface MobileTaskListProps {
     onBack: () => void;
     onSelectTask: (task: any) => void;
     refreshTrigger?: number;
+    selectedRole: string;
 }
 
-export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrigger }: MobileTaskListProps) {
+export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrigger, selectedRole }: MobileTaskListProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [tasks, setTasks] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [guideRequired, setGuideRequired] = useState(false);
+    const [guideMessage, setGuideMessage] = useState('');
 
     // Fetch Tasks
     useEffect(() => {
@@ -23,7 +26,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                 const offset = selectedDate.getTimezoneOffset();
                 const localDate = new Date(selectedDate.getTime() - (offset * 60 * 1000));
                 const dateStr = localDate.toISOString().split('T')[0];
-                const response = await fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}`, {
+                const response = await fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}&role=${selectedRole}`, {
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
                     }
@@ -32,6 +35,13 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                 if (response.ok) {
                     const data = await response.json();
                     setTasks(data);
+                    setGuideRequired(false);
+                    setGuideMessage('');
+                } else if (response.status === 423) {
+                    const data = await response.json();
+                    setTasks([]);
+                    setGuideRequired(true);
+                    setGuideMessage(data.message || 'Please confirm today\'s guide before accessing your tasks.');
                 }
             } catch (error) {
                 console.error("Failed to fetch tasks", error);
@@ -43,7 +53,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
         if (user?.user_id) {
             fetchTasks();
         }
-    }, [selectedDate, user?.user_id, refreshTrigger]);
+    }, [selectedDate, user?.user_id, refreshTrigger, selectedRole]);
 
     const completedCount = tasks.filter(t => t.status === 'approved').length;
     const totalCount = tasks.length;
@@ -83,6 +93,11 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                     <div className="overflow-y-auto flex-1 px-3 pb-20 space-y-3">
                         {loading ? (
                             <div className="flex justify-center py-10 text-gray-400">Loading tasks...</div>
+                        ) : guideRequired ? (
+                            <div className="flex flex-col items-center justify-center py-10 text-center text-gray-400 px-4">
+                                <p className="font-medium text-gray-500 mb-2">Task access is locked.</p>
+                                <p>{guideMessage}</p>
+                            </div>
                         ) : tasks.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-10 text-gray-400">
                                 <p>No tasks for this date.</p>

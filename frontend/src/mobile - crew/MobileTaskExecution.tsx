@@ -14,7 +14,7 @@ interface MobileTaskExecutionProps {
 }
 
 export default function MobileTaskExecution({ task, onClose, onUpload, onDelete }: MobileTaskExecutionProps) {
-    const isPastDue = new Date(task.due_at) < new Date(new Date().setHours(0, 0, 0, 0));
+    const isPastDue = new Date(task.due_at) < new Date();
     const isReadOnly = task.status === 'approved' || isPastDue;
 
     const [animateIn, setAnimateIn] = useState(false);
@@ -30,6 +30,8 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
 
     const beforeEvidences = task.evidences?.filter((e: any) => e.type === 'before') || [];
     const afterEvidences = task.evidences?.filter((e: any) => e.type === 'after') || [];
+    const canUploadBefore = !isReadOnly && beforeEvidences.length === 0;
+    const canUploadAfter = !isReadOnly && afterEvidences.length < 3;
 
     const beforePreview = beforeEvidences.length > 0 ? getInitialPreview(beforeEvidences[beforeEvidences.length - 1].file_path) : null;
     const afterPreview = afterEvidences.length > 0 ? getInitialPreview(afterEvidences[afterEvidences.length - 1].file_path) : null;
@@ -56,7 +58,9 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
     }, []);
 
     const handleSlotClick = (type: 'before' | 'after') => {
-        if (isReadOnly) return;
+        if (type === 'before' && !canUploadBefore) return;
+        if (type === 'after' && !canUploadAfter) return;
+
         setActiveUploadType(type);
         setShowActionModal(true);
     };
@@ -187,7 +191,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
                             <div className="relative group">
                                 <div
                                     onClick={() => handleSlotClick('before')}
-                                    className={`aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform ${isUploading ? 'opacity-50 pointer-events-none' : ''} ${isReadOnly ? 'cursor-default' : 'cursor-pointer hover:border-blue-400 hover:bg-blue-50'}`}
+                                    className={`aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform ${isUploading ? 'opacity-50 pointer-events-none' : ''} ${canUploadBefore ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50' : 'cursor-default opacity-70'}`}
                                 >
                                     {beforePreview ? (
                                         <div className="relative w-full h-full">
@@ -207,6 +211,9 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
                                                 <Camera size={24} />
                                             </div>
                                             <span className="font-bold text-gray-500 text-sm group-hover:text-blue-600">Before</span>
+                                            {!canUploadBefore && (
+                                                <span className="text-[10px] text-gray-400 text-center px-3">Max 1 photo</span>
+                                            )}
                                         </>
                                     )}
                                 </div>
@@ -216,7 +223,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
                             <div className="relative group">
                                 <div
                                     onClick={() => handleSlotClick('after')}
-                                    className={`aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform ${isUploading ? 'opacity-50 pointer-events-none' : ''} ${isReadOnly ? 'cursor-default' : 'cursor-pointer hover:border-purple-400 hover:bg-purple-50'}`}
+                                    className={`aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform ${isUploading ? 'opacity-50 pointer-events-none' : ''} ${canUploadAfter ? 'cursor-pointer hover:border-purple-400 hover:bg-purple-50' : 'cursor-default opacity-70'}`}
                                 >
                                     {afterPreview ? (
                                         <div className="relative w-full h-full">
@@ -236,6 +243,9 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
                                                 <ImageIcon size={24} />
                                             </div>
                                             <span className="font-bold text-gray-500 text-sm group-hover:text-purple-600">After</span>
+                                            {!canUploadAfter && (
+                                                <span className="text-[10px] text-gray-400 text-center px-3">Max 3 photos</span>
+                                            )}
                                         </>
                                     )}
                                 </div>

@@ -26,6 +26,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
     const [loading, setLoading] = useState(true);
     const [scores, setScores] = useState<Record<string, number>>({});
     const [submitLoading, setSubmitLoading] = useState(false);
+    const [showQuestionnaire, setShowQuestionnaire] = useState(false);
 
     const today = new Date();
     const currentYear = today.getFullYear();
@@ -96,6 +97,11 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
         fetchEvaluationStatus();
     }, [selectedDate, crew.id]);
 
+    useEffect(() => {
+        setShowQuestionnaire(false);
+        setScores({});
+    }, [selectedDate, crew.id]);
+
     const handleScoreChange = (id: string, value: number) => {
         setScores(prev => ({ ...prev, [id]: value }));
     };
@@ -129,9 +135,11 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
             });
 
             if (res.ok) {
+                setShowQuestionnaire(false);
                 fetchEvaluationStatus(); // Refresh to switch view
             } else {
-                alert("Failed to submit evaluation");
+                const errorData = await res.json().catch(() => null);
+                alert(errorData?.error || "Failed to submit evaluation");
             }
         } catch (error) {
             console.error("Error submitting", error);
@@ -165,25 +173,13 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
         return days;
     };
 
-    // Calculate Dummy Active Percentage to match Mock Calendar natively
-    const calendarDays = getCalendarDays();
-    let totalWorkDays = 0;
-    let presentDays = 0;
-
-    calendarDays.forEach(day => {
-        if (!day) return;
-        const now = new Date();
-        if (day > now) return; // Skip future days
-
-        const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-        if (!isWeekend) {
-            totalWorkDays++;
-            const hash = (day.getDate() + day.getMonth() * 31) % 7;
-            if (hash <= 4 || hash > 5) presentDays++;
-        }
-    });
-
-    const displayActivePercentage = totalWorkDays > 0 ? Math.round((presentDays / totalWorkDays) * 100) : 0;
+    const displayActivePercentage = activePercentage;
+    const isCurrentSelectedMonth =
+        selectedDate.getFullYear() === new Date().getFullYear() &&
+        selectedDate.getMonth() === new Date().getMonth();
+    const activityMonitorTitle = `${selectedDate.toLocaleString('default', { month: 'long' })} Activity Monitor${isCurrentSelectedMonth ? ' (MTD)' : ''}`;
+    const canShowQuestionnaire = !loading && evaluationData?.can_evaluate && !evaluationData?.evaluated;
+    const isStatsMode = !showQuestionnaire;
 
     return (
         <MobileLayout
@@ -195,7 +191,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                 {/* 1. Header (Month/Year) */}
                 <div className="bg-white rounded-3xl p-5 shadow-sm mb-6">
                     <h2 className="text-center text-sm font-bold text-gray-600 mb-4">
-                        {loading ? 'Checking...' : (evaluationData?.evaluated ? 'Point & Attendance History' : 'Monthly Evaluation')}
+                        {loading ? 'Checking...' : (isStatsMode ? 'Point & Attendance History' : 'Monthly Evaluation')}
                     </h2>
 
                     {/* Pill Dropdowns */}
@@ -232,7 +228,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
 
                 {/* CONTENT Area */}
                 {!loading && (
-                    evaluationData?.evaluated ? (
+                    isStatsMode ? (
                         // === STATS VIEW ===
                         <div className="space-y-4">
                             {/* Profile & Active Percentage */}
@@ -246,7 +242,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
 
                             {/* Activity Monitor */}
                             <div className="bg-gray-100 rounded-3xl p-5">
-                                <p className="text-sm font-medium text-gray-600 mb-3">{selectedDate.toLocaleString('default', { month: 'long' })} Activity Monitor</p>
+                                <p className="text-sm font-medium text-gray-600 mb-3">{activityMonitorTitle}</p>
                                 {activityMonitor.length > 0 ? (
                                     <>
                                         <div className="w-full h-4 bg-gray-300 rounded-full overflow-hidden flex mb-4">
@@ -271,8 +267,17 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                             {/* Monthly Score / Personality Score */}
                             <div className="bg-gray-100 rounded-3xl p-5">
                                 <p className="text-xs font-medium text-gray-600 mb-2 uppercase">POINT SIKAP KEPRIBADIAN ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
-                                <p className="text-sm font-bold text-gray-700">Total Point : {personalityScore}</p>
+                                <p className="text-sm font-bold text-gray-700">Total Point : {evaluationData?.evaluated ? personalityScore : '-'}</p>
                             </div>
+
+                            {canShowQuestionnaire && (
+                                <button
+                                    onClick={() => setShowQuestionnaire(true)}
+                                    className="w-full bg-blue-600 text-white font-bold py-4 rounded-full shadow-lg hover:bg-blue-700 transition"
+                                >
+                                    Fill Evaluation
+                                </button>
+                            )}
 
                             {/* Calendar View */}
                             <div className="bg-white rounded-3xl p-6 shadow-sm">
@@ -373,6 +378,14 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                 className="w-full bg-blue-600 text-white font-bold py-4 rounded-full shadow-lg hover:bg-blue-700 transition disabled:opacity-50 mt-4 mb-8"
                             >
                                 {submitLoading ? 'Submitting...' : 'Submit'}
+                            </button>
+
+                            <button
+                                onClick={() => setShowQuestionnaire(false)}
+                                disabled={submitLoading}
+                                className="w-full bg-gray-100 text-gray-700 font-bold py-4 rounded-full shadow-sm hover:bg-gray-200 transition disabled:opacity-50 mb-8"
+                            >
+                                Back to Stats
                             </button>
                         </div>
                     )

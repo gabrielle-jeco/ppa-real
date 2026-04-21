@@ -77,27 +77,10 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
         return days;
     };
 
-    // Calculate Dummy Active Percentage to match Mock Calendar natively
-    const calendarDays = getCalendarDays();
-    let totalWorkDays = 0;
-    let presentDays = 0;
-
-    calendarDays.forEach(day => {
-        if (!day) return;
-        const now = new Date();
-        if (day > now) return; // Skip future days
-
-        const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-        if (!isWeekend) {
-            totalWorkDays++;
-            const hash = (day.getDate() + day.getMonth() * 31) % 7;
-            // <= 3 (Hadir), 4 (Telat - counts as present?), 5 (Mangkir). Only <= 4 are "present".
-            if (hash <= 4 || hash > 5) presentDays++;
-        }
-    });
-
-    // Override the DB % with the Dummy UI Mock percentage since YoAbsen API is missing
-    const displayActivePercentage = totalWorkDays > 0 ? Math.round((presentDays / totalWorkDays) * 100) : 0;
+    const isCurrentSelectedMonth =
+        selectedDate.getFullYear() === new Date().getFullYear() &&
+        selectedDate.getMonth() === new Date().getMonth();
+    const activityMonitorTitle = `${selectedDate.toLocaleString('default', { month: 'long' })} Activity Monitor${isCurrentSelectedMonth ? ' (MTD)' : ''}`;
 
     return (
         <CrewLayout
@@ -152,14 +135,14 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                     <div className="bg-gray-100 rounded-3xl p-5">
                         <p className="text-sm font-bold text-gray-700 mb-2">{crewName}</p>
                         <div className="w-full bg-white rounded-full h-4 mb-2 overflow-hidden">
-                            <div className="bg-green-500 h-full rounded-full transition-all duration-1000" style={{ width: `${displayActivePercentage}%` }}></div>
+                            <div className="bg-green-500 h-full rounded-full transition-all duration-1000" style={{ width: `${activePercentage}%` }}></div>
                         </div>
-                        <p className="text-xs text-gray-500">Active Percentage - {displayActivePercentage}% ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
+                        <p className="text-xs text-gray-500">Active Percentage - {activePercentage}% ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
                     </div>
 
                     {/* Activity Monitor */}
                     <div className="bg-gray-100 rounded-3xl p-5">
-                        <p className="text-sm font-medium text-gray-600 mb-3">{selectedDate.toLocaleString('default', { month: 'long' })} Activity Monitor</p>
+                        <p className="text-sm font-medium text-gray-600 mb-3">{activityMonitorTitle}</p>
 
                         {activityMonitor.length > 0 ? (
                             <>

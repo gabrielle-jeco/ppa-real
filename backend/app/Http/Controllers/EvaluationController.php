@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MonthlyPersonalityEvaluation;
-use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -33,12 +33,19 @@ class EvaluationController extends Controller
                 return response()->json(['error' => 'Unauthorized. You can only evaluate your direct subordinates.'], 403);
             }
 
-            $date = \Carbon\Carbon::parse($request->date)->startOfMonth()->format('Y-m-d');
+            $period = Carbon::parse($request->date)->startOfMonth();
+            $currentPeriod = now()->startOfMonth();
+
+            if (!$period->isSameMonth($currentPeriod) || !$period->isSameYear($currentPeriod)) {
+                return response()->json([
+                    'error' => 'Evaluation can only be submitted for the current month.'
+                ], 422);
+            }
 
             $evaluation = MonthlyPersonalityEvaluation::updateOrCreate(
                 [
                     'evaluatee_id' => $request->user_id,
-                    'evaluation_period' => $date,
+                    'evaluation_period' => $period->toDateString(),
                 ],
                 [
                     'evaluator_id' => Auth::id(),
@@ -63,7 +70,9 @@ class EvaluationController extends Controller
     public function checkPeriod(Request $request, $supervisorId)
     {
         $dateStr = $request->query('date', now()->format('Y-m-d'));
-        $date = \Carbon\Carbon::parse($dateStr);
+        $date = Carbon::parse($dateStr);
+        $currentPeriod = now()->startOfMonth();
+        $requestedPeriod = $date->copy()->startOfMonth();
 
         $evaluation = MonthlyPersonalityEvaluation::where('evaluatee_id', $supervisorId)
             ->whereYear('evaluation_period', $date->year)
@@ -79,6 +88,8 @@ class EvaluationController extends Controller
         // Safe response
         return response()->json([
             'evaluated' => !!$evaluation,
+            'can_evaluate' => $requestedPeriod->equalTo($currentPeriod),
+            'is_locked' => !$requestedPeriod->equalTo($currentPeriod),
             'data' => $evaluation
         ]);
     }

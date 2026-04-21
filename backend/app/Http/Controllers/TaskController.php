@@ -2,11 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use Carbon\Carbon;
+use App\Models\GuideRead;
 use Illuminate\Http\Request;
 use App\Models\Task;
 use App\Models\User;
-use App\Models\GuideRead;
+use App\Models\TaskEvidence;
+use App\Models\WorkStation;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class TaskController extends Controller
@@ -18,11 +23,25 @@ class TaskController extends Controller
     public function index(Request $request, $supervisorId)
     {
         $user = Auth::user();
+        $targetDate = $request->has('date')
+            ? Carbon::parse($request->date)
+            : Carbon::now();
 
         // Security check: Only Managers/Supervisors can view tasks assigned to others
         if ($user->role_type !== 'manager' && $user->role_type !== 'supervisor') {
             if ($user->id != $supervisorId) { // Prevent Crews from viewing other Crew's tasks
                 return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            if (
+                in_array($user->role_type, ['employee', 'crew'], true)
+                && $targetDate->isSameDay(Carbon::today())
+                && !$this->hasConfirmedGuideForDate($user, $targetDate, $request->query('role'))
+            ) {
+                return response()->json([
+                    'message' => 'Please confirm today\'s guide before accessing your tasks.',
+                    'guide_required' => true,
+                ], 423);
             }
         } else {
             // If it's a Manager/Supervisor trying to view someone else's tasks, verify hierarchy
@@ -38,7 +57,7 @@ class TaskController extends Controller
         $query = Task::where('employee_id', $supervisorId);
 
         if ($request->has('date')) {
-            $query->whereDate('due_at', $request->date);
+            $query->whereDate('due_at', $targetDate->toDateString());
         }
 
         $tasks = $query->with('evidences')->orderBy('due_at', 'asc')->get();
@@ -98,10 +117,14 @@ class TaskController extends Controller
             return response()->json(['message' => 'Cannot delete an approved task. Please un-approve it first if you must delete it.'], 400);
         }
 
+        if ($this->isTaskLocked($task)) {
+            return response()->json(['message' => 'This task is already past its deadline and can no longer be deleted.'], 400);
+        }
+
         // Delete all physical evidence files before deleting the task
         foreach ($task->evidences as $evidence) {
-            if (\Illuminate\Support\Facades\Storage::disk('public')->exists($evidence->file_path)) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($evidence->file_path);
+            if (Storage::disk('public')->exists($evidence->file_path)) {
+                Storage::disk('public')->delete($evidence->file_path);
             }
         }
 
@@ -124,6 +147,10 @@ class TaskController extends Controller
             return response()->json(['message' => 'Unauthorized. Only the task assigner can update its status.'], 403);
         }
 
+        if ($this->isTaskLocked($task)) {
+            return response()->json(['message' => 'This task is already past its deadline and can no longer be checked or updated.'], 400);
+        }
+
         $task->status = $request->status;
         $task->save();
 
@@ -138,14 +165,20 @@ class TaskController extends Controller
     public function uploadEvidence(Request $request, $id)
     {
         $request->validate([
+            'before' => 'nullable|array|max:1',
             'before.*' => 'nullable|image|max:10240', // Max 10MB per file
+            'after' => 'nullable|array|max:3',
             'after.*' => 'nullable|image|max:10240',
         ]);
 
-        $task = Task::findOrFail($id);
+        $task = Task::with('evidences')->findOrFail($id);
 
         if ($task->status === 'approved') {
             return response()->json(['message' => 'Cannot modify evidence on an approved task. Please reject/un-approve the task first.'], 400);
+        }
+
+        if ($this->isTaskLocked($task)) {
+            return response()->json(['message' => 'This task is already past its deadline and evidence upload is locked.'], 400);
         }
 
         // Security check: Ensure the authenticated user is the one assigned to the task
@@ -154,14 +187,43 @@ class TaskController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        $authUser = Auth::user();
+        if (
+            $task->employee_id === $authUser->id
+            && in_array($authUser->role_type, ['employee', 'crew'], true)
+            && !$this->hasConfirmedGuideForDate($authUser, $task->due_at)
+        ) {
+            return response()->json([
+                'message' => 'Please confirm today\'s guide before uploading task evidence.'
+            ], 423);
+        }
+
         if (!$request->hasFile('before') && !$request->hasFile('after')) {
             return response()->json([
                 'message' => 'Foto tidak terdeteksi atau terlalu besar (Maks 10MB).'
             ], 400);
         }
 
+        $existingBeforeCount = $task->evidences->where('type', 'before')->count();
+        $existingAfterCount = $task->evidences->where('type', 'after')->count();
+
+        if ($request->hasFile('before') && $existingBeforeCount >= 1) {
+            return response()->json([
+                'message' => 'Before evidence is limited to 1 photo. Delete the old before photo first if you want to replace it.'
+            ], 422);
+        }
+
+        if ($request->hasFile('after')) {
+            $newAfterCount = count($request->file('after'));
+            if (($existingAfterCount + $newAfterCount) > 3) {
+                return response()->json([
+                    'message' => 'After evidence is limited to a maximum of 3 photos per task.'
+                ], 422);
+            }
+        }
+
         // Explicitly start a transaction to ensure all files or no files are saved
-        \Illuminate\Support\Facades\DB::beginTransaction();
+        DB::beginTransaction();
 
         try {
             if ($request->hasFile('before')) {
@@ -189,11 +251,11 @@ class TaskController extends Controller
             }
 
             // Do not update status here; status remains pending until approved by supervisor.
-            \Illuminate\Support\Facades\DB::commit();
+            DB::commit();
 
             return response()->json($task->load('evidences'));
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\DB::rollBack();
+            DB::rollBack();
             return response()->json(['message' => 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.'], 500);
         }
     }
@@ -207,10 +269,14 @@ class TaskController extends Controller
             'evidence_id' => 'required|integer|exists:task_evidences,id'
         ]);
 
-        $task = Task::findOrFail($id);
+        $task = Task::with('evidences')->findOrFail($id);
 
         if ($task->status === 'approved') {
             return response()->json(['message' => 'Cannot delete evidence from an approved task. Please reject/un-approve the task first.'], 400);
+        }
+
+        if ($this->isTaskLocked($task)) {
+            return response()->json(['message' => 'This task is already past its deadline and evidence can no longer be changed.'], 400);
         }
 
         // Security check: Ensure the authenticated user is authorized to delete
@@ -223,9 +289,15 @@ class TaskController extends Controller
             return response()->json(['message' => 'Evidence not found for this task'], 404);
         }
 
+        if ($evidence->type !== 'before') {
+            return response()->json([
+                'message' => 'Only before evidence can be deleted or replaced. After evidence is locked for scoring.'
+            ], 400);
+        }
+
         // Delete physical file
-        if (\Illuminate\Support\Facades\Storage::disk('public')->exists($evidence->file_path)) {
-            \Illuminate\Support\Facades\Storage::disk('public')->delete($evidence->file_path);
+        if (Storage::disk('public')->exists($evidence->file_path)) {
+            Storage::disk('public')->delete($evidence->file_path);
         }
 
         $evidence->delete();
@@ -294,5 +366,29 @@ class TaskController extends Controller
             ->exists();
 
         return response()->json(['has_read' => $hasRead]);
+    }
+
+    private function hasConfirmedGuideForDate(User $user, Carbon $date, ?string $role = null): bool
+    {
+        $query = GuideRead::where('user_id', $user->id)
+            ->whereDate('read_date', $date->toDateString());
+
+        if ($role) {
+            $workStation = WorkStation::whereRaw('LOWER(name) = ?', [strtolower($role)])->first();
+            if (!$workStation) {
+                return false;
+            }
+
+            $query->where('work_station_id', $workStation->id);
+        }
+
+        return $query->exists();
+    }
+
+    private function isTaskLocked(Task $task): bool
+    {
+        return $task->due_at instanceof Carbon
+            ? $task->due_at->isPast()
+            : Carbon::parse($task->due_at)->isPast();
     }
 }

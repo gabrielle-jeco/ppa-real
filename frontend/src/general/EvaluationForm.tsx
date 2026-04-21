@@ -59,8 +59,9 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
             if (res.ok) {
                 onSuccess();
             } else {
-                console.error("Evaluation failed");
-                alert("Failed to submit evaluation");
+                const errorData = await res.json().catch(() => null);
+                console.error("Evaluation failed", errorData);
+                alert(errorData?.error || "Failed to submit evaluation");
             }
         } catch (error) {
             console.error("Error submitting evaluation", error);

@@ -18,8 +18,6 @@ const ROLES = [
 ];
 
 export default function CrewDashboardMobile({ user, onNavigate, selectedRole, onRoleChange, onLogout }: CrewDashboardProps) {
-    // Removed local state: const [selectedRole, setSelectedRole] = useState(ROLES[0].id);
-    const [isGuideOpen, setIsGuideOpen] = useState(false);
     const [isGuideRead, setIsGuideRead] = useState(false);
     const [stats, setStats] = useState<any>({
         yearly_score: 0,
@@ -45,34 +43,30 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
         fetchStats();
     }, []);
 
-    // --- Dummy Attendance Calculator for UI consistency (Mirroring Evaluation page) ---
-    const getDummyActivePercentage = () => {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = today.getMonth();
-        const lastDay = new Date(year, month + 1, 0).getDate();
+    useEffect(() => {
+        const checkGuideStatus = async () => {
+            try {
+                const response = await fetch(`/api/crew/check-guide?role=${selectedRole}`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+                });
 
-        let totalWorkDays = 0;
-        let presentDays = 0;
-
-        for (let i = 1; i <= lastDay; i++) {
-            const day = new Date(year, month, i);
-            if (day > today) continue; // Skip future days
-
-            const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-            if (!isWeekend) {
-                totalWorkDays++;
-                const hash = (day.getDate() + day.getMonth() * 31) % 7;
-                // <= 4 (Hadir/Telat counts as present), 5 (Mangkir)
-                if (hash <= 4 || hash > 5) presentDays++;
+                if (response.ok) {
+                    const data = await response.json();
+                    setIsGuideRead(!!data.has_read);
+                } else {
+                    setIsGuideRead(false);
+                }
+            } catch (error) {
+                console.error("Failed to check guide status", error);
+                setIsGuideRead(false);
             }
-        }
-        return totalWorkDays > 0 ? Math.round((presentDays / totalWorkDays) * 100) : 0;
-    };
+        };
+
+        checkGuideStatus();
+    }, [selectedRole]);
 
     // Bound Data
-    // Override the DB % with the Dummy UI Mock percentage since YoAbsen API is missing
-    const activePercentage = getDummyActivePercentage();
+    const activePercentage = stats.active_percentage || 0;
     const taskProgress = stats.task_progress;
     const progressPercent = taskProgress.total > 0 ? (taskProgress.completed / taskProgress.total) * 100 : 0;
 
@@ -163,10 +157,10 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                                         <p className="text-3xl font-extrabold text-blue-900 leading-none">{taskProgress.completed}/{taskProgress.total}</p>
                                     </div>
                                     <button
-                                        onClick={() => onNavigate('task-list')}
-                                        className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md shadow-blue-200 active:scale-95 transition-transform hover:bg-blue-700"
+                                        onClick={() => onNavigate(isGuideRead ? 'task-list' : 'guide')}
+                                        className={`text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md active:scale-95 transition-transform ${isGuideRead ? 'bg-blue-600 shadow-blue-200 hover:bg-blue-700' : 'bg-gray-400 shadow-gray-200 hover:bg-gray-500'}`}
                                     >
-                                        View Task !
+                                        {isGuideRead ? 'View Task !' : 'Read Guide First'}
                                     </button>
                                 </div>
 

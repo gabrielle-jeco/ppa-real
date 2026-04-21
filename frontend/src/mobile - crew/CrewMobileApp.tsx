@@ -167,6 +167,7 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
                         onBack={() => setActivePage('dashboard')}
                         onSelectTask={handleSelectTask}
                         refreshTrigger={refreshTrigger}
+                        selectedRole={selectedRole}
                     />
                 );
             case 'history':

@@ -88,6 +88,10 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
     // TOGGLE STATUS (Checkbox)
     const handleToggleStatus = async (task: any) => {
+        if (new Date(task.due_at) < new Date()) {
+            return;
+        }
+
         const newStatus = task.status === 'approved' ? 'pending' : 'approved';
         handleUpdateStatus(task.task_id, newStatus);
     };
@@ -184,7 +188,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                     setIsPreviewOpen(true);
                 }}
                 onDelete={!isToday(selectedDate) ? undefined : (evidenceId) => handleDeleteProof(evidenceId)}
-                readOnly={previewTask?.status === 'approved' || !isToday(selectedDate)}
+                readOnly={previewTask?.status === 'approved' || (previewTask && new Date(previewTask.due_at) < new Date()) || !isToday(selectedDate)}
             />
 
             <MobileTaskPreview
@@ -196,7 +200,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 initialIndex={initialPreviewIndex}
                 onDeleteProof={(evidenceId) => handleDeleteProof(evidenceId)}
                 onUpdateStatus={(status) => handleUpdateStatus(previewTask.task_id, status)}
-                readOnly={previewTask?.status === 'approved' || (previewTask && new Date(previewTask.due_at) < new Date(new Date().setHours(0, 0, 0, 0)))}
+                readOnly={previewTask?.status === 'approved' || (previewTask && new Date(previewTask.due_at) < new Date())}
             />
 
             {/* CARD 1: Profile & History (Static) */}
@@ -275,7 +279,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
                     {tasks.map(task => {
                         const isApproved = task.status === 'approved';
-                        const isPastDue = new Date(task.due_at) < new Date(new Date().setHours(0, 0, 0, 0));
+                        const isPastDue = new Date(task.due_at) < new Date();
                         const isReadOnly = isApproved || isPastDue;
 
                         return (

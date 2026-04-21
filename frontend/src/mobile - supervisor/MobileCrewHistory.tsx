@@ -159,6 +159,8 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
         setIsEvidenceListOpen(true);
     };
 
+    const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
+
     // Calendar Logic
     const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
     const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
@@ -230,7 +232,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                     setIsPreviewOpen(true);
                 }}
                 onDelete={!isToday(selectedDate) ? undefined : (evidenceId) => handleDeleteProof(evidenceId)}
-                readOnly={previewTask?.status === 'approved' || !isToday(selectedDate)}
+                readOnly={previewTask?.status === 'approved' || (previewTask && isTaskPastDue(previewTask)) || !isToday(selectedDate)}
             />
 
             <MobileTaskPreview
@@ -242,7 +244,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 initialIndex={initialPreviewIndex}
                 onDeleteProof={(evidenceId) => handleDeleteProof(evidenceId)}
                 onUpdateStatus={(status) => handleUpdateStatus(previewTask?.task_id, status)}
-                readOnly={previewTask?.status === 'approved' || !isToday(selectedDate)}
+                readOnly={previewTask?.status === 'approved' || (previewTask && isTaskPastDue(previewTask)) || !isToday(selectedDate)}
             />
 
             <div className="flex flex-col h-full">
@@ -371,7 +373,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                             tasks.length > 0 ? (
                                 tasks.map((task) => {
                                     const isApproved = task.status === 'approved';
-                                    const isPastDue = !isToday(selectedDate);
+                                    const isPastDue = !isToday(selectedDate) || isTaskPastDue(task);
 
                                     return (
                                         <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between group border border-transparent hover:border-gray-200 transition">

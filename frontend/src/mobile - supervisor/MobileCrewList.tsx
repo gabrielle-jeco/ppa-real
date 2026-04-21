@@ -54,6 +54,12 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
         return 'bg-red-500';
     };
 
+    const getStarColor = (score: number) => {
+        if (score > 90) return 'text-green-500';
+        if (score >= 75.5) return 'text-yellow-400';
+        return 'text-red-500';
+    };
+
     return (
         <MobileLayout
             title="Employee"
@@ -100,7 +106,7 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                                 <h3 className="font-medium text-gray-700 text-sm">
                                     {index + 1}. {crew.name} - <span className="text-gray-500 text-xs">{displayRole}</span>
                                 </h3>
-                                {isTopPerformer && <Star size={16} className="text-blue-600 fill-blue-600" />}
+                                {isTopPerformer && <Star size={16} className={`${getStarColor(score)} fill-current`} />}
                             </div>
 
                             {/* Progress Bar */}

@@ -174,6 +174,10 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
     };
 
     const handleToggleStatus = async (task: any) => {
+        if (new Date(task.due_at) < new Date()) {
+            return;
+        }
+
         const newStatus = task.status === 'approved' ? 'pending' : 'approved';
         setTasks(tasks.map(t => t.task_id === task.task_id ? { ...t, status: newStatus } : t));
 
@@ -245,7 +249,13 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
         setViewMode(mode);
     };
 
+    const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
+
     const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const isCurrentSelectedMonth =
+        selectedDate.getFullYear() === new Date().getFullYear() &&
+        selectedDate.getMonth() === new Date().getMonth();
+    const activityMonitorTitle = `${selectedDate.toLocaleDateString('en-US', { month: 'long' })} Activity Monitor${isCurrentSelectedMonth ? ' (MTD)' : ''}`;
 
     // Activity Monitor colors for bar chart
     const monitorColors = ['bg-green-400', 'bg-purple-500', 'bg-blue-400', 'bg-yellow-400', 'bg-red-400', 'bg-pink-400'];
@@ -463,9 +473,9 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                     <div key={task.task_id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition group">
                                         <div className="flex items-start gap-3">
                                             <div
-                                                onClick={() => isToday(selectedDate) && handleToggleStatus(task)}
+                                                onClick={() => isToday(selectedDate) && !isTaskPastDue(task) && handleToggleStatus(task)}
                                                 className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${task.status === 'approved' ? 'bg-purple-100 border-primary text-primary' : 'border-gray-300'
-                                                    } ${(isToday(selectedDate)) ? 'cursor-pointer hover:border-primary' : 'cursor-default opacity-60'}`}
+                                                    } ${(isToday(selectedDate) && !isTaskPastDue(task)) ? 'cursor-pointer hover:border-primary' : 'cursor-default opacity-60'}`}
                                             >
                                                 {task.status === 'approved' && <span className="font-bold text-xs">✓</span>}
                                             </div>
@@ -479,7 +489,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                                     <Camera size={12} /> Foto
                                                 </button>
                                                 {/* Only allow deleting Crew's tasks if not approved */}
-                                                {(isToday(selectedDate) && task.status !== 'approved') && (
+                                                {(isToday(selectedDate) && !isTaskPastDue(task) && task.status !== 'approved') && (
                                                     <button onClick={() => handleDeleteTask(task.task_id)} className="text-red-400 hover:text-red-600 p-1 opacity-50 group-hover:opacity-100 transition">
                                                         <Trash2 size={14} />
                                                     </button>
@@ -492,16 +502,16 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                         </>
                     ) : (
                         /* Evaluation Mode View */
-                        todayEvaluation?.evaluated ? (
+                        (todayEvaluation?.evaluated || todayEvaluation?.is_locked || todayEvaluation?.can_evaluate === false) ? (
                             <div className="flex flex-col items-center justify-center h-full bg-white rounded-2xl p-8 border border-gray-100 text-center">
                                 <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-4xl mb-4">
                                     ✓
                                 </div>
-                                <h3 className="text-xl font-bold text-gray-800 mb-2">Evaluation Complete</h3>
-                                <p className="text-gray-500 mb-6">You have filled the Monthly Evaluation form for this month.</p>
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">{todayEvaluation?.evaluated ? 'Evaluation Complete' : 'Evaluation Closed'}</h3>
+                                <p className="text-gray-500 mb-6">{todayEvaluation?.evaluated ? 'You have filled the Monthly Evaluation form for this month.' : 'This month is no longer open for questionnaire input.'}</p>
                                 <div className="bg-purple-50 p-4 rounded-xl w-full max-w-xs mb-6">
                                     <p className="text-xs text-gray-500 uppercase tracking-wide">Total Score</p>
-                                    <p className="text-4xl font-bold text-primary">{todayEvaluation.data?.total_score}</p>
+                                    <p className="text-4xl font-bold text-primary">{todayEvaluation.data?.total_score ?? '-'}</p>
                                 </div>
                             </div>
                         ) : (
@@ -528,7 +538,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
 
                                     {/* Monthly Activity Monitor */}
                                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
-                                        <h3 className="text-sm font-semibold text-gray-600 mb-4">{selectedDate.toLocaleDateString('en-US', { month: 'long' })} Activity Monitor</h3>
+                                        <h3 className="text-sm font-semibold text-gray-600 mb-4">{activityMonitorTitle}</h3>
 
                                         {evalStats?.activity_monitor && evalStats.activity_monitor.length > 0 ? (
                                             <>
@@ -623,7 +633,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                 task={previewTask}
                                 onClose={handleClosePreview}
                                 onDeleteProof={handleDeleteProof}
-                                readOnly={previewTask.status === 'approved' || !isToday(selectedDate)}
+                                readOnly={previewTask.status === 'approved' || new Date(previewTask.due_at) < new Date() || !isToday(selectedDate)}
                             />
                         )
                     )}
