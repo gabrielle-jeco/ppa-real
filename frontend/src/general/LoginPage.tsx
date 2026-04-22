@@ -9,6 +9,19 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const loginErrorMessage = 'Invalid credentials.';
+    const fallbackErrorMessage = 'Login failed. Please try again.';
+
+    const readJsonSafely = async (response: Response) => {
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) return null;
+
+        try {
+            return await response.json();
+        } catch {
+            return null;
+        }
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -18,20 +31,21 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         try {
             const response = await fetch('/api/login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
                 body: JSON.stringify({ username, password })
             });
 
-            const data = await response.json();
+            const data = await readJsonSafely(response);
 
             if (!response.ok) {
-                const apiError =
-                    data?.errors?.username?.[0] ||
-                    data?.errors?.password?.[0] ||
-                    data?.message ||
-                    'Login failed';
+                throw new Error(loginErrorMessage);
+            }
 
-                throw new Error(apiError);
+            if (!data?.access_token || !data?.user) {
+                throw new Error(fallbackErrorMessage);
             }
 
             // Success
@@ -45,7 +59,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             onLoginSuccess(data.user);
 
         } catch (err: any) {
-            setError(err.message);
+            setError(err?.message === loginErrorMessage ? loginErrorMessage : fallbackErrorMessage);
         } finally {
             setLoading(false);
         }
