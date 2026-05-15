@@ -6,13 +6,16 @@ interface AddTaskModalProps {
     onClose: () => void;
     onSubmit: (task: any) => void;
     defaultDate?: string; // YYYY-MM-DD
+    requireCategory?: boolean;
 }
 
-export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate }: AddTaskModalProps) {
+export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false }: AddTaskModalProps) {
     const [title, setTitle] = useState('');
     const [date, setDate] = useState(defaultDate || '');
     const [time, setTime] = useState('');
     const [note, setNote] = useState('');
+    const [workStationId, setWorkStationId] = useState('');
+    const [workStations, setWorkStations] = useState<any[]>([]);
 
     // Reset/Update date when defaultDate changes or modal opens
     React.useEffect(() => {
@@ -20,6 +23,22 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate }:
             setDate(defaultDate);
         }
     }, [isOpen, defaultDate]);
+
+    React.useEffect(() => {
+        if (!isOpen || !requireCategory) return;
+
+        const fetchWorkStations = async () => {
+            const res = await fetch('/api/work-stations', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+            });
+
+            if (res.ok) {
+                setWorkStations(await res.json());
+            }
+        };
+
+        fetchWorkStations();
+    }, [isOpen, requireCategory]);
 
     if (!isOpen) return null;
 
@@ -31,6 +50,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate }:
             title,
             due_at: dueAt,
             note,
+            ...(requireCategory ? { work_station_id: workStationId } : {}),
         });
         onClose();
         // Reset form
@@ -38,6 +58,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate }:
         setDate('');
         setTime('');
         setNote('');
+        setWorkStationId('');
     };
 
     return (
@@ -65,6 +86,24 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate }:
                             required
                         />
                     </div>
+
+                    {requireCategory && (
+                        <div>
+                            <select
+                                value={workStationId}
+                                onChange={(e) => setWorkStationId(e.target.value)}
+                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer capitalize"
+                                required
+                            >
+                                <option value="">Choose Category</option>
+                                {workStations.map((station) => (
+                                    <option key={station.id} value={station.id}>
+                                        {station.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     {/* Date Picker */}
                     <div className="relative">

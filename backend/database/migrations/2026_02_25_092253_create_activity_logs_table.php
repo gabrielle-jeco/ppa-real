@@ -14,10 +14,12 @@ return new class extends Migration {
     {
         Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->string('user_id');
             $table->foreignId('work_station_id')->nullable()->constrained('work_stations')->onDelete('cascade');
             $table->enum('action', ['clock_in', 'station_changed', 'clock_out']);
             $table->timestamps();
+
+            $table->foreign('user_id')->references('username')->on('users')->cascadeOnDelete();
         });
     }
 

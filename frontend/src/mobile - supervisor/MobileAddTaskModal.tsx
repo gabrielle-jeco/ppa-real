@@ -6,13 +6,16 @@ interface MobileAddTaskModalProps {
     onClose: () => void;
     onSubmit: (task: any) => void;
     defaultDate?: string;
+    requireCategory?: boolean;
 }
 
-export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultDate }: MobileAddTaskModalProps) {
+export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false }: MobileAddTaskModalProps) {
     const [title, setTitle] = useState('');
     const [date, setDate] = useState(defaultDate || '');
     const [time, setTime] = useState('');
     const [note, setNote] = useState('');
+    const [workStationId, setWorkStationId] = useState('');
+    const [workStations, setWorkStations] = useState<any[]>([]);
     const [animateIn, setAnimateIn] = useState(false);
 
     useEffect(() => {
@@ -24,12 +27,33 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
         }
     }, [isOpen, defaultDate]);
 
+    useEffect(() => {
+        if (!isOpen || !requireCategory) return;
+
+        const fetchWorkStations = async () => {
+            const res = await fetch('/api/work-stations', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+            });
+
+            if (res.ok) {
+                setWorkStations(await res.json());
+            }
+        };
+
+        fetchWorkStations();
+    }, [isOpen, requireCategory]);
+
     if (!isOpen) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const dueAt = `${date} ${time}:00`;
-        onSubmit({ title, due_at: dueAt, note });
+        onSubmit({
+            title,
+            due_at: dueAt,
+            note,
+            ...(requireCategory ? { work_station_id: workStationId } : {}),
+        });
         handleClose();
     };
 
@@ -42,6 +66,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
             setDate(defaultDate || '');
             setTime('');
             setNote('');
+            setWorkStationId('');
         }, 300); // Match transition duration
     };
 
@@ -79,6 +104,25 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                             required
                         />
                     </div>
+
+                    {requireCategory && (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Category</label>
+                            <select
+                                value={workStationId}
+                                onChange={(e) => setWorkStationId(e.target.value)}
+                                className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-5 py-4 text-gray-800 font-medium transition-all capitalize"
+                                required
+                            >
+                                <option value="">Choose workstation</option>
+                                {workStations.map((station) => (
+                                    <option key={station.id} value={station.id}>
+                                        {station.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         {/* Date Picker */}

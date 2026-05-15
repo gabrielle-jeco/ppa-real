@@ -16,12 +16,13 @@ export default defineConfig({
         'safari-pinned-tab.svg',
         'android-chrome-96x96.png',
         'pwa-192x192.png',
-        'pwa-512x512.png'
+        'pwa-512x512.png',
+        'logo-yogya.png'
       ],
       manifest: {
-        name: 'PPA - Ceklis',
-        short_name: 'PPA Ceklis',
-        description: 'Checklist dashboard for the Personal Performance Application.',
+        name: 'YoDaily',
+        short_name: 'YoDaily',
+        description: 'Daily operational checklist and performance dashboard.',
         theme_color: '#2563EB',
         background_color: '#ffffff',
         display: 'standalone',

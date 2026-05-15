@@ -15,38 +15,73 @@ class DatabaseSeeder extends Seeder
 {
     public function run()
     {
-        // 1. Job Levels
         $crewLevel = JobLevel::create(['name' => 'crew', 'description' => 'Service Crew']);
         $spvLevel = JobLevel::create(['name' => 'supervisor', 'description' => 'Store Supervisor']);
         $managerLevel = JobLevel::create(['name' => 'manager', 'description' => 'Regional/Store Manager']);
 
-        // 2. Work Stations
         WorkStation::create(['name' => 'cashier', 'guide_content' => ['Check register', 'Greet customers']]);
         WorkStation::create(['name' => 'supermarket', 'guide_content' => ['Stock shelves', 'Check expiry dates']]);
         WorkStation::create(['name' => 'fashion', 'guide_content' => ['Fold clothes', 'Arrange mannequins']]);
         WorkStation::create(['name' => 'fresh', 'guide_content' => ['Sort vegetables', 'Check meat storage']]);
 
-        // 3. Locations
-        $locSudirman = Location::create(['name' => 'Yogya Sudirman']);
-        $locThamrin = Location::create(['name' => 'Yogya Thamrin']);
+        $locSudirman = Location::create([
+            'name' => 'YOGYA SUDIRMAN',
+            'store_code' => 101,
+            'initial' => 'YSD',
+            'address' => 'Jl. Jend. Sudirman No. 1',
+            'city' => 'Bandung',
+            'phone' => '022-0000001',
+            'region_code' => 10,
+            'latitude' => '-6.914744',
+            'longitude' => '107.609810',
+            'is_fnb' => 1,
+            'is_fashion' => 1,
+            'is_supermarket' => 1,
+            'is_yogya_electronic' => 0,
+            'is_food_court' => 1,
+            'open_hour' => '08:00-21:00',
+            'store_description' => 'Dummy store for YoDaily development.',
+            'is_active' => 1,
+            'type_store' => 'department_store',
+            'sm' => '900001',
+        ]);
 
-        // 4. Users
+        $locThamrin = Location::create([
+            'name' => 'YOGYA THAMRIN',
+            'store_code' => 102,
+            'initial' => 'YTH',
+            'address' => 'Jl. Thamrin No. 2',
+            'city' => 'Jakarta',
+            'phone' => '021-0000002',
+            'region_code' => 11,
+            'latitude' => '-6.194449',
+            'longitude' => '106.822919',
+            'is_fnb' => 1,
+            'is_fashion' => 1,
+            'is_supermarket' => 1,
+            'is_yogya_electronic' => 1,
+            'is_food_court' => 1,
+            'open_hour' => '08:00-21:00',
+            'store_description' => 'Dummy branch store for YoDaily development.',
+            'is_active' => 1,
+            'type_store' => 'department_store',
+            'sm' => '900001',
+        ]);
+
         $password = Hash::make('password');
 
-        // Manager
         $managerAnton = User::create([
             'name' => 'Anton Manager',
-            'username' => 'anton_mgr',
+            'username' => '900001',
             'email' => 'anton@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $managerLevel->id,
             'active' => true,
         ]);
 
-        // Supervisors
         $spvSurya = User::create([
             'name' => 'Surya Supervisor',
-            'username' => 'surya_spv',
+            'username' => '800001',
             'email' => 'surya@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $spvLevel->id,
@@ -55,17 +90,16 @@ class DatabaseSeeder extends Seeder
 
         $spvAndi = User::create([
             'name' => 'Andi Supervisor',
-            'username' => 'andi_spv',
+            'username' => '800002',
             'email' => 'andi@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $spvLevel->id,
             'active' => true,
         ]);
 
-        // Crews
         $crewBudi = User::create([
             'name' => 'Budi Crew',
-            'username' => 'budi_crew',
+            'username' => '700001',
             'email' => 'budi@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $crewLevel->id,
@@ -74,35 +108,28 @@ class DatabaseSeeder extends Seeder
 
         $crewDeni = User::create([
             'name' => 'Deni Crew',
-            'username' => 'deni_crew',
+            'username' => '700002',
             'email' => 'deni@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $crewLevel->id,
             'active' => true,
         ]);
 
-        // 5. User Locations (Pivot Table)
-        // Manager Anton holds both locations
-        UserLocation::create(['user_id' => $managerAnton->id, 'location_id' => $locSudirman->id]);
-        UserLocation::create(['user_id' => $managerAnton->id, 'location_id' => $locThamrin->id]);
+        UserLocation::create(['user_id' => $managerAnton->username, 'location_id' => $locSudirman->initial]);
+        UserLocation::create(['user_id' => $managerAnton->username, 'location_id' => $locThamrin->initial]);
 
-        // Surya and his crews at Sudirman
-        UserLocation::create(['user_id' => $spvSurya->id, 'location_id' => $locSudirman->id]);
-        UserLocation::create(['user_id' => $crewBudi->id, 'location_id' => $locSudirman->id]);
-        UserLocation::create(['user_id' => $crewDeni->id, 'location_id' => $locSudirman->id]);
+        UserLocation::create(['user_id' => $spvSurya->username, 'location_id' => $locSudirman->initial]);
+        UserLocation::create(['user_id' => $crewBudi->username, 'location_id' => $locSudirman->initial]);
+        UserLocation::create(['user_id' => $crewDeni->username, 'location_id' => $locSudirman->initial]);
 
-        // Andi at Thamrin
-        UserLocation::create(['user_id' => $spvAndi->id, 'location_id' => $locThamrin->id]);
+        UserLocation::create(['user_id' => $spvAndi->username, 'location_id' => $locThamrin->initial]);
 
-        // 6. Reporting Lines
-        // SPVs report to Manager
-        ReportingLine::create(['subordinate_id' => $spvSurya->id, 'leader_id' => $managerAnton->id]);
-        ReportingLine::create(['subordinate_id' => $spvAndi->id, 'leader_id' => $managerAnton->id]);
+        ReportingLine::create(['subordinate_id' => $spvSurya->username, 'leader_id' => $managerAnton->username]);
+        ReportingLine::create(['subordinate_id' => $spvAndi->username, 'leader_id' => $managerAnton->username]);
 
-        // Crews report to SPV Surya
-        ReportingLine::create(['subordinate_id' => $crewBudi->id, 'leader_id' => $spvSurya->id]);
-        ReportingLine::create(['subordinate_id' => $crewDeni->id, 'leader_id' => $spvSurya->id]);
+        ReportingLine::create(['subordinate_id' => $crewBudi->username, 'leader_id' => $spvSurya->username]);
+        ReportingLine::create(['subordinate_id' => $crewDeni->username, 'leader_id' => $spvSurya->username]);
 
-        $this->command->info('Database 3NF Seeder successfully populated!');
+        $this->command->info('Database seeder populated with NIK-based dummy users.');
     }
 }

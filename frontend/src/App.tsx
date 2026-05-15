@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import LoginPage from './general/LoginPage';
+import ManagerLayout from './desktop - manager/ManagerLayout';
+import ManagerDashboard from './desktop - manager/ManagerDashboard';
 import SupervisorLayout from './desktop - supervisor/SupervisorLayout';
 import SupervisorDashboard from './desktop - supervisor/SupervisorDashboard';
 import SupervisorMobileApp from './mobile - supervisor/SupervisorMobileApp';
+import SupervisorPerformance from './desktop - supervisor/SupervisorPerformance';
 import CrewMobileApp from './mobile - crew/CrewMobileApp';
 
 function App() {
   const [user, setUser] = useState<any>(null);
+  const [activeSupervisorPage, setActiveSupervisorPage] = useState<'employees' | 'performance'>('employees');
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [isVerifying, setIsVerifying] = useState(true);
 
@@ -76,14 +80,6 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (user?.role_type === 'manager') {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user_data');
-      setUser(null);
-    }
-  }, [user]);
-
   // Simplified Auth Flow for Phase 2 Verification
   const handleLoginSuccess = (userData: any) => {
     setUser(userData);
@@ -93,6 +89,7 @@ function App() {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
     setUser(null);
+    setActiveSupervisorPage('employees');
   };
 
   if (isVerifying && !user) {
@@ -103,6 +100,14 @@ function App() {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
+  if (user.role_type === 'manager') {
+    return (
+      <ManagerLayout user={user} onLogout={handleLogout}>
+        <ManagerDashboard />
+      </ManagerLayout>
+    );
+  }
+
   // Supervisor Flow
   if (user.role_type === 'supervisor') {
     if (isMobile) {
@@ -110,8 +115,16 @@ function App() {
     }
 
     return (
-      <SupervisorLayout onLogout={handleLogout}>
-        <SupervisorDashboard />
+      <SupervisorLayout
+        activePage={activeSupervisorPage}
+        onPageChange={setActiveSupervisorPage}
+        onLogout={handleLogout}
+      >
+        {activeSupervisorPage === 'employees' ? (
+          <SupervisorDashboard />
+        ) : (
+          <SupervisorPerformance />
+        )}
       </SupervisorLayout>
     );
   }

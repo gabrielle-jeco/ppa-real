@@ -14,10 +14,13 @@ return new class extends Migration {
     {
         Schema::create('reporting_lines', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('subordinate_id')->unique()->constrained('users')->onDelete('cascade');
-            $table->foreignId('leader_id')->constrained('users')->onDelete('cascade');
+            $table->string('subordinate_id')->unique();
+            $table->string('leader_id');
             $table->enum('status', ['active', 'inactive'])->default('active');
             $table->timestamps();
+
+            $table->foreign('subordinate_id')->references('username')->on('users')->cascadeOnDelete();
+            $table->foreign('leader_id')->references('username')->on('users')->cascadeOnDelete();
 
             // Composite unique constraint for referencing in other tables (Tasks, Evaluations)
             $table->unique(['leader_id', 'subordinate_id']);

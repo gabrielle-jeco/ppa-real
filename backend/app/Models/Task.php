@@ -12,6 +12,7 @@ class Task extends Model
     protected $fillable = [
         'employee_id',
         'employer_id',
+        'work_station_id',
         'title',
         'description',
         'due_at',
@@ -41,12 +42,17 @@ class Task extends Model
 
     public function assignedTo()
     {
-        return $this->belongsTo(User::class, 'employee_id');
+        return $this->belongsTo(User::class, 'employee_id', 'username');
     }
 
     public function createdBy()
     {
-        return $this->belongsTo(User::class, 'employer_id');
+        return $this->belongsTo(User::class, 'employer_id', 'username');
+    }
+
+    public function workStation()
+    {
+        return $this->belongsTo(WorkStation::class);
     }
 
     public function evidences()

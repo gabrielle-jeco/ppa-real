@@ -14,8 +14,8 @@ return new class extends Migration {
     {
         Schema::create('tasks', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('employee_id'); // corresponds to subordinate_id
-            $table->foreignId('employer_id'); // corresponds to leader_id
+            $table->string('employee_id'); // NIK/username, corresponds to subordinate_id
+            $table->string('employer_id'); // NIK/username, corresponds to leader_id
 
             // Composite Foreign Key linking directly to reporting_lines
             $table->foreign(['employer_id', 'employee_id'])

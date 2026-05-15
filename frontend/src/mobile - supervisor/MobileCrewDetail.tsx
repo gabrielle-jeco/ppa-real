@@ -176,6 +176,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 onClose={() => setIsTaskModalOpen(false)}
                 onSubmit={handleAddTask}
                 defaultDate={selectedDate.toLocaleDateString('en-CA')}
+                requireCategory
             />
 
             <MobileEvidenceListModal
@@ -300,6 +301,9 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                         <p className={`text-sm font-medium leading-tight mb-1 ${isApproved ? 'text-gray-500' : 'text-gray-700'}`}>
                                             {task.title}
                                         </p>
+                                        {task.work_station?.name && (
+                                            <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Category: {task.work_station.name}</p>
+                                        )}
                                         <p className="text-[10px] text-gray-400 mb-0.5">Due {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                         {task.note && <div className="text-[10px] text-gray-500 italic truncate">{task.note}</div>}
                                     </div>

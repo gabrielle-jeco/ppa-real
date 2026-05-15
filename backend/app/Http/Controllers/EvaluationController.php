@@ -13,7 +13,7 @@ class EvaluationController extends Controller
     {
         try {
             $request->validate([
-                'user_id' => 'required|exists:users,id',
+                'user_id' => 'required|exists:users,username',
                 'scores' => 'required|array',
                 'total_score' => 'required|numeric',
                 'date' => 'required|date',
@@ -48,7 +48,7 @@ class EvaluationController extends Controller
                     'evaluation_period' => $period->toDateString(),
                 ],
                 [
-                    'evaluator_id' => Auth::id(),
+                    'evaluator_id' => $evaluator->username,
                     'score' => $request->total_score,
                 ]
             );

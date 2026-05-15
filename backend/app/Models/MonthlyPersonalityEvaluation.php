@@ -13,11 +13,11 @@ class MonthlyPersonalityEvaluation extends Model
 
     public function evaluatee()
     {
-        return $this->belongsTo(User::class, 'evaluatee_id');
+        return $this->belongsTo(User::class, 'evaluatee_id', 'username');
     }
 
     public function evaluator()
     {
-        return $this->belongsTo(User::class, 'evaluator_id');
+        return $this->belongsTo(User::class, 'evaluator_id', 'username');
     }
 }

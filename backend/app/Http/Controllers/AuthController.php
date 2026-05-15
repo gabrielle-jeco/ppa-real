@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
-use App\Models\Location;
+use App\Services\YoabsenAuthService;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -13,21 +13,27 @@ class AuthController extends Controller
     /**
      * Handle the login request.
      */
-    public function login(Request $request)
+    public function login(Request $request, YoabsenAuthService $yoabsenAuth)
     {
         $request->validate([
             'username' => 'required',
             'password' => 'required',
-            'location_id' => 'nullable|integer' // Optional: If the frontend sends current location
+            'location_id' => 'nullable|string' // Optional: store initial if the frontend sends current location
         ]);
 
-        if (!Auth::attempt($request->only('username', 'password'))) {
-            throw ValidationException::withMessages([
-                'username' => ['Invalid credentials.'],
-            ]);
+        $credentialsAreValid = $yoabsenAuth->enabled()
+            ? $yoabsenAuth->authenticate($request->username, $request->password)
+            : Auth::attempt($request->only('username', 'password'));
+
+        if (!$credentialsAreValid) {
+            throw $this->invalidCredentials();
         }
 
         $user = User::where('username', $request->username)->first();
+        if (!$user) {
+            Auth::logout();
+            throw $this->invalidCredentials();
+        }
 
         // Check if user is active
         if (!$user->active) {
@@ -37,11 +43,30 @@ class AuthController extends Controller
             ]);
         }
 
+        // Manager Logic: Location Lock
         if ($user->role_type === 'manager') {
-            Auth::logout();
-            throw ValidationException::withMessages([
-                'username' => ['Invalid credentials.'],
-            ]);
+
+            // Store Manager (SM) must be locked to their assigned location
+            if ($user->manager_type === 'SM') {
+                if (!$user->location_id) {
+                    // Safety check: SM must have a location assigned in DB
+                    Auth::logout();
+                    return response()->json(['message' => 'System Error: SM has no assigned location.'], 403);
+                }
+
+                // In a real PWA on-site, we might verify IP or geolocation here.
+                // For now, we assume the location_id passed (or lack thereof) implies checking the backend assignment
+                // Getting stricter: If the request includes a location_id (e.g. from a site kiosk), it must match.
+                if ($request->has('location_id') && $request->location_id != $user->location_id) {
+                    Auth::logout();
+                    throw ValidationException::withMessages([
+                        'location_id' => ['Access denied: You are locked to a different location.'],
+                    ]);
+                }
+            }
+
+            // Regional Manager (RM) - No Lock
+            // Can access from anywhere.
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -69,5 +94,12 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         return $request->user();
+    }
+
+    private function invalidCredentials(): ValidationException
+    {
+        return ValidationException::withMessages([
+            'username' => ['Invalid credentials.'],
+        ]);
     }
 }

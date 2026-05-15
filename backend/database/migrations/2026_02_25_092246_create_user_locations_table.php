@@ -14,9 +14,13 @@ return new class extends Migration {
     {
         Schema::create('user_locations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
-            $table->foreignId('location_id')->constrained('locations')->onDelete('cascade');
+            $table->string('user_id');
+            $table->string('location_id');
             $table->timestamps();
+
+            $table->foreign('user_id')->references('username')->on('users')->cascadeOnDelete();
+            $table->foreign('location_id')->references('initial')->on('locations')->cascadeOnDelete();
+            $table->unique(['user_id', 'location_id']);
         });
     }
 

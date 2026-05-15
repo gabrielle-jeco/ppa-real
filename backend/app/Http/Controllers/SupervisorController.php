@@ -36,12 +36,12 @@ class SupervisorController extends Controller
                 $score = $crewStats['active_percentage'] ?? 0;
 
                 $totalTasks = Task::where('employee_id', $crew->user_id)
-                    ->where('employer_id', $user->id)
+                    ->where('employer_id', $user->username)
                     ->whereDate('due_at', $today->toDateString())
                     ->count();
 
                 $approvedTasks = Task::where('employee_id', $crew->user_id)
-                    ->where('employer_id', $user->id)
+                    ->where('employer_id', $user->username)
                     ->whereDate('due_at', $today->toDateString())
                     ->whereIn('status', ['approved', 'completed'])
                     ->count();
@@ -76,7 +76,8 @@ class SupervisorController extends Controller
 
         return response()->json([
             'supervisor' => [
-                'id' => $user->id,
+                'id' => $user->username,
+                'username' => $user->username,
                 'name' => $user->name,
                 'role' => 'Supervisor',
                 'location' => $user->locations->first() ? $user->locations->first()->name : 'Unknown',
@@ -119,7 +120,7 @@ class SupervisorController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $crewUser = User::find($id);
+        $crewUser = User::where('username', $id)->first();
         if (!$crewUser) {
             return response()->json(['message' => 'Crew not found'], 404);
         }

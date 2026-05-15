@@ -14,10 +14,12 @@ return new class extends Migration {
     {
         Schema::create('attendances', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->string('user_id');
             $table->date('date');
             $table->string('status_code');
             $table->timestamps();
+
+            $table->foreign('user_id')->references('username')->on('users')->cascadeOnDelete();
 
             // Enforce exactly one attendance per user per day
             $table->unique(['user_id', 'date']);

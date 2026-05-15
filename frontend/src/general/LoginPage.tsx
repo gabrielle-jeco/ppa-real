@@ -69,8 +69,13 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 md:px-0">
             <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 space-y-6 border border-gray-100">
                 <div className="text-center">
+                    <img
+                        src="/logo-yogya.png"
+                        alt="Yogya"
+                        className="mx-auto mb-8 h-auto w-48 max-w-48 object-contain sm:w-72"
+                    />
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Let's get you logged in</h1>
-                    <p className="text-gray-500 mt-2">PPA - Ceklis</p>
+                    <p className="text-gray-500 mt-2">YoDaily</p>
                 </div>
 
                 {error && (
@@ -81,13 +86,13 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
                 <form onSubmit={handleLogin} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Username</label>
+                        <label className="block text-sm font-medium text-gray-700">NIK</label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none transition"
-                            placeholder="e.g. sm_jakarta"
+                            placeholder="e.g. 800001"
                             required
                         />
                     </div>
@@ -114,7 +119,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                 </form>
 
                 <div className="text-center text-xs text-gray-400">
-                    &copy; 2026 PPA - Ceklis
+                    &copy; 2026 YoDaily
                 </div>
             </div>
         </div>
