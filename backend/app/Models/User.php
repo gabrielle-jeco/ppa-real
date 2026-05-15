@@ -31,7 +31,7 @@ class User extends Authenticatable
 
     public function getUserIdAttribute()
     {
-        return $this->id;
+        return $this->username;
     }
 
     public function getFullNameAttribute()
@@ -48,7 +48,7 @@ class User extends Authenticatable
     public function getLocationIdAttribute()
     {
         $location = $this->locations->first();
-        return $location ? $location->id : null;
+        return $location ? $location->initial : null;
     }
 
     public function getManagerTypeAttribute()
@@ -66,46 +66,46 @@ class User extends Authenticatable
 
     public function locations()
     {
-        return $this->belongsToMany(Location::class, 'user_locations', 'user_id', 'location_id');
+        return $this->belongsToMany(Location::class, 'user_locations', 'user_id', 'location_id', 'username', 'initial');
     }
 
     public function subordinateLines()
     {
-        return $this->hasMany(ReportingLine::class, 'leader_id');
+        return $this->hasMany(ReportingLine::class, 'leader_id', 'username');
     }
 
     public function leaderLines()
     {
-        return $this->hasMany(ReportingLine::class, 'subordinate_id');
+        return $this->hasMany(ReportingLine::class, 'subordinate_id', 'username');
     }
 
     public function tasksAssigned()
     {
-        return $this->hasMany(Task::class, 'employee_id');
+        return $this->hasMany(Task::class, 'employee_id', 'username');
     }
 
     public function tasksCreated()
     {
-        return $this->hasMany(Task::class, 'employer_id');
+        return $this->hasMany(Task::class, 'employer_id', 'username');
     }
 
     public function attendances()
     {
-        return $this->hasMany(Attendance::class);
+        return $this->hasMany(Attendance::class, 'user_id', 'username');
     }
 
     public function evaluationsReceived()
     {
-        return $this->hasMany(MonthlyPersonalityEvaluation::class, 'evaluatee_id');
+        return $this->hasMany(MonthlyPersonalityEvaluation::class, 'evaluatee_id', 'username');
     }
 
     public function evaluationsGiven()
     {
-        return $this->hasMany(MonthlyPersonalityEvaluation::class, 'evaluator_id');
+        return $this->hasMany(MonthlyPersonalityEvaluation::class, 'evaluator_id', 'username');
     }
 
     public function activityLogs()
     {
-        return $this->hasMany(ActivityLog::class);
+        return $this->hasMany(ActivityLog::class, 'user_id', 'username');
     }
 }

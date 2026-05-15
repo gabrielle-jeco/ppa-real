@@ -3,8 +3,8 @@ import { Star, ChevronDown } from 'lucide-react';
 
 interface CrewListProps {
     data: any;
-    selectedId: number | null;
-    onSelect: (id: number) => void;
+    selectedId: string | null;
+    onSelect: (id: string) => void;
 }
 
 export default function CrewList({ data, selectedId, onSelect }: CrewListProps) {

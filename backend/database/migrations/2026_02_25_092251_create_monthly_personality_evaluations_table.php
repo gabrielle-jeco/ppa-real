@@ -14,8 +14,8 @@ return new class extends Migration {
     {
         Schema::create('monthly_personality_evaluations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('evaluatee_id'); // corresponds to subordinate_id
-            $table->foreignId('evaluator_id'); // corresponds to leader_id
+            $table->string('evaluatee_id'); // NIK/username, corresponds to subordinate_id
+            $table->string('evaluator_id'); // NIK/username, corresponds to leader_id
 
             // Composite Foreign Key linking directly to reporting_lines
             $table->foreign(['evaluator_id', 'evaluatee_id'])

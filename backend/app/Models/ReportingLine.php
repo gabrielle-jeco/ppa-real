@@ -13,11 +13,11 @@ class ReportingLine extends Model
 
     public function subordinate()
     {
-        return $this->belongsTo(User::class, 'subordinate_id');
+        return $this->belongsTo(User::class, 'subordinate_id', 'username');
     }
 
     public function leader()
     {
-        return $this->belongsTo(User::class, 'leader_id');
+        return $this->belongsTo(User::class, 'leader_id', 'username');
     }
 }

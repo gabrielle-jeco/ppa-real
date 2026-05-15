@@ -64,7 +64,7 @@ class ScoringService
         $guideReads = $endOfRange->lt($startOfMonth)
             ? collect()
             : GuideRead::with('workStation')
-                ->where('user_id', $crew->id)
+                ->where('user_id', $crew->username)
                 ->whereBetween('read_date', [$startOfMonth->toDateString(), $endOfRange->toDateString()])
                 ->get();
 
@@ -110,7 +110,7 @@ class ScoringService
 
         $monthsToCalculate = ($targetYear === $currentYear) ? $currentMonth : 12;
 
-        $snapshots = MonthlyOverallScore::where('user_id', $crew->id)
+        $snapshots = MonthlyOverallScore::where('user_id', $crew->username)
             ->whereYear('period', $targetYear)
             ->get()
             ->keyBy(function ($item) {
@@ -162,7 +162,7 @@ class ScoringService
         $crewTotalPoints = 0;
 
         foreach ($subordinateLines as $line) {
-            $monthlyTasks = Task::where('employer_id', $supervisor->id)
+            $monthlyTasks = Task::where('employer_id', $supervisor->username)
                 ->where('employee_id', $line->subordinate_id)
                 ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->copy()->endOfDay()])
                 ->get();
@@ -182,7 +182,7 @@ class ScoringService
                 $scScores[] = 0;
             }
 
-            $crewUser = User::find($line->subordinate_id);
+            $crewUser = User::where('username', $line->subordinate_id)->first();
             if ($crewUser) {
                 $monthlyScoreData = $this->getCrewMonthlyScore($crewUser, $month);
                 $crewTotalPoints += $monthlyScoreData['total_score'];
@@ -198,7 +198,7 @@ class ScoringService
         $managerId = $managerLine ? $managerLine->leader_id : null;
 
         if ($managerId) {
-            $projects = Task::where('employee_id', $supervisor->id)
+            $projects = Task::where('employee_id', $supervisor->username)
                 ->where('employer_id', $managerId)
                 ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
                 ->get();
@@ -259,7 +259,7 @@ class ScoringService
     private function getCrewTaskScoreForDate(User $crew, Carbon $date): float
     {
         $tasks = Task::with('evidences')
-            ->where('employee_id', $crew->id)
+            ->where('employee_id', $crew->username)
             ->whereDate('due_at', $date->toDateString())
             ->get();
 
@@ -299,7 +299,7 @@ class ScoringService
 
     private function getAttendanceStatusForDate(User $crew, Carbon $date): string
     {
-        $attendance = Attendance::where('user_id', $crew->id)
+        $attendance = Attendance::where('user_id', $crew->username)
             ->whereDate('date', $date->toDateString())
             ->first();
 
@@ -338,7 +338,7 @@ class ScoringService
 
     private function getPersonalityScoreForMonth(User $crew, Carbon $month): int
     {
-        $personality = MonthlyPersonalityEvaluation::where('evaluatee_id', $crew->id)
+        $personality = MonthlyPersonalityEvaluation::where('evaluatee_id', $crew->username)
             ->whereYear('evaluation_period', $month->year)
             ->whereMonth('evaluation_period', $month->month)
             ->first();

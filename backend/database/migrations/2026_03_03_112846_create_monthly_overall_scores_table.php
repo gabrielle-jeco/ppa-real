@@ -14,11 +14,14 @@ return new class extends Migration {
     {
         Schema::create('monthly_overall_scores', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->string('user_id');
             $table->date('period'); // Represents the month, e.g., 2026-03-01
             $table->integer('final_score');
             $table->json('details')->nullable();
             $table->timestamps();
+
+            $table->foreign('user_id')->references('username')->on('users')->cascadeOnDelete();
+            $table->unique(['user_id', 'period']);
         });
     }
 

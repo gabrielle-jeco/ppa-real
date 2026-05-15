@@ -4,7 +4,7 @@ import CrewDetail from './CrewDetail';
 
 export default function SupervisorDashboard() {
     const [dashboardData, setDashboardData] = useState<any>(null);
-    const [selectedCrewId, setSelectedCrewId] = useState<number | null>(null);
+    const [selectedCrewId, setSelectedCrewId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -39,7 +39,7 @@ export default function SupervisorDashboard() {
         }
     };
 
-    const handleSelectCrew = (id: number) => {
+    const handleSelectCrew = (id: string) => {
         setSelectedCrewId(id);
     };
 

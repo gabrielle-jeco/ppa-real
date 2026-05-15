@@ -14,10 +14,12 @@ return new class extends Migration {
     {
         Schema::create('guide_reads', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->string('user_id');
             $table->foreignId('work_station_id')->constrained('work_stations')->onDelete('cascade');
             $table->date('read_date'); // To enforce daily uniqueness easily in Postgres
             $table->timestamps();
+
+            $table->foreign('user_id')->references('username')->on('users')->cascadeOnDelete();
 
             // Ensure a user can only read a specific guide once per day
             $table->unique(['user_id', 'work_station_id', 'read_date'], 'user_guide_daily_unique');

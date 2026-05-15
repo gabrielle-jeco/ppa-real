@@ -7,9 +7,10 @@ interface MobileCrewHistoryProps {
     onBack: () => void;
     onSelectTask: (task: any) => void;
     refreshTrigger?: number;
+    selectedRole: string;
 }
 
-export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshTrigger }: MobileCrewHistoryProps) {
+export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshTrigger, selectedRole }: MobileCrewHistoryProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [viewMode, setViewMode] = useState<'ACTIVITY' | 'TASKS'>('TASKS'); // Default to TASKS for now
     const [showRoleDropdown, setShowRoleDropdown] = useState(false);
@@ -29,7 +30,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                 const dateStr = selectedDate.toLocaleDateString('en-CA');
                 const token = localStorage.getItem('auth_token') || '';
 
-                const taskReq = fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}`, {
+                const taskReq = fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}&role=${selectedRole}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -39,7 +40,11 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
 
                 const [taskRes, activityRes] = await Promise.all([taskReq, activityReq]);
 
-                if (taskRes.ok) setTasks(await taskRes.json());
+                if (taskRes.ok) {
+                    setTasks(await taskRes.json());
+                } else {
+                    setTasks([]);
+                }
                 if (activityRes.ok) setActivityLogs(await activityRes.json());
 
             } catch (error) {
@@ -50,7 +55,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
         };
 
         fetchData();
-    }, [selectedDate, user?.user_id, refreshTrigger]);
+    }, [selectedDate, user?.user_id, refreshTrigger, selectedRole]);
 
 
 
@@ -183,6 +188,9 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                         <h3 className="font-bold text-gray-800 text-sm">
                             {selectedDate.toLocaleDateString('en-US', { day: 'numeric', month: 'long' })}
                         </h3>
+                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg capitalize">
+                            {selectedRole}
+                        </span>
 
                         <div className="relative">
                             <button

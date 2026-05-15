@@ -270,6 +270,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                 onClose={() => setIsTaskModalOpen(false)}
                 onSubmit={handleAddTask}
                 defaultDate={selectedDate.toLocaleDateString('en-CA')}
+                requireCategory
             />
 
             <div className="items-center justify-between hidden lg:flex mb-6"></div>
@@ -481,6 +482,9 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                             </div>
                                             <div className="flex-1">
                                                 <p className={`text-sm font-medium ${task.status === 'approved' ? 'text-gray-800' : 'text-gray-600'}`}>{task.title}</p>
+                                                {task.work_station?.name && (
+                                                    <p className="text-[10px] text-primary font-semibold capitalize mt-1">Category: {task.work_station.name}</p>
+                                                )}
                                                 <p className="text-[10px] text-gray-400 mt-1">Due: {new Date(task.due_at).toLocaleString()}</p>
                                                 {task.note && <p className="text-[10px] text-gray-500 italic mt-0.5">"{task.note}"</p>}
                                             </div>

@@ -25,22 +25,22 @@ class CrewController extends Controller
     public function myStats(Request $request)
     {
         $authUser = Auth::user();
-        $targetUserId = $request->query('user_id', $authUser->id);
+        $targetUserId = $request->query('user_id', $authUser->username);
 
-        $user = User::find($targetUserId);
+        $user = User::where('username', $targetUserId)->first();
         if (!$user) {
             return response()->json(['message' => 'User not found'], 404);
         }
 
         // Authorization logic
-        if ($authUser->id != $user->id) {
+        if ($authUser->username !== $user->username) {
             // Must be superior to view other's stats
             if ($authUser->role_type !== 'supervisor' && $authUser->role_type !== 'manager') {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
             // Hierarchy Check: The superior must be the direct manager/supervisor of the user
-            $isSubordinate = $authUser->subordinateLines()->where('subordinate_id', $user->id)->where('status', 'active')->exists();
+            $isSubordinate = $authUser->subordinateLines()->where('subordinate_id', $user->username)->where('status', 'active')->exists();
             if (!$isSubordinate) {
                 return response()->json(['message' => 'Unauthorized. This user is not your subordinate.'], 403);
             }
@@ -68,7 +68,7 @@ class CrewController extends Controller
         $detailedStats = $this->scoringService->getCrewMonthlyDetailedStats($user, $targetDate);
 
         // Daily Task Progress
-        $tasks = Task::where('employee_id', $user->id)
+        $tasks = Task::where('employee_id', $user->username)
             ->whereDate('due_at', Carbon::now()->toDateString())
             ->get();
 

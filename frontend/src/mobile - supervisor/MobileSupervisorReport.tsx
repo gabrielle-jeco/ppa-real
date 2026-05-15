@@ -4,7 +4,7 @@ import MobileLayout from './MobileLayout';
 
 interface MobileSupervisorReportProps {
     onBack: () => void;
-    supervisorId: number; // We might need this, or fetching from auth/user
+    supervisorId: string; // NIK/username for supervisor identity
 }
 
 export default function MobileSupervisorReport({ onBack, supervisorId }: MobileSupervisorReportProps) {

@@ -13,11 +13,11 @@ class UserLocation extends Model
 
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id', 'username');
     }
 
     public function location()
     {
-        return $this->belongsTo(Location::class);
+        return $this->belongsTo(Location::class, 'location_id', 'initial');
     }
 }

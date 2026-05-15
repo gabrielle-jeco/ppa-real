@@ -30,4 +30,15 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'yoabsen' => [
+        'enabled' => env('YOABSEN_ENABLED', false),
+        'base_url' => env('YOABSEN_BASE_URL'),
+        'login_path' => env('YOABSEN_LOGIN_PATH', '/api/login'),
+        'token' => env('YOABSEN_TOKEN'),
+        'timeout' => env('YOABSEN_TIMEOUT', 10),
+        'nik_field' => env('YOABSEN_NIK_FIELD', 'nik'),
+        'password_field' => env('YOABSEN_PASSWORD_FIELD', 'password'),
+        'success_field' => env('YOABSEN_SUCCESS_FIELD'),
+    ],
+
 ];
