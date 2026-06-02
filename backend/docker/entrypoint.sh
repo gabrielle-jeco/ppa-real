@@ -19,6 +19,7 @@ php artisan route:clear || true
 
 php artisan migrate --force
 
+
 # Seed only if table is empty
 USER_COUNT=$(php artisan tinker --execute="echo \App\Models\User::count();" 2>/dev/null | tail -1)
 if [ "$USER_COUNT" = "0" ]; then

@@ -89,7 +89,7 @@ function App() {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
     setUser(null);
-    setActiveSupervisorPage('employees');
+    setActiveSupervisorPage('employees'); // Reset
   };
 
   if (isVerifying && !user) {
@@ -100,6 +100,7 @@ function App() {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
+  // ALLOW SM and RM
   if (user.role_type === 'manager') {
     return (
       <ManagerLayout user={user} onLogout={handleLogout}>

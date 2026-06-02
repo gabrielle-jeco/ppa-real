@@ -112,7 +112,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                 <MenuCard
                     icon={<CheckSquare size={32} className="text-blue-600" />}
                     label="Checklist"
-                    onClick={() => onNavigate('CHECKLIST')}
+                    onClick={() => { }}
                 />
                 <MenuCard
                     icon={<FileText size={32} className="text-blue-600" />}

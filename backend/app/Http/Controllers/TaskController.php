@@ -99,6 +99,12 @@ class TaskController extends Controller
         $employer = Auth::user();
         $assignee = User::where('username', $request->supervisor_id)->firstOrFail();
 
+        if ($employer->role_type === 'manager' && $assignee->role_type === 'supervisor') {
+            return response()->json([
+                'message' => 'Manager-to-supervisor assignments are handled through manager review, not task checklist.'
+            ], 422);
+        }
+
         // Hierarchy Check: Prevent user from creating tasks for someone who is not their subordinate
         if ($employer->username !== $request->supervisor_id) { // Allow self-assigned tasks for Supervisor's own checklist
             $isSubordinate = $employer->subordinateLines()->where('subordinate_id', $request->supervisor_id)->where('status', 'active')->exists();

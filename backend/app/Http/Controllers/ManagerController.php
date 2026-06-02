@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Services\ScoringService;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
@@ -12,7 +13,7 @@ class ManagerController extends Controller
     /**
      * Get list of supervisors for the logged-in manager.
      */
-    public function getSupervisors(Request $request)
+    public function getSupervisors(Request $request, ScoringService $scoringService)
     {
         $user = Auth::user();
 
@@ -56,23 +57,9 @@ class ManagerController extends Controller
             }
         }
 
-        $startOfMonth = Carbon::now()->startOfMonth()->toDateString();
-        $endOfMonth = Carbon::now()->endOfMonth()->toDateString();
-
-        $supervisors = $supervisorsCollection->values()->map(function ($spv) use ($startOfMonth, $endOfMonth) {
-            // Deterministic score based on user ID for visual stability (simulate YoAbsen)
-            $score = ((abs(crc32($spv->username)) * 7 + 13) % 39) + 60; // Returns 60-98 consistently
-
-            // Calculate Task Progress: Supervisor's own tasks (assigned by the manager)
-            $tasks = \App\Models\Task::where('employee_id', $spv->username)
-                ->whereBetween('due_at', [$startOfMonth, $endOfMonth])
-                ->get();
-
-            $totalTasks = $tasks->count();
-            $completedTasks = $tasks->whereIn('status', ['approved', 'completed'])->count();
-
-            $taskProgress = $totalTasks > 0 ? (int) round(($completedTasks / $totalTasks) * 100) : 0;
-            $hasTasks = $totalTasks > 0;
+        $supervisors = $supervisorsCollection->values()->map(function ($spv) use ($scoringService) {
+            $stats = $scoringService->getSupervisorMonthlyDetailedScore($spv, Carbon::now());
+            $score = $stats['my_avg_point'] ?? 0;
 
             return [
                 'id' => $spv->username,
@@ -81,9 +68,9 @@ class ManagerController extends Controller
                 'location' => $spv->locations->first() ? $spv->locations->first()->name : 'N/A',
                 'status' => $spv->active ? 'active' : 'inactive',
                 'score' => $score,
-                'activity_percentage' => $score, // Mapping score to activity % for now
-                'task_progress' => $taskProgress,
-                'has_tasks' => $hasTasks,
+                'activity_percentage' => $score,
+                'task_progress' => $score,
+                'has_tasks' => true,
                 'is_top_performer' => $score > 90 // Logic for the Star icon
             ];
         });
@@ -97,7 +84,7 @@ class ManagerController extends Controller
             ],
             'location_name' => $filterLocationName,
             'locations' => $locations, // List for dropdown
-            'location_avg_progress' => round($supervisors->where('has_tasks', true)->avg('task_progress') ?? 0, 1),
+            'location_avg_progress' => round($supervisors->avg('task_progress') ?? 0, 1),
             'supervisors' => $supervisors
         ]);
     }
@@ -143,5 +130,81 @@ class ManagerController extends Controller
         $detailedStats = $scoringService->getSupervisorMonthlyDetailedScore($supervisor, $targetDate);
 
         return response()->json($detailedStats);
+    }
+
+    public function getSupervisorCrewTasks($id, Request $request, ScoringService $scoringService)
+    {
+        $manager = Auth::user();
+
+        if ($manager->role_type !== 'manager') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $isSubordinate = $manager->subordinateLines()
+            ->where('subordinate_id', $id)
+            ->where('status', 'active')
+            ->exists();
+
+        if (!$isSubordinate) {
+            return response()->json(['message' => 'Unauthorized or Supervisor not found'], 403);
+        }
+
+        $supervisor = User::where('username', $id)->first();
+        if (!$supervisor) {
+            return response()->json(['message' => 'Supervisor not found'], 404);
+        }
+
+        $targetDate = $request->has('date')
+            ? Carbon::parse($request->date)
+            : Carbon::today();
+
+        $crews = $supervisor->subordinateLines()
+            ->where('status', 'active')
+            ->with(['subordinate.locations'])
+            ->get()
+            ->pluck('subordinate')
+            ->filter(function ($crew) {
+                return $crew && $crew->active;
+            })
+            ->values()
+            ->map(function ($crew) use ($supervisor, $targetDate, $scoringService) {
+                $tasks = \App\Models\Task::with(['evidences', 'workStation'])
+                    ->where('employee_id', $crew->username)
+                    ->where('employer_id', $supervisor->username)
+                    ->whereDate('due_at', $targetDate->toDateString())
+                    ->orderBy('due_at', 'asc')
+                    ->get();
+
+                $approvedCount = $tasks->whereIn('status', ['approved', 'completed'])->count();
+                $overdueCount = $tasks->filter(function ($task) {
+                    return !in_array($task->status, ['approved', 'completed'], true)
+                        && Carbon::parse($task->due_at)->isPast();
+                })->count();
+
+                $crewStats = $scoringService->getCrewMonthlyDetailedStats($crew, $targetDate);
+
+                return [
+                    'id' => $crew->username,
+                    'name' => $crew->name,
+                    'role' => $crew->role_type,
+                    'location' => $crew->locations->first() ? $crew->locations->first()->name : 'N/A',
+                    'activity_percentage' => $crewStats['active_percentage'] ?? 0,
+                    'tasks_total' => $tasks->count(),
+                    'tasks_approved' => $approvedCount,
+                    'tasks_pending' => $tasks->count() - $approvedCount,
+                    'tasks_overdue' => $overdueCount,
+                    'tasks' => $tasks,
+                ];
+            });
+
+        return response()->json([
+            'supervisor' => [
+                'id' => $supervisor->username,
+                'name' => $supervisor->name,
+                'location' => $supervisor->locations->first() ? $supervisor->locations->first()->name : 'N/A',
+            ],
+            'date' => $targetDate->toDateString(),
+            'crews' => $crews,
+        ]);
     }
 }
