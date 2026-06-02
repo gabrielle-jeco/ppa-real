@@ -9,7 +9,20 @@ class MonthlyPersonalityEvaluation extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['evaluatee_id', 'evaluator_id', 'evaluation_period', 'score'];
+    protected $fillable = [
+        'evaluatee_id',
+        'evaluator_id',
+        'evaluation_period',
+        'evaluation_type',
+        'score',
+        'scores',
+        'notes',
+    ];
+
+    protected $casts = [
+        'evaluation_period' => 'date',
+        'scores' => 'array',
+    ];
 
     public function evaluatee()
     {

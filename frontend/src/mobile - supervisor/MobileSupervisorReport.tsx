@@ -194,9 +194,9 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                         <p className="text-[10px] text-gray-400">{stats?.task_for_sc?.completed || 0}% Completed</p>
                     </div>
 
-                    {/* Task Completed From SM/RM */}
+                    {/* Manager Review */}
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
-                        <h3 className="text-xs font-bold text-gray-600 mb-3">Task Completed From SM/RM</h3>
+                        <h3 className="text-xs font-bold text-gray-600 mb-3">{stats?.task_from_manager?.label || 'Manager Review'}</h3>
                         <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden mb-1">
                             <div className="h-full bg-red-500 rounded-full transition-all duration-1000" style={{ width: `${stats?.task_from_manager?.completed || 0}%` }}></div>
                         </div>

@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import SupervisorDashboardMobile from './SupervisorDashboardMobile';
 import MobileCrewList from './MobileCrewList';
 import MobileCrewDetail from './MobileCrewDetail';
-import MobileChecklist from './MobileChecklist';
 import MobileCrewHistory from './MobileCrewHistory';
 import MobileSupervisorReport from './MobileSupervisorReport';
 import MobileCrewEvaluation from './MobileCrewEvaluation';
 
-type MobileView = 'DASHBOARD' | 'EMPLOYEE_LIST' | 'CREW_DETAIL' | 'HISTORY' | 'EVALUATION' | 'CHECKLIST' | 'REPORT';
+type MobileView = 'DASHBOARD' | 'EMPLOYEE_LIST' | 'CREW_DETAIL' | 'HISTORY' | 'EVALUATION' | 'REPORT';
 
 const SupervisorMobileApp: React.FC = () => {
     const [currentView, setCurrentView] = useState<MobileView>('DASHBOARD');
@@ -51,8 +50,6 @@ const SupervisorMobileApp: React.FC = () => {
                 return <SupervisorDashboardMobile onNavigate={handleNavigate} user={currentUser} />;
             case 'EMPLOYEE_LIST':
                 return <MobileCrewList onNavigate={handleNavigate} />;
-            case 'CHECKLIST':
-                return <MobileChecklist supervisor={supervisor} onNavigate={handleNavigate} />;
             case 'CREW_DETAIL':
                 return selectedCrew ? (
                     <MobileCrewDetail

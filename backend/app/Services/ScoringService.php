@@ -197,20 +197,19 @@ class ScoringService
         $managerLine = $supervisor->leaderLines()->where('status', 'active')->first();
         $managerId = $managerLine ? $managerLine->leader_id : null;
 
+        $managerReviewScore = 0;
         if ($managerId) {
-            $projects = Task::where('employee_id', $supervisor->username)
-                ->where('employer_id', $managerId)
-                ->whereBetween('due_at', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
-                ->get();
+            $managerReview = MonthlyPersonalityEvaluation::where('evaluatee_id', $supervisor->username)
+                ->where('evaluator_id', $managerId)
+                ->where('evaluation_type', 'manager_review')
+                ->whereYear('evaluation_period', $month->year)
+                ->whereMonth('evaluation_period', $month->month)
+                ->first();
 
-            $totalProjects = $projects->count();
-            $completedProjects = $projects->whereIn('status', ['approved', 'completed'])->count();
-            $projectScore = $totalProjects === 0 ? 0 : ($completedProjects / $totalProjects) * 100;
-        } else {
-            $projectScore = 0;
+            $managerReviewScore = $managerReview ? (float) $managerReview->score : 0;
         }
 
-        $myAvgPoint = (int) round(($scAverageScore * 0.6) + ($projectScore * 0.4));
+        $myAvgPoint = (int) round(($scAverageScore * 0.6) + ($managerReviewScore * 0.4));
 
         return [
             'my_avg_point' => $myAvgPoint,
@@ -220,9 +219,9 @@ class ScoringService
                 'label' => 'Task for SC',
             ],
             'task_from_manager' => [
-                'completed' => (int) round($projectScore),
+                'completed' => (int) round($managerReviewScore),
                 'total' => 100,
-                'label' => 'Task Completed From SM/RM',
+                'label' => 'Manager Review',
             ],
             'monthly_task_given' => "{$totalTaskGiven} / {$scCount} People",
             'avg_service_crew_point' => (int) round($avgServiceCrewPoint),

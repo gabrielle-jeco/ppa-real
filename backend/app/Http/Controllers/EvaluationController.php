@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MonthlyPersonalityEvaluation;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,6 +22,7 @@ class EvaluationController extends Controller
             ]);
 
             $evaluator = Auth::user();
+            $evaluatee = User::where('username', $request->user_id)->firstOrFail();
 
             // Security Check: Only managers and supervisors can evaluate
             if ($evaluator->role_type !== 'manager' && $evaluator->role_type !== 'supervisor') {
@@ -42,14 +44,19 @@ class EvaluationController extends Controller
                 ], 422);
             }
 
+            $evaluationType = $this->resolveEvaluationType($evaluator, $evaluatee);
+
             $evaluation = MonthlyPersonalityEvaluation::updateOrCreate(
                 [
                     'evaluatee_id' => $request->user_id,
+                    'evaluator_id' => $evaluator->username,
                     'evaluation_period' => $period->toDateString(),
+                    'evaluation_type' => $evaluationType,
                 ],
                 [
-                    'evaluator_id' => $evaluator->username,
                     'score' => $request->total_score,
+                    'scores' => $request->scores,
+                    'notes' => $request->notes,
                 ]
             );
 
@@ -57,8 +64,6 @@ class EvaluationController extends Controller
             $evaluation->setAttribute('total_score', $evaluation->score);
             $evaluation->setAttribute('user_id', $evaluation->evaluatee_id);
             $evaluation->setAttribute('date', $evaluation->evaluation_period);
-            $evaluation->setAttribute('scores', $request->scores);
-            $evaluation->setAttribute('notes', $request->notes);
 
             return response()->json($evaluation);
         } catch (\Exception $e) {
@@ -74,7 +79,12 @@ class EvaluationController extends Controller
         $currentPeriod = now()->startOfMonth();
         $requestedPeriod = $date->copy()->startOfMonth();
 
+        $evaluator = Auth::user();
+        $evaluatee = User::where('username', $supervisorId)->first();
+        $evaluationType = $evaluatee ? $this->resolveEvaluationType($evaluator, $evaluatee) : 'personality';
+
         $evaluation = MonthlyPersonalityEvaluation::where('evaluatee_id', $supervisorId)
+            ->where('evaluation_type', $evaluationType)
             ->whereYear('evaluation_period', $date->year)
             ->whereMonth('evaluation_period', $date->month)
             ->first();
@@ -90,7 +100,17 @@ class EvaluationController extends Controller
             'evaluated' => !!$evaluation,
             'can_evaluate' => $requestedPeriod->equalTo($currentPeriod),
             'is_locked' => !$requestedPeriod->equalTo($currentPeriod),
+            'evaluation_type' => $evaluationType,
             'data' => $evaluation
         ]);
+    }
+
+    private function resolveEvaluationType(User $evaluator, User $evaluatee): string
+    {
+        if ($evaluator->role_type === 'manager' && $evaluatee->role_type === 'supervisor') {
+            return 'manager_review';
+        }
+
+        return 'personality';
     }
 }

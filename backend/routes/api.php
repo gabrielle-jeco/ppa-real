@@ -23,6 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Manager Routes
     Route::get('/manager/supervisors', [App\Http\Controllers\ManagerController::class, 'getSupervisors']);
     Route::get('/manager/supervisors/{id}/stats', [App\Http\Controllers\ManagerController::class, 'getSupervisorStats']);
+    Route::get('/manager/supervisors/{id}/crews', [App\Http\Controllers\ManagerController::class, 'getSupervisorCrewTasks']);
 
     // Task Routes
     Route::get('/supervisor/{id}/tasks', [App\Http\Controllers\TaskController::class, 'index']);
