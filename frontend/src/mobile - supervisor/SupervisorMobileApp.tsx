@@ -23,6 +23,24 @@ const SupervisorMobileApp: React.FC = () => {
         fetchSupervisorInfo();
     }, []);
 
+    useEffect(() => {
+        const handleBrowserBack = (event: PopStateEvent) => {
+            const state = event.state;
+
+            if (state?.app === 'supervisor-mobile') {
+                setSelectedCrew(state.selectedCrew || null);
+                setCurrentView(state.view || 'DASHBOARD');
+                return;
+            }
+
+            setSelectedCrew(null);
+            setCurrentView('DASHBOARD');
+        };
+
+        window.addEventListener('popstate', handleBrowserBack);
+        return () => window.removeEventListener('popstate', handleBrowserBack);
+    }, []);
+
     const fetchSupervisorInfo = async () => {
         try {
             const token = localStorage.getItem('auth_token');
@@ -38,8 +56,20 @@ const SupervisorMobileApp: React.FC = () => {
         }
     };
 
-    const handleNavigate = (view: MobileView, data?: any) => {
-        if (data) setSelectedCrew(data);
+    const handleNavigate = (view: MobileView, data?: any, pushHistory = true) => {
+        const nextCrew = ['CREW_DETAIL', 'HISTORY', 'EVALUATION'].includes(view)
+            ? (data ?? selectedCrew ?? null)
+            : null;
+
+        if (pushHistory) {
+            window.history.pushState(
+                { app: 'supervisor-mobile', view, selectedCrew: nextCrew },
+                '',
+                window.location.href
+            );
+        }
+
+        setSelectedCrew(nextCrew);
         setCurrentView(view);
     };
 
@@ -63,7 +93,7 @@ const SupervisorMobileApp: React.FC = () => {
                 return selectedCrew ? (
                     <MobileCrewHistory
                         crew={selectedCrew}
-                        onBack={() => handleNavigate('CREW_DETAIL', selectedCrew)}
+                        onBack={() => handleNavigate('CREW_DETAIL', selectedCrew, false)}
                     />
                 ) : (
                     <MobileCrewList onNavigate={handleNavigate} />
@@ -72,7 +102,7 @@ const SupervisorMobileApp: React.FC = () => {
                 return selectedCrew ? (
                     <MobileCrewEvaluation
                         crew={selectedCrew}
-                        onBack={() => handleNavigate('CREW_DETAIL', selectedCrew)}
+                        onBack={() => handleNavigate('CREW_DETAIL', selectedCrew, false)}
                     />
                 ) : (
                     <MobileCrewList onNavigate={handleNavigate} />
@@ -80,7 +110,7 @@ const SupervisorMobileApp: React.FC = () => {
             case 'REPORT':
                 return (
                     <MobileSupervisorReport
-                        onBack={() => handleNavigate('DASHBOARD')}
+                        onBack={() => handleNavigate('DASHBOARD', null, false)}
                         supervisorId={supervisor?.id || ''}
                     />
                 );
