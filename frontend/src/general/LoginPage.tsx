@@ -74,8 +74,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                         alt="Yogya"
                         className="mx-auto mb-8 h-auto w-48 max-w-48 object-contain sm:w-72"
                     />
-                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Let's get you logged in</h1>
-                    <p className="text-gray-500 mt-2">YoDaily</p>
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900">YoDaily</h1>
                 </div>
 
                 {error && (
