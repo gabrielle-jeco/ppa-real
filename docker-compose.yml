@@ -19,6 +19,17 @@ services:
       DB_DATABASE: performance_app
       DB_USERNAME: sail
       DB_PASSWORD: password
+      YOJADWAL_ENABLED: "true"
+      YOJADWAL_BASE_URL: http://yojadwal.yogya.com
+      YOJADWAL_LOGIN_PATH: /api/login
+      YOJADWAL_PRESENCE_PATH: /api/presence
+      YOJADWAL_APP_CLIENT: Android-Mobile-App
+      YOJADWAL_TOKEN: ""
+      YOJADWAL_COOKIE: ""
+      YOJADWAL_TIMEOUT: 10
+      YOJADWAL_NIK_FIELD: username
+      YOJADWAL_PASSWORD_FIELD: password
+      YOJADWAL_SUCCESS_FIELD: success
       TZ: Asia/Jakarta
     depends_on:
       - db
