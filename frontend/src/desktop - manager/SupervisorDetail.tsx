@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Camera, ChevronDown } from 'lucide-react';
 import TaskPreview from '../general/TaskPreview';
 import ManagerReviewForm from './ManagerReviewForm';
+import { getAttendanceColor as getAttendanceStatusColor, getAttendanceDay } from '../utils/attendanceCalendar';
 
 interface SupervisorDetailProps {
     supervisor: any;
@@ -115,13 +116,8 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
     };
 
     const getAttendanceColor = (day: Date) => {
-        if (isFutureDate(day)) return 'text-gray-300 cursor-not-allowed bg-transparent';
-
-        const hash = (day.getDate() + day.getMonth() * 31) % 7;
-        if (hash <= 3) return 'bg-green-500 text-white shadow-sm';
-        if (hash === 4) return 'bg-yellow-400 text-white shadow-sm';
-        if (hash === 5) return 'bg-red-500 text-white shadow-sm';
-        return 'bg-gray-300 text-white';
+        const attendanceDay = getAttendanceDay(stats?.attendance_calendar, day);
+        return getAttendanceStatusColor(attendanceDay?.status_code, isFutureDate(day));
     };
 
     const selectedCrew = crewRows.find((crew) => crew.id === selectedCrewId);

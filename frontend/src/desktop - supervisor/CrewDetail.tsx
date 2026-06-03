@@ -4,6 +4,7 @@ import AddTaskModal from '../general/AddTaskModal';
 import TaskPreview from '../general/TaskPreview';
 import EvaluationForm from '../general/EvaluationForm';
 import SubmissionHistory from './SubmissionHistory';
+import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 
 interface CrewDetailProps {
     crew: any;
@@ -404,16 +405,8 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                         const isToday = day.getDate() === now.getDate() && day.getMonth() === now.getMonth() && day.getFullYear() === now.getFullYear();
                                         const isFuture = day > now && !isToday;
 
-                                        let attendanceColor = 'text-gray-700';
-                                        if (isFuture) {
-                                            attendanceColor = 'text-gray-300';
-                                        } else {
-                                            const hash = (day.getDate() + day.getMonth() * 31) % 7;
-                                            if (hash <= 3) attendanceColor = 'bg-green-500 text-white shadow-sm';
-                                            else if (hash === 4) attendanceColor = 'bg-yellow-400 text-white shadow-sm';
-                                            else if (hash === 5) attendanceColor = 'bg-red-500 text-white shadow-sm';
-                                            else attendanceColor = 'bg-gray-300 text-white';
-                                        }
+                                        const attendanceDay = getAttendanceDay(evalStats?.attendance_calendar, day);
+                                        const attendanceColor = getAttendanceColor(attendanceDay?.status_code, isFuture);
 
                                         return (
                                             <div key={idx} className="flex justify-center relative">

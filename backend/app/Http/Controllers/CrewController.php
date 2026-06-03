@@ -82,6 +82,7 @@ class CrewController extends Controller
             'active_percentage' => $detailedStats['active_percentage'],
             'personality_score' => $detailedStats['personality_score'],
             'activity_monitor' => $detailedStats['activity_monitor'],
+            'attendance_calendar' => $detailedStats['attendance_calendar'],
             'task_progress' => [
                 'completed' => $totalCompleted,
                 'total' => $totalGiven

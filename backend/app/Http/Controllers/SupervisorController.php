@@ -146,6 +146,7 @@ class SupervisorController extends Controller
             'activity_monitor' => $detailedStats['activity_monitor'],
             'active_percentage' => $detailedStats['active_percentage'],
             'personality_score' => $detailedStats['personality_score'],
+            'attendance_calendar' => $detailedStats['attendance_calendar'],
             'yearly_score' => $yearlyScore,
         ]);
     }

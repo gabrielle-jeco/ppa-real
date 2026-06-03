@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Star } from 'lucide-react';
 import MobileLayout from './MobileLayout';
+import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 
 interface MobileSupervisorReportProps {
     onBack: () => void;
@@ -56,18 +57,8 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                 date.getMonth() === today.getMonth() &&
                 date.getFullYear() === today.getFullYear();
 
-            // Mock Attendance Coloring
-            let attendanceColor = 'bg-gray-100 text-gray-700'; // Default/Future
-            if (!isFuture) {
-                const hash = (i + selectedDate.getMonth() * 31) % 7;
-                // Skew towards present
-                if (hash <= 3) attendanceColor = 'bg-green-500 text-white shadow-sm';
-                else if (hash === 4) attendanceColor = 'bg-yellow-400 text-white shadow-sm';
-                else if (hash === 5) attendanceColor = 'bg-red-500 text-white shadow-sm';
-                else attendanceColor = 'bg-gray-300 text-white';
-            } else {
-                attendanceColor = 'text-gray-300 cursor-not-allowed bg-transparent';
-            }
+            const attendanceDay = getAttendanceDay(stats?.attendance_calendar, date);
+            const attendanceColor = getAttendanceColor(attendanceDay?.status_code, isFuture);
 
             days.push(
                 <button
