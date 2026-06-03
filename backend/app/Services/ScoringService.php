@@ -95,6 +95,7 @@ class ScoringService
             'active_percentage' => (int) round($this->average($dailyBreakdown['daily_scores'] ?? [])),
             'personality_score' => $this->getPersonalityScoreForMonth($crew, $month),
             'activity_monitor' => $activityMonitor,
+            'attendance_calendar' => $this->getAttendanceCalendarForMonth($crew, $month),
         ];
     }
 
@@ -227,7 +228,48 @@ class ScoringService
             'avg_service_crew_point' => (int) round($avgServiceCrewPoint),
             'daily_task_given' => "{$dailyTaskGiven} / {$scCount} People",
             'avg_sc_point_today' => (int) round($dailyAvgServiceCrewPoint),
+            'attendance_calendar' => $this->getAttendanceCalendarForMonth($supervisor, $month),
         ];
+    }
+
+    public function getAttendanceCalendarForMonth(User $user, Carbon $month): array
+    {
+        $startOfMonth = $month->copy()->startOfMonth();
+        $endOfMonth = $month->copy()->endOfMonth();
+        $today = Carbon::today();
+
+        $attendanceByDate = Attendance::where('user_id', $user->username)
+            ->whereBetween('date', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+            ->get()
+            ->keyBy(function ($attendance) {
+                return Carbon::parse($attendance->date)->toDateString();
+            });
+
+        $calendar = [];
+        for ($date = $startOfMonth->copy(); $date->lte($endOfMonth); $date->addDay()) {
+            $dateKey = $date->toDateString();
+            $attendance = $attendanceByDate->get($dateKey);
+
+            if ($date->gt($today)) {
+                $status = null;
+                $source = 'future';
+            } elseif ($attendance) {
+                $status = strtoupper((string) $attendance->status_code);
+                $source = 'attendance';
+            } else {
+                $status = $this->getDummyAttendanceStatus($date);
+                $source = 'fallback';
+            }
+
+            $calendar[] = [
+                'date' => $dateKey,
+                'day' => $date->day,
+                'status_code' => $status,
+                'source' => $source,
+            ];
+        }
+
+        return $calendar;
     }
 
     private function collectDailyBreakdown(User $crew, Carbon $startDate, Carbon $endDate): array

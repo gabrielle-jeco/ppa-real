@@ -63,6 +63,16 @@ class YoabsenAuthService
             $headers['Authorization'] = 'Bearer ' . $token;
         }
 
+        $appClient = config('services.yoabsen.app_client');
+        if ($appClient) {
+            $headers['X-App-Client'] = $appClient;
+        }
+
+        $cookie = config('services.yoabsen.cookie');
+        if ($cookie) {
+            $headers['Cookie'] = $cookie;
+        }
+
         return $headers;
     }
 }

@@ -31,14 +31,17 @@ return [
     ],
 
     'yoabsen' => [
-        'enabled' => env('YOABSEN_ENABLED', false),
-        'base_url' => env('YOABSEN_BASE_URL'),
-        'login_path' => env('YOABSEN_LOGIN_PATH', '/api/login'),
-        'token' => env('YOABSEN_TOKEN'),
-        'timeout' => env('YOABSEN_TIMEOUT', 10),
-        'nik_field' => env('YOABSEN_NIK_FIELD', 'nik'),
-        'password_field' => env('YOABSEN_PASSWORD_FIELD', 'password'),
-        'success_field' => env('YOABSEN_SUCCESS_FIELD'),
+        'enabled' => env('YOJADWAL_ENABLED', env('YOABSEN_ENABLED', false)),
+        'base_url' => env('YOJADWAL_BASE_URL', env('YOABSEN_BASE_URL')),
+        'login_path' => env('YOJADWAL_LOGIN_PATH', env('YOABSEN_LOGIN_PATH', '/api/login')),
+        'presence_path' => env('YOJADWAL_PRESENCE_PATH', '/api/presence'),
+        'token' => env('YOJADWAL_TOKEN', env('YOABSEN_TOKEN')),
+        'cookie' => env('YOJADWAL_COOKIE'),
+        'app_client' => env('YOJADWAL_APP_CLIENT', 'Android-Mobile-App'),
+        'timeout' => env('YOJADWAL_TIMEOUT', env('YOABSEN_TIMEOUT', 10)),
+        'nik_field' => env('YOJADWAL_NIK_FIELD', env('YOABSEN_NIK_FIELD', 'username')),
+        'password_field' => env('YOJADWAL_PASSWORD_FIELD', env('YOABSEN_PASSWORD_FIELD', 'password')),
+        'success_field' => env('YOJADWAL_SUCCESS_FIELD', env('YOABSEN_SUCCESS_FIELD')),
     ],
 
 ];

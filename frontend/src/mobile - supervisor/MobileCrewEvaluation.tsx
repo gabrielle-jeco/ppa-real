@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import MobileLayout from './MobileLayout';
+import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 
 interface MobileCrewEvaluationProps {
     crew: any;
@@ -45,7 +46,8 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
         monthly_score: 0,
         active_percentage: 0,
         personality_score: 0,
-        activity_monitor: []
+        activity_monitor: [],
+        attendance_calendar: []
     });
 
     const activePercentage = stats.active_percentage || 0;
@@ -292,35 +294,16 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                 <div className="grid grid-cols-7 gap-y-3">
                                     {getCalendarDays().map((day, idx) => {
                                         if (!day) return <div key={idx}></div>;
-                                        const hash = (day.getDate() + day.getMonth() * 31) % 7;
                                         // Highlight Today logic
                                         const now = new Date();
                                         const isToday = day.toDateString() === now.toDateString();
                                         const isFuture = day > now;
-
-                                        let bg = 'bg-gray-200';
-                                        let text = 'text-gray-700';
-
-                                        if (isFuture) {
-                                            bg = 'bg-gray-50';
-                                            text = 'text-gray-300';
-                                        } else {
-                                            // Mock Attendance Logic based on User Request
-                                            if (day.getDay() === 0 || day.getDay() === 6) {
-                                                // Weekend -> Libur (Abu)
-                                                bg = 'bg-gray-400'; text = 'text-white';
-                                            } else {
-                                                // Weekday dummy
-                                                if (hash <= 3) { bg = 'bg-green-500'; text = 'text-white'; } // Hadir
-                                                else if (hash === 4) { bg = 'bg-yellow-400'; text = 'text-white'; } // Telat
-                                                else if (hash === 5) { bg = 'bg-red-500'; text = 'text-white'; } // Mangkir
-                                                else { bg = 'bg-green-500'; text = 'text-white'; } // Default hadir
-                                            }
-                                        }
+                                        const attendanceDay = getAttendanceDay(stats.attendance_calendar, day);
+                                        const attendanceColor = getAttendanceColor(attendanceDay?.status_code, isFuture);
 
                                         return (
                                             <div key={idx} className="flex justify-center">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${bg} ${text} ${isToday ? 'ring-2 ring-purple-500 ring-offset-2' : ''}`}>
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${attendanceColor} ${isToday ? 'ring-2 ring-purple-500 ring-offset-2' : ''}`}>
                                                     {day.getDate()}
                                                 </div>
                                             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BarChart2, ChevronDown } from 'lucide-react';
+import { getAttendanceColor as getAttendanceStatusColor, getAttendanceDay } from '../utils/attendanceCalendar';
 
 export default function SupervisorPerformance() {
     const [stats, setStats] = useState<any>(null);
@@ -54,13 +55,8 @@ export default function SupervisorPerformance() {
 
     const getAttendanceColor = (day: number) => {
         const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
-        if (isFutureDate(date)) return 'text-gray-300 bg-transparent';
-
-        const hash = (day + selectedDate.getMonth() * 31) % 7;
-        if (hash <= 3) return 'bg-green-500 text-white shadow-sm';
-        if (hash === 4) return 'bg-yellow-400 text-white shadow-sm';
-        if (hash === 5) return 'bg-red-500 text-white shadow-sm';
-        return 'bg-gray-300 text-white';
+        const attendanceDay = getAttendanceDay(stats?.attendance_calendar, date);
+        return getAttendanceStatusColor(attendanceDay?.status_code, isFutureDate(date));
     };
 
     const renderCalendar = () => {
