@@ -68,6 +68,28 @@ class DatabaseSeeder extends Seeder
             'sm' => '900001',
         ]);
 
+        $locCiamis = Location::create([
+            'name' => 'YOGYA CIAMIS',
+            'store_code' => 103,
+            'initial' => 'YGC',
+            'address' => 'Jl. Ciamis No. 3',
+            'city' => 'Ciamis',
+            'phone' => '0265-0000003',
+            'region_code' => 12,
+            'latitude' => '-7.325700',
+            'longitude' => '108.353400',
+            'is_fnb' => 1,
+            'is_fashion' => 1,
+            'is_supermarket' => 1,
+            'is_yogya_electronic' => 0,
+            'is_food_court' => 1,
+            'open_hour' => '08:00-21:00',
+            'store_description' => 'YoJadwal test store for YoDaily development.',
+            'is_active' => 1,
+            'type_store' => 'department_store',
+            'sm' => '900001',
+        ]);
+
         $password = Hash::make('password');
 
         $managerAnton = User::create([
@@ -92,6 +114,15 @@ class DatabaseSeeder extends Seeder
             'name' => 'Andi Supervisor',
             'username' => '800002',
             'email' => 'andi@yogyagroup.com',
+            'password' => $password,
+            'job_level_id' => $spvLevel->id,
+            'active' => true,
+        ]);
+
+        $spvHaritsyah = User::create([
+            'name' => 'HARITSYAH AGUSTIAN',
+            'username' => '17070008',
+            'email' => '17070008@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $spvLevel->id,
             'active' => true,
@@ -123,9 +154,11 @@ class DatabaseSeeder extends Seeder
         UserLocation::create(['user_id' => $crewDeni->username, 'location_id' => $locSudirman->initial]);
 
         UserLocation::create(['user_id' => $spvAndi->username, 'location_id' => $locThamrin->initial]);
+        UserLocation::create(['user_id' => $spvHaritsyah->username, 'location_id' => $locCiamis->initial]);
 
         ReportingLine::create(['subordinate_id' => $spvSurya->username, 'leader_id' => $managerAnton->username]);
         ReportingLine::create(['subordinate_id' => $spvAndi->username, 'leader_id' => $managerAnton->username]);
+        ReportingLine::create(['subordinate_id' => $spvHaritsyah->username, 'leader_id' => $managerAnton->username]);
 
         ReportingLine::create(['subordinate_id' => $crewBudi->username, 'leader_id' => $spvSurya->username]);
         ReportingLine::create(['subordinate_id' => $crewDeni->username, 'leader_id' => $spvSurya->username]);
