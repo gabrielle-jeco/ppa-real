@@ -41,7 +41,7 @@ return [
         'timeout' => env('YOJADWAL_TIMEOUT', env('YOABSEN_TIMEOUT', 10)),
         'nik_field' => env('YOJADWAL_NIK_FIELD', env('YOABSEN_NIK_FIELD', 'username')),
         'password_field' => env('YOJADWAL_PASSWORD_FIELD', env('YOABSEN_PASSWORD_FIELD', 'password')),
-        'success_field' => env('YOJADWAL_SUCCESS_FIELD', env('YOABSEN_SUCCESS_FIELD')),
+        'success_field' => env('YOJADWAL_SUCCESS_FIELD', env('YOABSEN_SUCCESS_FIELD', 'success')),
     ],
 
 ];
