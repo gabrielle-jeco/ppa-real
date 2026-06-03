@@ -7,7 +7,7 @@ use Carbon\Carbon;
 class YojadwalAttendanceMapper
 {
     /**
-     * Normalize the unknown YoJadwal response shape into attendance rows.
+     * Normalize the YoJadwal presence response into attendance rows.
      *
      * Expected output per row:
      * [
@@ -92,7 +92,7 @@ class YojadwalAttendanceMapper
             return 'H';
         }
 
-        if (in_array($rawStatus, ['t', 'telat', 'terlambat', 'late'], true)) {
+        if (in_array($rawStatus, ['t', 'tl', 'telat', 'terlambat', 'late'], true)) {
             return 'T';
         }
 
@@ -100,11 +100,11 @@ class YojadwalAttendanceMapper
             return 'A';
         }
 
-        if (in_array($rawStatus, ['s', 'sakit', 'sick'], true)) {
+        if (in_array($rawStatus, ['s', 'sd', 'ps', 'sakit', 'sick', 'correction'], true)) {
             return 'S';
         }
 
-        if (in_array($rawStatus, ['c', 'cuti', 'leave'], true)) {
+        if (in_array($rawStatus, ['c', 'ct', 'cuti', 'leave'], true)) {
             return 'C';
         }
 
