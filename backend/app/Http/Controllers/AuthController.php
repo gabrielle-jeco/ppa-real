@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
 use App\Services\YoabsenAuthService;
+use App\Services\YojadwalPresenceService;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -13,7 +16,7 @@ class AuthController extends Controller
     /**
      * Handle the login request.
      */
-    public function login(Request $request, YoabsenAuthService $yoabsenAuth)
+    public function login(Request $request, YoabsenAuthService $yoabsenAuth, YojadwalPresenceService $presenceService)
     {
         $request->validate([
             'username' => 'required',
@@ -70,6 +73,7 @@ class AuthController extends Controller
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
+        $this->syncCurrentMonthAttendance($presenceService, $user);
 
         return response()->json([
             'message' => 'Login successful',
@@ -101,5 +105,22 @@ class AuthController extends Controller
         return ValidationException::withMessages([
             'username' => ['Invalid credentials.'],
         ]);
+    }
+
+    private function syncCurrentMonthAttendance(YojadwalPresenceService $presenceService, User $user): void
+    {
+        if (!$presenceService->enabled()) {
+            return;
+        }
+
+        try {
+            $today = Carbon::now();
+            $presenceService->syncMonth($user->username, $today->month, $today->year);
+        } catch (\Throwable $error) {
+            Log::warning('YoJadwal attendance sync after login failed.', [
+                'username' => $user->username,
+                'message' => $error->getMessage(),
+            ]);
+        }
     }
 }
