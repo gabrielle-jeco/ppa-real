@@ -56,6 +56,32 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Run only once on mount
 
+    useEffect(() => {
+        const handleBrowserBack = (event: PopStateEvent) => {
+            const state = event.state;
+
+            if (state?.app === 'crew-mobile') {
+                setActivePage(state.page || 'dashboard');
+                setSelectedTask(state.selectedTask || null);
+                return;
+            }
+
+            setActivePage('dashboard');
+            setSelectedTask(null);
+        };
+
+        window.addEventListener('popstate', handleBrowserBack);
+        return () => window.removeEventListener('popstate', handleBrowserBack);
+    }, []);
+
+    const pushCrewHistory = (page: typeof activePage, task: any = null) => {
+        window.history.pushState(
+            { app: 'crew-mobile', page, selectedTask: task },
+            '',
+            window.location.href
+        );
+    };
+
     // Handlers
     const handleRoleChange = async (role: string) => {
         setSelectedRole(role);
@@ -74,11 +100,16 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
         }
     };
 
-    const handleNavigate = (page: 'dashboard' | 'history' | 'evaluation' | 'task-list' | 'guide') => {
+    const handleNavigate = (page: 'dashboard' | 'history' | 'evaluation' | 'task-list' | 'guide', pushHistory = true) => {
+        if (pushHistory) {
+            pushCrewHistory(page);
+        }
         setActivePage(page);
+        setSelectedTask(null);
     };
 
     const handleSelectTask = (task: any) => {
+        pushCrewHistory(activePage, task);
         setSelectedTask(task);
     };
 
@@ -164,7 +195,7 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
                 return (
                     <MobileTaskList
                         user={user}
-                        onBack={() => setActivePage('dashboard')}
+                        onBack={() => handleNavigate('dashboard', false)}
                         onSelectTask={handleSelectTask}
                         refreshTrigger={refreshTrigger}
                         selectedRole={selectedRole}
@@ -174,18 +205,18 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
                 return (
                     <MobileCrewHistory
                         user={user}
-                        onBack={() => setActivePage('dashboard')}
+                        onBack={() => handleNavigate('dashboard', false)}
                         onSelectTask={handleSelectTask}
                         refreshTrigger={refreshTrigger}
                         selectedRole={selectedRole}
                     />
                 );
             case 'evaluation':
-                return <MobileCrewEvaluation user={user} onBack={() => setActivePage('dashboard')} />;
+                return <MobileCrewEvaluation user={user} onBack={() => handleNavigate('dashboard', false)} />;
             case 'guide':
                 return (
                     <MobileTaskGuide
-                        onBack={() => setActivePage('dashboard')}
+                        onBack={() => handleNavigate('dashboard', false)}
                         role={selectedRole}
                     />
                 );
