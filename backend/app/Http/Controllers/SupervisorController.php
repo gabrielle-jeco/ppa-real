@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\ScoringService;
+use App\Services\YojadwalPresenceService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -92,7 +93,7 @@ class SupervisorController extends Controller
      * Get Supervisor's OWN Performance Stats.
      * Mocking data based on 'Penilaian Supervisor' mockup.
      */
-    public function myStats(Request $request, ScoringService $scoringService)
+    public function myStats(Request $request, ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
         $user = Auth::user();
         $month = $request->query('month', Carbon::now()->month);
@@ -104,6 +105,8 @@ class SupervisorController extends Controller
             $targetDate = Carbon::now();
         }
 
+        $presenceService->syncMonthIfNeeded($user->username, (int) $targetDate->month, (int) $targetDate->year);
+
         $detailedStats = $scoringService->getSupervisorMonthlyDetailedScore($user, $targetDate);
 
         return response()->json($detailedStats);
@@ -113,7 +116,7 @@ class SupervisorController extends Controller
      * Get Crew Evaluation Stats (Activity Monitor, Personality, Yearly Score).
      * Route: GET /api/supervisor/crew/{id}/eval-stats
      */
-    public function getCrewEvalStats($id, Request $request, ScoringService $scoringService)
+    public function getCrewEvalStats($id, Request $request, ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
         $user = Auth::user();
         if ($user->role_type !== 'supervisor' && $user->role_type !== 'manager') {
@@ -138,6 +141,8 @@ class SupervisorController extends Controller
         } catch (\Exception $e) {
             $targetDate = Carbon::now();
         }
+
+        $presenceService->syncMonthIfNeeded($crewUser->username, (int) $targetDate->month, (int) $targetDate->year);
 
         $detailedStats = $scoringService->getCrewMonthlyDetailedStats($crewUser, $targetDate);
         $yearlyScore = $scoringService->getCrewYearlyScore($crewUser, $targetDate);

@@ -135,7 +135,7 @@ class AuthController extends Controller
 
         try {
             $today = Carbon::now();
-            $presenceService->syncMonth($user->username, $today->month, $today->year);
+            $presenceService->syncMonthIfNeeded($user->username, $today->month, $today->year);
         } catch (\Throwable $error) {
             Log::warning('YoJadwal attendance sync after login failed.', [
                 'username' => $user->username,
