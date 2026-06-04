@@ -46,6 +46,24 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/crew/check-guide', [App\Http\Controllers\TaskController::class, 'checkGuideStatus']);
     Route::get('/crew/stats', [App\Http\Controllers\CrewController::class, 'myStats']);
     Route::get('/work-stations', [App\Http\Controllers\ActivityController::class, 'getWorkStations']);
+
+    // CMS / Superadmin Routes
+    Route::prefix('cms')->group(function () {
+        Route::get('/overview', [App\Http\Controllers\AdminController::class, 'overview']);
+        Route::post('/users', [App\Http\Controllers\AdminController::class, 'storeUser']);
+        Route::patch('/users/{username}', [App\Http\Controllers\AdminController::class, 'updateUser']);
+        Route::post('/locations', [App\Http\Controllers\AdminController::class, 'storeLocation']);
+        Route::patch('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'updateLocation']);
+        Route::delete('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'destroyLocation']);
+        Route::post('/job-levels', [App\Http\Controllers\AdminController::class, 'storeJobLevel']);
+        Route::patch('/job-levels/{jobLevel}', [App\Http\Controllers\AdminController::class, 'updateJobLevel']);
+        Route::delete('/job-levels/{jobLevel}', [App\Http\Controllers\AdminController::class, 'destroyJobLevel']);
+        Route::post('/reporting-lines', [App\Http\Controllers\AdminController::class, 'storeReportingLine']);
+        Route::patch('/reporting-lines/{reportingLine}', [App\Http\Controllers\AdminController::class, 'updateReportingLine']);
+        Route::delete('/reporting-lines/{reportingLine}', [App\Http\Controllers\AdminController::class, 'destroyReportingLine']);
+        Route::post('/work-stations', [App\Http\Controllers\AdminController::class, 'storeWorkStation']);
+        Route::patch('/work-stations/{workStation}', [App\Http\Controllers\AdminController::class, 'updateWorkStation']);
+    });
 });
 
 // Supervisor Routes

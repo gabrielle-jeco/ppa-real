@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import LoginPage from './general/LoginPage';
 import ManagerLayout from './desktop - manager/ManagerLayout';
 import ManagerDashboard from './desktop - manager/ManagerDashboard';
+import AdminLayout from './desktop - admin/AdminLayout';
+import AdminDashboard from './desktop - admin/AdminDashboard';
 import SupervisorLayout from './desktop - supervisor/SupervisorLayout';
 import SupervisorDashboard from './desktop - supervisor/SupervisorDashboard';
 import SupervisorMobileApp from './mobile - supervisor/SupervisorMobileApp';
@@ -100,6 +102,14 @@ function App() {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
+  if (user.role_type === 'superadmin') {
+    return (
+      <AdminLayout onLogout={handleLogout}>
+        <AdminDashboard />
+      </AdminLayout>
+    );
+  }
+
   // ALLOW SM and RM
   if (user.role_type === 'manager') {
     return (
@@ -135,7 +145,31 @@ function App() {
     return <CrewMobileApp user={user} onLogout={handleLogout} />;
   }
 
-  return <div>Role not supported yet.</div>;
+  return <UnsupportedRolePage role={user.role_type} onLogout={handleLogout} />;
+}
+
+function UnsupportedRolePage({ role, onLogout }: { role?: string; onLogout: () => void }) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6 font-sans text-gray-800">
+      <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-8 text-center shadow-xl shadow-gray-100">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50 text-primary">
+          <span className="text-2xl font-black">!</span>
+        </div>
+        <p className="text-xs font-bold uppercase tracking-[0.25em] text-gray-400">Access Check</p>
+        <h1 className="mt-2 text-2xl font-black text-gray-900">Role belum didukung</h1>
+        <p className="mt-3 text-sm leading-6 text-gray-500">
+          Akun ini berhasil login, tapi role <span className="font-bold text-gray-800">{role || 'unknown'}</span> belum
+          terhubung ke halaman YoDaily. Silakan hubungi admin untuk mapping role.
+        </p>
+        <button
+          onClick={onLogout}
+          className="mt-6 w-full rounded-xl bg-primary py-3 font-bold text-white shadow-lg shadow-purple-100 transition hover:bg-primary-dark"
+        >
+          Logout
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default App;

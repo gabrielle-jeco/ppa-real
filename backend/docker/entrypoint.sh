@@ -20,8 +20,9 @@ php artisan route:clear || true
 php artisan migrate --force
 
 
-# Seed only if table is empty
-USER_COUNT=$(php artisan tinker --execute="echo \App\Models\User::count();" 2>/dev/null | tail -1)
+# Seed only if there are no operational users yet. The CMS superadmin can be
+# created by migrations, so it should not mark the demo/initial data as seeded.
+USER_COUNT=$(php artisan tinker --execute="echo \App\Models\User::where('username', '!=', '000001')->count();" 2>/dev/null | tail -1)
 if [ "$USER_COUNT" = "0" ]; then
   php artisan db:seed --force
 else

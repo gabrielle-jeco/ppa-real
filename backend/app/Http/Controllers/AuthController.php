@@ -24,9 +24,7 @@ class AuthController extends Controller
             'location_id' => 'nullable|string' // Optional: store initial if the frontend sends current location
         ]);
 
-        $credentialsAreValid = $yoabsenAuth->enabled()
-            ? $yoabsenAuth->authenticate($request->username, $request->password)
-            : Auth::attempt($request->only('username', 'password'));
+        $credentialsAreValid = $this->credentialsAreValid($request, $yoabsenAuth);
 
         if (!$credentialsAreValid) {
             throw $this->invalidCredentials();
@@ -105,6 +103,28 @@ class AuthController extends Controller
         return ValidationException::withMessages([
             'username' => ['Invalid credentials.'],
         ]);
+    }
+
+    private function credentialsAreValid(Request $request, YoabsenAuthService $yoabsenAuth): bool
+    {
+        if (!$yoabsenAuth->enabled()) {
+            return Auth::attempt($request->only('username', 'password'));
+        }
+
+        if ($yoabsenAuth->authenticate($request->username, $request->password)) {
+            return true;
+        }
+
+        if (!config('services.yoabsen.allow_local_superadmin_fallback', false)) {
+            return false;
+        }
+
+        $localUser = User::where('username', $request->username)->first();
+        if (!$localUser || $localUser->role_type !== 'superadmin') {
+            return false;
+        }
+
+        return Auth::attempt($request->only('username', 'password'));
     }
 
     private function syncCurrentMonthAttendance(YojadwalPresenceService $presenceService, User $user): void
