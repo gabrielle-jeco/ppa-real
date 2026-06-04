@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -82,6 +83,50 @@ class YojadwalPresenceService
         }
 
         return count($rows);
+    }
+
+    public function syncMonthIfNeeded(string $nik, int $month, int $year): int
+    {
+        if (!$this->enabled()) {
+            return 0;
+        }
+
+        $expectedRows = $this->expectedRowsForMonth($month, $year);
+        if ($expectedRows <= 0) {
+            return 0;
+        }
+
+        $storedRows = Attendance::where('user_id', $nik)
+            ->whereYear('date', $year)
+            ->whereMonth('date', $month)
+            ->distinct('date')
+            ->count('date');
+
+        if ($storedRows >= $expectedRows) {
+            return 0;
+        }
+
+        return $this->syncMonth($nik, $month, $year);
+    }
+
+    private function expectedRowsForMonth(int $month, int $year): int
+    {
+        try {
+            $target = Carbon::create($year, $month, 1)->startOfDay();
+        } catch (\Throwable $error) {
+            return 0;
+        }
+
+        $today = Carbon::today();
+        if ($target->greaterThan($today->copy()->startOfMonth())) {
+            return 0;
+        }
+
+        if ($target->isSameMonth($today)) {
+            return $today->day;
+        }
+
+        return $target->daysInMonth;
     }
 
     private function headers(): array

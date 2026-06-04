@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Services\ScoringService;
+use App\Services\YojadwalPresenceService;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
@@ -92,7 +93,7 @@ class ManagerController extends Controller
     /**
      * Get Detailed Stats for a specific supervisor under the manager
      */
-    public function getSupervisorStats($id, Request $request, \App\Services\ScoringService $scoringService)
+    public function getSupervisorStats($id, Request $request, \App\Services\ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
         $manager = Auth::user();
 
@@ -126,6 +127,8 @@ class ManagerController extends Controller
         } catch (\Exception $e) {
             $targetDate = Carbon::now();
         }
+
+        $presenceService->syncMonthIfNeeded($supervisor->username, (int) $targetDate->month, (int) $targetDate->year);
 
         $detailedStats = $scoringService->getSupervisorMonthlyDetailedScore($supervisor, $targetDate);
 
