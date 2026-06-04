@@ -69,7 +69,7 @@ class ActivityController extends Controller
      */
     public function getWorkStations()
     {
-        $stations = WorkStation::all();
+        $stations = WorkStation::orderBy('name')->get();
         return response()->json($stations);
     }
 

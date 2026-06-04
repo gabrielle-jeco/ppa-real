@@ -8,6 +8,12 @@
     }
 }
 
+@layer components {
+    .input {
+        @apply w-full rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-2 focus:ring-purple-100 disabled:bg-gray-100 disabled:text-gray-400;
+    }
+}
+
 @keyframes fade-in-up {
     from {
         opacity: 0;

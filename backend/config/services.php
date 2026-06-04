@@ -42,6 +42,7 @@ return [
         'nik_field' => env('YOJADWAL_NIK_FIELD', env('YOABSEN_NIK_FIELD', 'username')),
         'password_field' => env('YOJADWAL_PASSWORD_FIELD', env('YOABSEN_PASSWORD_FIELD', 'password')),
         'success_field' => env('YOJADWAL_SUCCESS_FIELD', env('YOABSEN_SUCCESS_FIELD', 'success')),
+        'allow_local_superadmin_fallback' => env('YOJADWAL_ALLOW_LOCAL_SUPERADMIN_FALLBACK', true),
     ],
 
 ];

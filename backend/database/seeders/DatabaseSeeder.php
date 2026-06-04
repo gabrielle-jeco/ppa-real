@@ -18,6 +18,10 @@ class DatabaseSeeder extends Seeder
         $crewLevel = JobLevel::create(['name' => 'crew', 'description' => 'Service Crew']);
         $spvLevel = JobLevel::create(['name' => 'supervisor', 'description' => 'Store Supervisor']);
         $managerLevel = JobLevel::create(['name' => 'manager', 'description' => 'Regional/Store Manager']);
+        $superadminLevel = JobLevel::firstOrCreate(
+            ['name' => 'superadmin'],
+            ['description' => 'System administrator for CMS and master data']
+        );
 
         WorkStation::create(['name' => 'cashier', 'guide_content' => ['Check register', 'Greet customers']]);
         WorkStation::create(['name' => 'supermarket', 'guide_content' => ['Stock shelves', 'Check expiry dates']]);
@@ -101,6 +105,17 @@ class DatabaseSeeder extends Seeder
             'active' => true,
         ]);
 
+        $superadmin = User::updateOrCreate(
+            ['username' => '000001'],
+            [
+                'name' => 'YoDaily Superadmin',
+                'email' => 'superadmin@yogyagroup.com',
+                'password' => $password,
+                'job_level_id' => $superadminLevel->id,
+                'active' => true,
+            ]
+        );
+
         $spvSurya = User::create([
             'name' => 'Surya Supervisor',
             'username' => '800001',
@@ -148,6 +163,9 @@ class DatabaseSeeder extends Seeder
 
         UserLocation::create(['user_id' => $managerAnton->username, 'location_id' => $locSudirman->initial]);
         UserLocation::create(['user_id' => $managerAnton->username, 'location_id' => $locThamrin->initial]);
+        UserLocation::create(['user_id' => $superadmin->username, 'location_id' => $locSudirman->initial]);
+        UserLocation::create(['user_id' => $superadmin->username, 'location_id' => $locThamrin->initial]);
+        UserLocation::create(['user_id' => $superadmin->username, 'location_id' => $locCiamis->initial]);
 
         UserLocation::create(['user_id' => $spvSurya->username, 'location_id' => $locSudirman->initial]);
         UserLocation::create(['user_id' => $crewBudi->username, 'location_id' => $locSudirman->initial]);

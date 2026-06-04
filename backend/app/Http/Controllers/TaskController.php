@@ -354,7 +354,7 @@ class TaskController extends Controller
         $user = Auth::user();
 
         // Find the workstation ID (Case Insensitive)
-        $workStation = \App\Models\WorkStation::whereRaw('LOWER(name) = ?', [strtolower($request->role)])->first();
+        $workStation = $this->findWorkStationByRole($request->role);
 
         if (!$workStation) {
             return response()->json(['message' => 'Invalid role'], 400);
@@ -389,7 +389,7 @@ class TaskController extends Controller
         ]);
 
         $user = Auth::user();
-        $workStation = \App\Models\WorkStation::whereRaw('LOWER(name) = ?', [strtolower($request->role)])->first();
+        $workStation = $this->findWorkStationByRole($request->role);
 
         if (!$workStation) {
             return response()->json(['message' => 'Invalid role'], 400);
