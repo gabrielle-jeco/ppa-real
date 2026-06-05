@@ -24,8 +24,8 @@ class ActivityController extends Controller
 
         $user = Auth::user();
 
-        // Find the workstation by name (e.g., 'cashier', 'fresh')
-        $workStation = WorkStation::where('name', $request->work_station_name)->first();
+        // Find the workstation by normalized name (e.g., 'cashier', 'fresh').
+        $workStation = WorkStation::whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($request->work_station_name))])->first();
 
         if (!$workStation) {
             return response()->json(['message' => 'Invalid workstation name'], 400);

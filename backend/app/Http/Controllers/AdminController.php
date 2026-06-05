@@ -166,6 +166,7 @@ class AdminController extends Controller
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $data['name'] = strtolower(trim($data['name']));
         $jobLevel = JobLevel::create($data);
 
         return response()->json($jobLevel, 201);
@@ -180,6 +181,7 @@ class AdminController extends Controller
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $data['name'] = strtolower(trim($data['name']));
         $jobLevel->update($data);
 
         return response()->json($jobLevel->fresh());
