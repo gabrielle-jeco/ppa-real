@@ -42,6 +42,8 @@ class User extends Authenticatable
     public function getRoleTypeAttribute()
     {
         $roleName = $this->jobLevel ? $this->jobLevel->name : null;
+        $roleName = $roleName ? strtolower(trim($roleName)) : null;
+
         return $roleName === 'crew' ? 'employee' : $roleName;
     }
 
@@ -53,7 +55,7 @@ class User extends Authenticatable
 
     public function getManagerTypeAttribute()
     {
-        if ($this->jobLevel && $this->jobLevel->name === 'manager') {
+        if ($this->role_type === 'manager') {
             return $this->locations->count() > 1 ? 'RM' : 'SM';
         }
         return null;
