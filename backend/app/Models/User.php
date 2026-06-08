@@ -18,6 +18,7 @@ class User extends Authenticatable
         'email',
         'password',
         'job_level_id',
+        'role_id',
         'initial_store',
         'active',
     ];
@@ -42,10 +43,8 @@ class User extends Authenticatable
 
     public function getRoleTypeAttribute()
     {
-        $roleName = $this->jobLevel ? $this->jobLevel->name : null;
-        $roleName = $roleName ? strtolower(trim($roleName)) : null;
-
-        if ($roleName === 'superadmin') {
+        $accountRole = $this->accountRole ? strtolower(trim((string) $this->accountRole->name)) : null;
+        if ($accountRole === 'admin') {
             return 'superadmin';
         }
 
@@ -58,7 +57,7 @@ class User extends Authenticatable
             return 'manager';
         }
 
-        return $appRole ?: ($roleName === 'crew' ? 'employee' : $roleName);
+        return $appRole;
     }
 
     public function getLocationIdAttribute()
@@ -87,6 +86,11 @@ class User extends Authenticatable
     public function jobLevel()
     {
         return $this->belongsTo(JobLevel::class);
+    }
+
+    public function accountRole()
+    {
+        return $this->belongsTo(Role::class, 'role_id');
     }
 
     public function locations()

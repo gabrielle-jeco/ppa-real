@@ -6,6 +6,7 @@ use App\Models\JobLevel;
 use App\Models\Location;
 use App\Models\Regional;
 use App\Models\ReportingLine;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\UserLocation;
 use App\Models\WorkStation;
@@ -23,7 +24,7 @@ class AdminController extends Controller
     {
         $this->authorizeSuperadmin();
 
-        $users = User::with(['jobLevel', 'locations', 'leaderLines.leader', 'subordinateLines.subordinate'])
+        $users = User::with(['accountRole', 'jobLevel', 'locations', 'leaderLines.leader', 'subordinateLines.subordinate'])
             ->orderBy('name')
             ->get()
             ->map(fn(User $user) => $this->formatUser($user));
@@ -55,7 +56,9 @@ class AdminController extends Controller
                 'work_stations' => $workStations->count(),
                 'user_locations' => $userLocations->count(),
                 'regionals' => Regional::count(),
+                'account_roles' => Role::count(),
             ],
+            'roles' => Role::orderBy('name')->get(['id', 'name']),
             'job_levels' => JobLevel::orderBy('name')->get(['id', 'name', 'description']),
             'locations' => Location::orderBy('name')->get([
                 'initial',
@@ -87,6 +90,7 @@ class AdminController extends Controller
             'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'password' => ['nullable', 'string', 'min:6'],
             'job_level_id' => ['required', 'exists:job_levels,id'],
+            'role_id' => ['nullable', 'exists:roles,id'],
             'active' => ['boolean'],
             'initial_store' => ['nullable', 'exists:locations,initial'],
             'location_ids' => ['array'],
@@ -99,6 +103,7 @@ class AdminController extends Controller
             'email' => $data['email'] ?? null,
             'password' => Hash::make($data['password'] ?? 'password'),
             'job_level_id' => $data['job_level_id'],
+            'role_id' => $data['role_id'] ?? $this->defaultAccountRoleId(),
             'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? true,
         ]);
@@ -229,6 +234,7 @@ class AdminController extends Controller
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:6'],
             'job_level_id' => ['required', 'exists:job_levels,id'],
+            'role_id' => ['nullable', 'exists:roles,id'],
             'active' => ['boolean'],
             'initial_store' => ['nullable', 'exists:locations,initial'],
             'location_ids' => ['array'],
@@ -239,6 +245,7 @@ class AdminController extends Controller
             'name' => $data['name'],
             'email' => $data['email'] ?? null,
             'job_level_id' => $data['job_level_id'],
+            'role_id' => $data['role_id'] ?? $this->defaultAccountRoleId(),
             'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? false,
         ]);
@@ -441,6 +448,8 @@ class AdminController extends Controller
             'email' => $user->email,
             'initial_store' => $user->initial_store,
             'job_level_id' => $user->job_level_id,
+            'role_id' => $user->role_id,
+            'account_role' => $user->accountRole?->name,
             'job_level_name' => $user->jobLevel?->name,
             'corporate_job_level_name' => $user->jobLevel?->name,
             'role_type' => $user->role_type,
@@ -482,6 +491,11 @@ class AdminController extends Controller
             'manager' => 'manager',
             default => null,
         };
+    }
+
+    private function defaultAccountRoleId(): ?int
+    {
+        return Role::where('name', 'user')->value('id');
     }
 
     private function formatReportingLine(ReportingLine $line): array

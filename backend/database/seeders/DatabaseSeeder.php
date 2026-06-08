@@ -10,6 +10,7 @@ use App\Models\Location;
 use App\Models\User;
 use App\Models\UserLocation;
 use App\Models\ReportingLine;
+use App\Models\Role;
 
 class DatabaseSeeder extends Seeder
 {
@@ -22,6 +23,8 @@ class DatabaseSeeder extends Seeder
             ['name' => 'superadmin'],
             ['description' => 'System administrator for CMS and master data']
         );
+        $adminRole = Role::firstOrCreate(['name' => 'admin']);
+        $userRole = Role::firstOrCreate(['name' => 'user']);
 
         WorkStation::create(['name' => 'cashier', 'guide_content' => ['Check register', 'Greet customers']]);
         WorkStation::create(['name' => 'supermarket', 'guide_content' => ['Stock shelves', 'Check expiry dates']]);
@@ -102,6 +105,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'anton@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $managerLevel->id,
+            'role_id' => $userRole->id,
             'initial_store' => $locSudirman->initial,
             'active' => true,
         ]);
@@ -113,6 +117,7 @@ class DatabaseSeeder extends Seeder
                 'email' => 'superadmin@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $superadminLevel->id,
+            'role_id' => $adminRole->id,
             'initial_store' => null,
             'active' => true,
             ]
@@ -124,6 +129,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'surya@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $spvLevel->id,
+            'role_id' => $userRole->id,
             'initial_store' => $locSudirman->initial,
             'active' => true,
         ]);
@@ -134,6 +140,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'andi@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $spvLevel->id,
+            'role_id' => $userRole->id,
             'initial_store' => $locThamrin->initial,
             'active' => true,
         ]);
@@ -144,6 +151,7 @@ class DatabaseSeeder extends Seeder
             'email' => '17070008@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $spvLevel->id,
+            'role_id' => $userRole->id,
             'initial_store' => $locCiamis->initial,
             'active' => true,
         ]);
@@ -154,6 +162,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'budi@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $crewLevel->id,
+            'role_id' => $userRole->id,
             'initial_store' => $locSudirman->initial,
             'active' => true,
         ]);
@@ -164,6 +173,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'deni@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $crewLevel->id,
+            'role_id' => $userRole->id,
             'initial_store' => $locSudirman->initial,
             'active' => true,
         ]);

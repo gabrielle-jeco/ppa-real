@@ -13,6 +13,10 @@ done
 
 echo "Postgres is up ✅"
 
+PHP_MEMORY_LIMIT="${PHP_MEMORY_LIMIT:-1024M}"
+echo "memory_limit=${PHP_MEMORY_LIMIT}" > /usr/local/etc/php/conf.d/zz-yodaily-memory.ini
+echo "PHP memory_limit set to ${PHP_MEMORY_LIMIT}"
+
 php artisan config:clear || true
 php artisan cache:clear || true
 php artisan route:clear || true

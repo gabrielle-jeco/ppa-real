@@ -24,19 +24,23 @@ class AuthController extends Controller
             'location_id' => 'nullable|string' // Optional: store initial if the frontend sends current location
         ]);
 
-        $credentialsAreValid = $this->credentialsAreValid($request, $yoabsenAuth);
-
-        if (!$credentialsAreValid) {
-            throw $this->invalidCredentials();
-        }
-
         $user = User::where('username', $request->username)->first();
         if (!$user) {
             Auth::logout();
             throw $this->invalidCredentials();
         }
 
-        $this->syncYojadwalUserData($user, $yoabsenAuth->lastPayload());
+        if ($user->role_type === 'superadmin') {
+            if (!Auth::attempt($request->only('username', 'password'))) {
+                throw $this->invalidCredentials();
+            }
+        } else {
+            if (!$this->credentialsAreValid($request, $yoabsenAuth)) {
+                throw $this->invalidCredentials();
+            }
+
+            $this->syncYojadwalUserData($user, $yoabsenAuth->lastPayload());
+        }
 
         // Check if user is active
         if (!$user->active) {
@@ -75,7 +79,9 @@ class AuthController extends Controller
         $tokenExpirationMinutes = config('sanctum.expiration');
         $expiresAt = $tokenExpirationMinutes ? Carbon::now()->addMinutes((int) $tokenExpirationMinutes) : null;
         $token = $user->createToken('auth_token')->plainTextToken;
-        $this->syncCurrentMonthAttendance($presenceService, $user);
+        if ($user->role_type !== 'superadmin') {
+            $this->syncCurrentMonthAttendance($presenceService, $user);
+        }
 
         return response()->json([
             'message' => 'Login successful',
@@ -112,24 +118,9 @@ class AuthController extends Controller
 
     private function credentialsAreValid(Request $request, YoabsenAuthService $yoabsenAuth): bool
     {
-        if (!$yoabsenAuth->enabled()) {
-            return Auth::attempt($request->only('username', 'password'));
-        }
-
-        if ($yoabsenAuth->authenticate($request->username, $request->password)) {
-            return true;
-        }
-
-        if (!config('services.yoabsen.allow_local_superadmin_fallback', false)) {
-            return false;
-        }
-
-        $localUser = User::where('username', $request->username)->first();
-        if (!$localUser || $localUser->role_type !== 'superadmin') {
-            return false;
-        }
-
-        return Auth::attempt($request->only('username', 'password'));
+        return $yoabsenAuth->enabled()
+            ? $yoabsenAuth->authenticate($request->username, $request->password)
+            : Auth::attempt($request->only('username', 'password'));
     }
 
     private function syncCurrentMonthAttendance(YojadwalPresenceService $presenceService, User $user): void
