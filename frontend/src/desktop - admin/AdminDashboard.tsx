@@ -9,6 +9,11 @@ type JobLevel = {
     description?: string;
 };
 
+type AccountRole = {
+    id: number;
+    name: string;
+};
+
 type Location = {
     initial: string;
     name: string;
@@ -26,7 +31,9 @@ type CmsUser = {
     name: string;
     email?: string | null;
     initial_store?: string | null;
-    job_level_id: number;
+    job_level_id?: number | null;
+    role_id?: number | null;
+    account_role?: string | null;
     job_level_name?: string;
     role_type?: string;
     active: boolean;
@@ -69,6 +76,7 @@ type WorkStation = {
 type CmsData = {
     stats: Record<string, number>;
     users: CmsUser[];
+    roles: AccountRole[];
     job_levels: JobLevel[];
     locations: Location[];
     reporting_lines: ReportingLine[];
@@ -84,6 +92,7 @@ const emptyUserForm = {
     email: '',
     password: '',
     initial_store: '',
+    role_id: '',
     job_level_id: '',
     active: true,
     location_ids: [] as string[],
@@ -173,7 +182,8 @@ export default function AdminDashboard() {
             email: user.email || '',
             password: '',
             initial_store: user.initial_store || '',
-            job_level_id: String(user.job_level_id),
+            role_id: user.role_id ? String(user.role_id) : '',
+            job_level_id: user.job_level_id ? String(user.job_level_id) : '',
             active: user.active,
             location_ids: user.locations.map((location) => location.initial),
         });
@@ -200,7 +210,8 @@ export default function AdminDashboard() {
         try {
             const payload = {
                 ...userForm,
-                job_level_id: Number(userForm.job_level_id),
+                role_id: userForm.role_id ? Number(userForm.role_id) : null,
+                job_level_id: userForm.job_level_id ? Number(userForm.job_level_id) : null,
                 password: userForm.password || undefined,
             };
 
@@ -628,6 +639,14 @@ export default function AdminDashboard() {
                         </Field>
                         <Field label="Password">
                             <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="input" placeholder={selectedUsername ? 'Leave blank to keep current password' : 'Default: password'} />
+                        </Field>
+                        <Field label="Account Role">
+                            <CustomSelect
+                                value={userForm.role_id}
+                                placeholder="Choose account role"
+                                options={data.roles.map((role) => ({ value: String(role.id), label: role.name }))}
+                                onChange={(value) => setUserForm({ ...userForm, role_id: value })}
+                            />
                         </Field>
                         <Field label="HR/Corporate Job Level">
                             <CustomSelect
