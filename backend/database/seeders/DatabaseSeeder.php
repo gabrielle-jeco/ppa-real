@@ -102,6 +102,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'anton@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $managerLevel->id,
+            'initial_store' => $locSudirman->initial,
             'active' => true,
         ]);
 
@@ -110,9 +111,10 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'YoDaily Superadmin',
                 'email' => 'superadmin@yogyagroup.com',
-                'password' => $password,
-                'job_level_id' => $superadminLevel->id,
-                'active' => true,
+            'password' => $password,
+            'job_level_id' => $superadminLevel->id,
+            'initial_store' => null,
+            'active' => true,
             ]
         );
 
@@ -122,6 +124,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'surya@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $spvLevel->id,
+            'initial_store' => $locSudirman->initial,
             'active' => true,
         ]);
 
@@ -131,6 +134,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'andi@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $spvLevel->id,
+            'initial_store' => $locThamrin->initial,
             'active' => true,
         ]);
 
@@ -140,6 +144,7 @@ class DatabaseSeeder extends Seeder
             'email' => '17070008@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $spvLevel->id,
+            'initial_store' => $locCiamis->initial,
             'active' => true,
         ]);
 
@@ -149,6 +154,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'budi@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $crewLevel->id,
+            'initial_store' => $locSudirman->initial,
             'active' => true,
         ]);
 
@@ -158,21 +164,22 @@ class DatabaseSeeder extends Seeder
             'email' => 'deni@yogyagroup.com',
             'password' => $password,
             'job_level_id' => $crewLevel->id,
+            'initial_store' => $locSudirman->initial,
             'active' => true,
         ]);
 
-        UserLocation::create(['user_id' => $managerAnton->username, 'location_id' => $locSudirman->initial]);
-        UserLocation::create(['user_id' => $managerAnton->username, 'location_id' => $locThamrin->initial]);
+        UserLocation::create(['user_id' => $managerAnton->username, 'location_id' => $locSudirman->initial, 'job_level' => 'regional_manager']);
+        UserLocation::create(['user_id' => $managerAnton->username, 'location_id' => $locThamrin->initial, 'job_level' => 'regional_manager']);
         UserLocation::create(['user_id' => $superadmin->username, 'location_id' => $locSudirman->initial]);
         UserLocation::create(['user_id' => $superadmin->username, 'location_id' => $locThamrin->initial]);
         UserLocation::create(['user_id' => $superadmin->username, 'location_id' => $locCiamis->initial]);
 
-        UserLocation::create(['user_id' => $spvSurya->username, 'location_id' => $locSudirman->initial]);
-        UserLocation::create(['user_id' => $crewBudi->username, 'location_id' => $locSudirman->initial]);
-        UserLocation::create(['user_id' => $crewDeni->username, 'location_id' => $locSudirman->initial]);
+        UserLocation::create(['user_id' => $spvSurya->username, 'location_id' => $locSudirman->initial, 'job_level' => 'supervisor']);
+        UserLocation::create(['user_id' => $crewBudi->username, 'location_id' => $locSudirman->initial, 'job_level' => 'sc']);
+        UserLocation::create(['user_id' => $crewDeni->username, 'location_id' => $locSudirman->initial, 'job_level' => 'sc']);
 
-        UserLocation::create(['user_id' => $spvAndi->username, 'location_id' => $locThamrin->initial]);
-        UserLocation::create(['user_id' => $spvHaritsyah->username, 'location_id' => $locCiamis->initial]);
+        UserLocation::create(['user_id' => $spvAndi->username, 'location_id' => $locThamrin->initial, 'job_level' => 'supervisor']);
+        UserLocation::create(['user_id' => $spvHaritsyah->username, 'location_id' => $locCiamis->initial, 'job_level' => 'supervisor']);
 
         ReportingLine::create(['subordinate_id' => $spvSurya->username, 'leader_id' => $managerAnton->username]);
         ReportingLine::create(['subordinate_id' => $spvAndi->username, 'leader_id' => $managerAnton->username]);

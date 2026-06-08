@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\JobLevel;
 use App\Models\Location;
+use App\Models\Regional;
 use App\Models\ReportingLine;
 use App\Models\User;
 use App\Models\UserLocation;
@@ -16,6 +17,8 @@ use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
+    private const APP_JOB_LEVELS = ['sc', 'supervisor', 'manager', 'regional_manager'];
+
     public function overview()
     {
         $this->authorizeSuperadmin();
@@ -37,6 +40,12 @@ class AdminController extends Controller
             'guide_content' => $station->guide_content ?: [],
         ]);
 
+        $userLocations = UserLocation::with(['user', 'location'])
+            ->orderBy('user_id')
+            ->orderBy('location_id')
+            ->get()
+            ->map(fn(UserLocation $assignment) => $this->formatUserLocation($assignment));
+
         return response()->json([
             'stats' => [
                 'users' => $users->count(),
@@ -44,6 +53,8 @@ class AdminController extends Controller
                 'locations' => Location::count(),
                 'reporting_lines' => $reportingLines->where('status', 'active')->count(),
                 'work_stations' => $workStations->count(),
+                'user_locations' => $userLocations->count(),
+                'regionals' => Regional::count(),
             ],
             'job_levels' => JobLevel::orderBy('name')->get(['id', 'name', 'description']),
             'locations' => Location::orderBy('name')->get([
@@ -60,6 +71,9 @@ class AdminController extends Controller
             'users' => $users,
             'reporting_lines' => $reportingLines,
             'work_stations' => $workStations,
+            'user_locations' => $userLocations,
+            'app_job_levels' => self::APP_JOB_LEVELS,
+            'regionals' => Regional::orderBy('kode_regional')->get(),
         ]);
     }
 
@@ -74,6 +88,7 @@ class AdminController extends Controller
             'password' => ['nullable', 'string', 'min:6'],
             'job_level_id' => ['required', 'exists:job_levels,id'],
             'active' => ['boolean'],
+            'initial_store' => ['nullable', 'exists:locations,initial'],
             'location_ids' => ['array'],
             'location_ids.*' => ['exists:locations,initial'],
         ]);
@@ -84,6 +99,7 @@ class AdminController extends Controller
             'email' => $data['email'] ?? null,
             'password' => Hash::make($data['password'] ?? 'password'),
             'job_level_id' => $data['job_level_id'],
+            'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? true,
         ]);
 
@@ -214,6 +230,7 @@ class AdminController extends Controller
             'password' => ['nullable', 'string', 'min:6'],
             'job_level_id' => ['required', 'exists:job_levels,id'],
             'active' => ['boolean'],
+            'initial_store' => ['nullable', 'exists:locations,initial'],
             'location_ids' => ['array'],
             'location_ids.*' => ['exists:locations,initial'],
         ]);
@@ -222,6 +239,7 @@ class AdminController extends Controller
             'name' => $data['name'],
             'email' => $data['email'] ?? null,
             'job_level_id' => $data['job_level_id'],
+            'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? false,
         ]);
 
@@ -316,6 +334,83 @@ class AdminController extends Controller
         return response()->json($workStation->fresh());
     }
 
+    public function updateUserLocation(Request $request, UserLocation $userLocation)
+    {
+        $this->authorizeSuperadmin();
+
+        $data = $request->validate([
+            'job_level' => ['required', Rule::in(self::APP_JOB_LEVELS)],
+        ]);
+
+        $userLocation->update([
+            'job_level' => strtolower(trim($data['job_level'])),
+        ]);
+
+        return response()->json($this->formatUserLocation($userLocation->fresh(['user', 'location'])));
+    }
+
+    public function syncUserLocationsFromUsers()
+    {
+        $this->authorizeSuperadmin();
+
+        $created = 0;
+        $users = User::whereNotNull('initial_store')->get();
+
+        foreach ($users as $user) {
+            $locationId = strtoupper(trim((string) $user->initial_store));
+            if ($locationId === '' || !Location::where('initial', $locationId)->exists()) {
+                continue;
+            }
+
+            $assignment = UserLocation::firstOrCreate(
+                ['user_id' => $user->username, 'location_id' => $locationId],
+                ['job_level' => $this->defaultAppJobLevel($user)]
+            );
+
+            if ($assignment->wasRecentlyCreated) {
+                $created++;
+            }
+        }
+
+        return response()->json(['message' => "{$created} user-location assignment(s) synchronized.", 'created' => $created]);
+    }
+
+    public function storeRegional(Request $request)
+    {
+        $this->authorizeSuperadmin();
+
+        $data = $request->validate([
+            'kode_regional' => ['required', 'string', 'max:255', 'unique:regional,kode_regional'],
+            'nama_regional' => ['required', 'string', 'max:255'],
+            'cabang' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        return response()->json(Regional::create($data), 201);
+    }
+
+    public function updateRegional(Request $request, Regional $regional)
+    {
+        $this->authorizeSuperadmin();
+
+        $data = $request->validate([
+            'kode_regional' => ['required', 'string', 'max:255', Rule::unique('regional', 'kode_regional')->ignore($regional->id)],
+            'nama_regional' => ['required', 'string', 'max:255'],
+            'cabang' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $regional->update($data);
+
+        return response()->json($regional->fresh());
+    }
+
+    public function destroyRegional(Regional $regional)
+    {
+        $this->authorizeSuperadmin();
+        $regional->delete();
+
+        return response()->json(['message' => 'Regional deleted.']);
+    }
+
     private function authorizeSuperadmin(): void
     {
         abort_if(Auth::user()?->role_type !== 'superadmin', 403, 'Unauthorized');
@@ -323,13 +418,16 @@ class AdminController extends Controller
 
     private function syncUserLocations(User $user, array $locationIds): void
     {
-        UserLocation::where('user_id', $user->username)->delete();
+        $locationIds = array_values(array_unique($locationIds));
+        UserLocation::where('user_id', $user->username)
+            ->whereNotIn('location_id', $locationIds)
+            ->delete();
 
-        foreach (array_unique($locationIds) as $locationId) {
-            UserLocation::create([
-                'user_id' => $user->username,
-                'location_id' => $locationId,
-            ]);
+        foreach ($locationIds as $locationId) {
+            UserLocation::firstOrCreate(
+                ['user_id' => $user->username, 'location_id' => $locationId],
+                ['job_level' => $this->defaultAppJobLevel($user)]
+            );
         }
     }
 
@@ -341,13 +439,17 @@ class AdminController extends Controller
             'username' => $user->username,
             'name' => $user->name,
             'email' => $user->email,
+            'initial_store' => $user->initial_store,
             'job_level_id' => $user->job_level_id,
             'job_level_name' => $user->jobLevel?->name,
+            'corporate_job_level_name' => $user->jobLevel?->name,
             'role_type' => $user->role_type,
+            'manager_type' => $user->manager_type,
             'active' => (bool) $user->active,
             'locations' => $user->locations->map(fn(Location $location) => [
                 'initial' => $location->initial,
                 'name' => $location->name,
+                'app_job_level' => $location->pivot?->job_level,
             ])->values(),
             'leader' => $leaderLine?->leader ? [
                 'username' => $leaderLine->leader->username,
@@ -355,6 +457,31 @@ class AdminController extends Controller
             ] : null,
             'subordinates_count' => $user->subordinateLines->count(),
         ];
+    }
+
+    private function formatUserLocation(UserLocation $assignment): array
+    {
+        return [
+            'id' => $assignment->id,
+            'user_id' => $assignment->user_id,
+            'user_name' => $assignment->user?->name,
+            'location_id' => $assignment->location_id,
+            'location_name' => $assignment->location?->name,
+            'job_level' => $assignment->job_level,
+        ];
+    }
+
+    private function defaultAppJobLevel(User $user): ?string
+    {
+        $role = strtolower(trim((string) $user->jobLevel?->name));
+
+        return match ($role) {
+            'crew', 'employee', 'sc' => 'sc',
+            'supervisor' => 'supervisor',
+            'regional_manager' => 'regional_manager',
+            'manager' => 'manager',
+            default => null,
+        };
     }
 
     private function formatReportingLine(ReportingLine $line): array

@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Log;
 
 class YoabsenAuthService
 {
+    private ?array $lastPayload = null;
+
     public function enabled(): bool
     {
         return (bool) config('services.yoabsen.enabled', false);
@@ -14,6 +16,8 @@ class YoabsenAuthService
 
     public function authenticate(string $nik, string $password): bool
     {
+        $this->lastPayload = null;
+
         if (!$this->enabled()) {
             return false;
         }
@@ -39,9 +43,11 @@ class YoabsenAuthService
                 return false;
             }
 
+            $this->lastPayload = $response->json();
+
             $successField = config('services.yoabsen.success_field');
             if ($successField) {
-                return (bool) data_get($response->json(), $successField);
+                return (bool) data_get($this->lastPayload, $successField);
             }
 
             return true;
@@ -52,6 +58,11 @@ class YoabsenAuthService
 
             return false;
         }
+    }
+
+    public function lastPayload(): ?array
+    {
+        return $this->lastPayload;
     }
 
     private function headers(): array

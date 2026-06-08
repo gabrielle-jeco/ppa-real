@@ -55,6 +55,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/locations', [App\Http\Controllers\AdminController::class, 'storeLocation']);
         Route::patch('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'updateLocation']);
         Route::delete('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'destroyLocation']);
+        Route::post('/user-locations/sync', [App\Http\Controllers\AdminController::class, 'syncUserLocationsFromUsers']);
+        Route::patch('/user-locations/{userLocation}', [App\Http\Controllers\AdminController::class, 'updateUserLocation']);
+        Route::post('/regionals', [App\Http\Controllers\AdminController::class, 'storeRegional']);
+        Route::patch('/regionals/{regional}', [App\Http\Controllers\AdminController::class, 'updateRegional']);
+        Route::delete('/regionals/{regional}', [App\Http\Controllers\AdminController::class, 'destroyRegional']);
         Route::post('/job-levels', [App\Http\Controllers\AdminController::class, 'storeJobLevel']);
         Route::patch('/job-levels/{jobLevel}', [App\Http\Controllers\AdminController::class, 'updateJobLevel']);
         Route::delete('/job-levels/{jobLevel}', [App\Http\Controllers\AdminController::class, 'destroyJobLevel']);

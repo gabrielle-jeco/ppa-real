@@ -28,10 +28,8 @@ class SyncYojadwalAttendance extends Command
         $niks = $this->option('nik');
 
         if (empty($niks)) {
-            $niks = User::where('active', true)
-                ->whereHas('jobLevel', function ($query) {
-                    $query->whereIn('name', ['crew', 'supervisor', 'manager']);
-                })
+            $niks = User::where('active', true)->get()
+                ->filter(fn(User $user) => in_array($user->role_type, ['employee', 'crew', 'supervisor', 'manager'], true))
                 ->pluck('username')
                 ->all();
         }
