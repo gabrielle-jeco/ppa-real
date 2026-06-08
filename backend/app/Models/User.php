@@ -114,6 +114,10 @@ class User extends Authenticatable
             }
         }
 
+        if ($levels->isNotEmpty()) {
+            return $levels->first();
+        }
+
         return null;
     }
 
