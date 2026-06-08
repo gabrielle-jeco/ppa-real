@@ -19,6 +19,7 @@ services:
       DB_DATABASE: performance_app
       DB_USERNAME: sail
       DB_PASSWORD: password
+      SANCTUM_EXPIRATION: 1440
       YOJADWAL_ENABLED: "true"
       YOJADWAL_BASE_URL: http://yojadwal.yogya.com
       YOJADWAL_LOGIN_PATH: /api/login

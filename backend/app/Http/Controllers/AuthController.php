@@ -70,6 +70,8 @@ class AuthController extends Controller
             // Can access from anywhere.
         }
 
+        $tokenExpirationMinutes = config('sanctum.expiration');
+        $expiresAt = $tokenExpirationMinutes ? Carbon::now()->addMinutes((int) $tokenExpirationMinutes) : null;
         $token = $user->createToken('auth_token')->plainTextToken;
         $this->syncCurrentMonthAttendance($presenceService, $user);
 
@@ -77,6 +79,7 @@ class AuthController extends Controller
             'message' => 'Login successful',
             'access_token' => $token,
             'token_type' => 'Bearer',
+            'expires_at' => $expiresAt?->toIso8601String(),
             'user' => $user
         ]);
     }

@@ -54,6 +54,9 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             // Store token for API requests
             localStorage.setItem('auth_token', data.access_token);
             localStorage.setItem('user_data', JSON.stringify(data.user));
+            if (data.expires_at) {
+                localStorage.setItem('session_expires_at', data.expires_at);
+            }
             sessionStorage.setItem('just_logged_in', 'true');
 
             onLoginSuccess(data.user);

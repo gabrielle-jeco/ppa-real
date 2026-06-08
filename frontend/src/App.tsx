@@ -19,6 +19,14 @@ function App() {
   useEffect(() => {
     const storedUser = localStorage.getItem('user_data');
     const token = localStorage.getItem('auth_token');
+    const sessionExpiresAt = localStorage.getItem('session_expires_at');
+    const sessionExpired = !!sessionExpiresAt && Date.now() >= new Date(sessionExpiresAt).getTime();
+
+    if (sessionExpired) {
+      handleLogout();
+      setIsVerifying(false);
+      return;
+    }
 
     // Preliminary set to allow immediate initial render (UX)
     if (storedUser && token) {
@@ -73,10 +81,18 @@ function App() {
 
     // Mobile detection (reactive to resize) + theme color update
     const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const sessionTimer = window.setInterval(() => {
+      const expiresAt = localStorage.getItem('session_expires_at');
+      if (expiresAt && Date.now() >= new Date(expiresAt).getTime()) {
+        handleLogout();
+      }
+    }, 60 * 1000);
+
     window.addEventListener('resize', updateThemeColor);
     window.addEventListener('resize', handleResize);
 
     return () => {
+      window.clearInterval(sessionTimer);
       window.removeEventListener('resize', updateThemeColor);
       window.removeEventListener('resize', handleResize);
     };
@@ -90,6 +106,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
+    localStorage.removeItem('session_expires_at');
     setUser(null);
     setActiveSupervisorPage('employees'); // Reset
   };
