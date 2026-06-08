@@ -36,6 +36,8 @@ class AuthController extends Controller
             throw $this->invalidCredentials();
         }
 
+        $this->syncYojadwalUserData($user, $yoabsenAuth->lastPayload());
+
         // Check if user is active
         if (!$user->active) {
             Auth::logout();
@@ -145,5 +147,16 @@ class AuthController extends Controller
                 'message' => $error->getMessage(),
             ]);
         }
+    }
+
+    private function syncYojadwalUserData(User $user, ?array $payload): void
+    {
+        $initialStore = data_get($payload, 'data.user.initial_store');
+        if (!$initialStore) {
+            return;
+        }
+
+        $user->initial_store = strtoupper(trim((string) $initialStore));
+        $user->save();
     }
 }

@@ -18,6 +18,7 @@ class User extends Authenticatable
         'email',
         'password',
         'job_level_id',
+        'initial_store',
         'active',
     ];
 
@@ -27,7 +28,7 @@ class User extends Authenticatable
     ];
 
     protected $appends = ['role_type', 'location_id', 'manager_type', 'user_id', 'full_name'];
-    protected $with = ['jobLevel', 'locations'];
+    protected $with = ['jobLevel', 'locations', 'userLocations'];
 
     public function getUserIdAttribute()
     {
@@ -44,7 +45,20 @@ class User extends Authenticatable
         $roleName = $this->jobLevel ? $this->jobLevel->name : null;
         $roleName = $roleName ? strtolower(trim($roleName)) : null;
 
-        return $roleName === 'crew' ? 'employee' : $roleName;
+        if ($roleName === 'superadmin') {
+            return 'superadmin';
+        }
+
+        $appRole = $this->effectiveAppJobLevel();
+        if ($appRole === 'sc') {
+            return 'employee';
+        }
+
+        if ($appRole === 'regional_manager') {
+            return 'manager';
+        }
+
+        return $appRole ?: ($roleName === 'crew' ? 'employee' : $roleName);
     }
 
     public function getLocationIdAttribute()
@@ -55,6 +69,15 @@ class User extends Authenticatable
 
     public function getManagerTypeAttribute()
     {
+        $appRole = $this->effectiveAppJobLevel();
+        if ($appRole === 'regional_manager') {
+            return 'RM';
+        }
+
+        if ($appRole === 'manager') {
+            return 'SM';
+        }
+
         if ($this->role_type === 'manager') {
             return $this->locations->count() > 1 ? 'RM' : 'SM';
         }
@@ -68,7 +91,30 @@ class User extends Authenticatable
 
     public function locations()
     {
-        return $this->belongsToMany(Location::class, 'user_locations', 'user_id', 'location_id', 'username', 'initial');
+        return $this->belongsToMany(Location::class, 'user_locations', 'user_id', 'location_id', 'username', 'initial')
+            ->withPivot('job_level');
+    }
+
+    public function userLocations()
+    {
+        return $this->hasMany(UserLocation::class, 'user_id', 'username');
+    }
+
+    private function effectiveAppJobLevel(): ?string
+    {
+        $priority = ['regional_manager', 'manager', 'supervisor', 'sc'];
+        $levels = $this->userLocations
+            ->pluck('job_level')
+            ->filter()
+            ->map(fn($level) => strtolower(trim((string) $level)));
+
+        foreach ($priority as $level) {
+            if ($levels->contains($level)) {
+                return $level;
+            }
+        }
+
+        return null;
     }
 
     public function subordinateLines()

@@ -42,15 +42,15 @@ class TakeMonthlySnapshot extends Command
 
         $this->info("Taking score snapshot for {$targetDate->format('F Y')}...");
 
-        $users = User::with('jobLevel')->get();
+        $users = User::all();
 
         $crewCount = 0;
         $spvCount = 0;
 
         foreach ($users as $user) {
-            $role = $user->jobLevel ? $user->jobLevel->name : null;
+            $role = $user->role_type;
 
-            if ($role === 'crew') {
+            if ($role === 'employee' || $role === 'crew') {
                 // Both calls are needed: scoreData has the 4 scoring components, details has the UI breakdown.
                 // They query different data so both are necessary (not redundant).
                 $scoreData = $scoringService->getCrewMonthlyScore($user, $targetDate);

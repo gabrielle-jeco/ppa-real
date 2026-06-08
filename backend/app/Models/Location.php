@@ -38,6 +38,7 @@ class Location extends Model
 
     public function users()
     {
-        return $this->belongsToMany(User::class, 'user_locations', 'location_id', 'user_id', 'initial', 'username');
+        return $this->belongsToMany(User::class, 'user_locations', 'location_id', 'user_id', 'initial', 'username')
+            ->withPivot('job_level');
     }
 }

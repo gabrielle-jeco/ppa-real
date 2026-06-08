@@ -9,7 +9,7 @@ class UserLocation extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'location_id'];
+    protected $fillable = ['user_id', 'location_id', 'job_level'];
 
     public function user()
     {

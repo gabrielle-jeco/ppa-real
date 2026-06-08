@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpenCheck, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserPlus, UsersRound } from 'lucide-react';
+import { BookOpenCheck, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound } from 'lucide-react';
 
-type Tab = 'users' | 'hierarchy' | 'guides' | 'locations' | 'roles';
+type Tab = 'users' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'roles';
 
 type JobLevel = {
     id: number;
@@ -25,6 +25,7 @@ type CmsUser = {
     username: string;
     name: string;
     email?: string | null;
+    initial_store?: string | null;
     job_level_id: number;
     job_level_name?: string;
     role_type?: string;
@@ -32,6 +33,22 @@ type CmsUser = {
     locations: Array<{ initial: string; name: string }>;
     leader?: { username: string; name: string } | null;
     subordinates_count: number;
+};
+
+type UserLocationAssignment = {
+    id: number;
+    user_id: string;
+    user_name?: string;
+    location_id: string;
+    location_name?: string;
+    job_level?: string | null;
+};
+
+type Regional = {
+    id: number;
+    kode_regional: string;
+    nama_regional: string;
+    cabang?: string | null;
 };
 
 type ReportingLine = {
@@ -56,6 +73,9 @@ type CmsData = {
     locations: Location[];
     reporting_lines: ReportingLine[];
     work_stations: WorkStation[];
+    user_locations: UserLocationAssignment[];
+    app_job_levels: string[];
+    regionals: Regional[];
 };
 
 const emptyUserForm = {
@@ -63,6 +83,7 @@ const emptyUserForm = {
     name: '',
     email: '',
     password: '',
+    initial_store: '',
     job_level_id: '',
     active: true,
     location_ids: [] as string[],
@@ -92,6 +113,8 @@ export default function AdminDashboard() {
     });
     const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
     const [roleForm, setRoleForm] = useState({ name: '', description: '' });
+    const [selectedRegionalId, setSelectedRegionalId] = useState<number | null>(null);
+    const [regionalForm, setRegionalForm] = useState({ kode_regional: '', nama_regional: '', cabang: '' });
 
     useEffect(() => {
         fetchOverview();
@@ -149,6 +172,7 @@ export default function AdminDashboard() {
             name: user.name,
             email: user.email || '',
             password: '',
+            initial_store: user.initial_store || '',
             job_level_id: String(user.job_level_id),
             active: user.active,
             location_ids: user.locations.map((location) => location.initial),
@@ -392,6 +416,87 @@ export default function AdminDashboard() {
         }
     };
 
+    const updateUserLocationRole = async (assignment: UserLocationAssignment, jobLevel: string) => {
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson(`/api/cms/user-locations/${assignment.id}`, 'PATCH', { job_level: jobLevel });
+            setMessage('Application role updated.');
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to update application role.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const syncUserLocations = async () => {
+        setSaving(true);
+        setMessage('');
+        try {
+            const payload = await requestJson('/api/cms/user-locations/sync', 'POST');
+            setMessage(payload?.message || 'User locations synchronized.');
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to synchronize user locations.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const selectRegional = (regional: Regional) => {
+        setSelectedRegionalId(regional.id);
+        setRegionalForm({
+            kode_regional: regional.kode_regional,
+            nama_regional: regional.nama_regional,
+            cabang: regional.cabang || '',
+        });
+    };
+
+    const resetRegionalForm = () => {
+        setSelectedRegionalId(null);
+        setRegionalForm({ kode_regional: '', nama_regional: '', cabang: '' });
+    };
+
+    const saveRegional = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setSaving(true);
+        setMessage('');
+        try {
+            if (selectedRegionalId) {
+                await requestJson(`/api/cms/regionals/${selectedRegionalId}`, 'PATCH', regionalForm);
+                setMessage('Regional updated.');
+            } else {
+                await requestJson('/api/cms/regionals', 'POST', regionalForm);
+                setMessage('Regional created.');
+            }
+
+            resetRegionalForm();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to save regional.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const deleteRegional = async (id: number) => {
+        if (!window.confirm('Delete this regional?')) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson(`/api/cms/regionals/${id}`, 'DELETE');
+            setMessage('Regional deleted.');
+            resetRegionalForm();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to delete regional.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const deleteRole = async (id: number) => {
         if (!window.confirm('Delete this role? Roles assigned to users cannot be deleted.')) return;
 
@@ -444,7 +549,7 @@ export default function AdminDashboard() {
                     ['Active', data.stats.active_users],
                     ['Locations', data.stats.locations],
                     ['Relations', data.stats.reporting_lines],
-                    ['Guides', data.stats.work_stations],
+                    ['App Roles', data.stats.user_locations],
                 ].map(([label, value]) => (
                     <div key={label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
                         <p className="text-xs text-gray-400 font-bold uppercase">{label}</p>
@@ -461,10 +566,12 @@ export default function AdminDashboard() {
 
             <div className="flex gap-3 mb-6">
                 <TabButton active={activeTab === 'users'} icon={<UsersRound size={16} />} label="Users & Locations" onClick={() => setActiveTab('users')} />
+                <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="App Roles" onClick={() => setActiveTab('appRoles')} />
                 <TabButton active={activeTab === 'hierarchy'} icon={<GitBranch size={16} />} label="Reporting Lines" onClick={() => setActiveTab('hierarchy')} />
                 <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Crew Guides" onClick={() => setActiveTab('guides')} />
                 <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Location Master" onClick={() => setActiveTab('locations')} />
-                <TabButton active={activeTab === 'roles'} icon={<ShieldCheck size={16} />} label="Role Master" onClick={() => setActiveTab('roles')} />
+                <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Regional Master" onClick={() => setActiveTab('regionals')} />
+                <TabButton active={activeTab === 'roles'} icon={<ShieldCheck size={16} />} label="HR Job Levels" onClick={() => setActiveTab('roles')} />
             </div>
 
             {activeTab === 'users' && (
@@ -511,13 +618,21 @@ export default function AdminDashboard() {
                         <Field label="Email">
                             <input value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="input" />
                         </Field>
+                        <Field label="Initial Store">
+                            <CustomSelect
+                                value={userForm.initial_store}
+                                placeholder="Choose initial store"
+                                options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
+                                onChange={(value) => setUserForm({ ...userForm, initial_store: value })}
+                            />
+                        </Field>
                         <Field label="Password">
                             <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="input" placeholder={selectedUsername ? 'Leave blank to keep current password' : 'Default: password'} />
                         </Field>
-                        <Field label="Role">
+                        <Field label="HR/Corporate Job Level">
                             <CustomSelect
                                 value={userForm.job_level_id}
-                                placeholder="Choose role"
+                                placeholder="Choose HR job level"
                                 options={data.job_levels.map((level) => ({ value: String(level.id), label: level.name }))}
                                 onChange={(value) => setUserForm({ ...userForm, job_level_id: value })}
                             />
@@ -541,6 +656,40 @@ export default function AdminDashboard() {
                             {saving ? 'Saving...' : 'Save User'}
                         </button>
                     </form>
+                </div>
+            )}
+
+            {activeTab === 'appRoles' && (
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <div>
+                            <h2 className="font-black text-gray-900">Application Role by Location</h2>
+                            <p className="text-xs text-gray-400 mt-1">This controls YoDaily routing. HR job level remains separate.</p>
+                        </div>
+                        <button disabled={saving} onClick={syncUserLocations} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                            Sync From Users
+                        </button>
+                    </div>
+                    <div className="divide-y divide-gray-100 max-h-[680px] overflow-y-auto">
+                        {data.user_locations.map((assignment) => (
+                            <div key={assignment.id} className="px-6 py-4 grid grid-cols-[1fr_1fr_260px] gap-4 items-center">
+                                <div>
+                                    <p className="font-black text-gray-900">{assignment.user_name || assignment.user_id}</p>
+                                    <p className="text-xs text-gray-400">{assignment.user_id}</p>
+                                </div>
+                                <div>
+                                    <p className="font-bold text-gray-700">{assignment.location_name || assignment.location_id}</p>
+                                    <p className="text-xs text-gray-400">{assignment.location_id}</p>
+                                </div>
+                                <CustomSelect
+                                    value={assignment.job_level || ''}
+                                    placeholder="Choose app role"
+                                    options={data.app_job_levels.map((level) => ({ value: level, label: level }))}
+                                    onChange={(value) => value && updateUserLocationRole(assignment, value)}
+                                />
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 
@@ -725,12 +874,55 @@ export default function AdminDashboard() {
                 </div>
             )}
 
+            {activeTab === 'regionals' && (
+                <div className="grid grid-cols-[0.9fr_1.1fr] gap-6">
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                            <h2 className="font-black text-gray-900">Regional Master</h2>
+                            <button onClick={resetRegionalForm} className="text-sm text-primary font-bold">New Regional</button>
+                        </div>
+                        <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
+                            {data.regionals.map((regional) => (
+                                <button key={regional.id} onClick={() => selectRegional(regional)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 ${selectedRegionalId === regional.id ? 'bg-purple-50' : ''}`}>
+                                    <p className="font-black text-gray-900">{regional.nama_regional}</p>
+                                    <p className="text-xs text-gray-400">{regional.kode_regional} - Cabang: {regional.cabang || '-'}</p>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <form onSubmit={saveRegional} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Regional Data</p>
+                                <h2 className="text-xl font-black text-gray-900">{selectedRegionalId ? 'Edit Regional' : 'Create Regional'}</h2>
+                            </div>
+                            {selectedRegionalId && (
+                                <button type="button" onClick={() => deleteRegional(selectedRegionalId)} className="text-sm font-bold text-red-500">Delete</button>
+                            )}
+                        </div>
+                        <Field label="Kode Regional">
+                            <input value={regionalForm.kode_regional} onChange={(e) => setRegionalForm({ ...regionalForm, kode_regional: e.target.value })} className="input" required />
+                        </Field>
+                        <Field label="Nama Regional">
+                            <input value={regionalForm.nama_regional} onChange={(e) => setRegionalForm({ ...regionalForm, nama_regional: e.target.value })} className="input" required />
+                        </Field>
+                        <Field label="Cabang">
+                            <input value={regionalForm.cabang} onChange={(e) => setRegionalForm({ ...regionalForm, cabang: e.target.value })} className="input" placeholder="Initial store or branch note" />
+                        </Field>
+                        <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
+                            {saving ? 'Saving...' : 'Save Regional'}
+                        </button>
+                    </form>
+                </div>
+            )}
+
             {activeTab === 'roles' && (
                 <div className="grid grid-cols-[0.9fr_1.1fr] gap-6">
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <h2 className="font-black text-gray-900">Role Master</h2>
-                            <button onClick={resetRoleForm} className="text-sm text-primary font-bold">New Role</button>
+                            <h2 className="font-black text-gray-900">HR Job Level Master</h2>
+                            <button onClick={resetRoleForm} className="text-sm text-primary font-bold">New Job Level</button>
                         </div>
                         <div className="divide-y divide-gray-100">
                             {data.job_levels.map((role) => (
@@ -745,21 +937,21 @@ export default function AdminDashboard() {
                     <form onSubmit={saveRole} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Role Data</p>
-                                <h2 className="text-xl font-black text-gray-900">{selectedRoleId ? 'Edit Role' : 'Create Role'}</h2>
+                                <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">HR Job Level Data</p>
+                                <h2 className="text-xl font-black text-gray-900">{selectedRoleId ? 'Edit HR Job Level' : 'Create HR Job Level'}</h2>
                             </div>
                             {selectedRoleId && (
                                 <button type="button" onClick={() => deleteRole(selectedRoleId)} className="text-sm font-bold text-red-500">Delete</button>
                             )}
                         </div>
-                        <Field label="Role Name">
+                        <Field label="HR Job Level Name">
                             <input value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} className="input" required />
                         </Field>
                         <Field label="Description">
                             <textarea value={roleForm.description} onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })} className="input min-h-[180px]" />
                         </Field>
                         <div className="rounded-2xl bg-yellow-50 border border-yellow-100 p-4 text-xs text-yellow-700">
-                            Use role names that YoDaily understands directly: manager, supervisor, crew, employee, or superadmin. If company roles are more specific, map them intentionally before using them for login routing.
+                            HR job levels are company data. YoDaily access is controlled from App Roles on user-location assignments.
                         </div>
                         <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
                             {saving ? 'Saving...' : 'Save Role'}
