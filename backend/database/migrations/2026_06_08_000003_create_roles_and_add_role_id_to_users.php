@@ -33,12 +33,20 @@ return new class extends Migration {
         $adminRoleId = DB::table('roles')->where('name', 'admin')->value('id');
         $userRoleId = DB::table('roles')->where('name', 'user')->value('id');
 
-        DB::table('users')
-            ->leftJoin('job_levels', 'job_levels.id', '=', 'users.job_level_id')
-            ->whereNull('users.role_id')
-            ->update([
-                'role_id' => DB::raw("CASE WHEN LOWER(TRIM(job_levels.name)) = 'superadmin' THEN {$adminRoleId} ELSE {$userRoleId} END"),
-            ]);
+        DB::statement("
+            UPDATE users
+            SET role_id = CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM job_levels
+                    WHERE job_levels.id = users.job_level_id
+                      AND LOWER(TRIM(job_levels.name)) = 'superadmin'
+                )
+                THEN {$adminRoleId}
+                ELSE {$userRoleId}
+            END
+            WHERE role_id IS NULL
+        ");
     }
 
     public function down()
