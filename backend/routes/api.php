@@ -60,9 +60,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/regionals', [App\Http\Controllers\AdminController::class, 'storeRegional']);
         Route::patch('/regionals/{regional}', [App\Http\Controllers\AdminController::class, 'updateRegional']);
         Route::delete('/regionals/{regional}', [App\Http\Controllers\AdminController::class, 'destroyRegional']);
-        Route::post('/job-levels', [App\Http\Controllers\AdminController::class, 'storeJobLevel']);
-        Route::patch('/job-levels/{jobLevel}', [App\Http\Controllers\AdminController::class, 'updateJobLevel']);
-        Route::delete('/job-levels/{jobLevel}', [App\Http\Controllers\AdminController::class, 'destroyJobLevel']);
+        Route::get('/users', [App\Http\Controllers\AdminController::class, 'getUsers']);
+        Route::get('/user-locations', [App\Http\Controllers\AdminController::class, 'getUserLocations']);
+        Route::get('/leaders', [App\Http\Controllers\AdminController::class, 'getLeaders']);
+        Route::get('/reporting-lines', [App\Http\Controllers\AdminController::class, 'getReportingLines']);
+
         Route::post('/reporting-lines', [App\Http\Controllers\AdminController::class, 'storeReportingLine']);
         Route::patch('/reporting-lines/{reportingLine}', [App\Http\Controllers\AdminController::class, 'updateReportingLine']);
         Route::delete('/reporting-lines/{reportingLine}', [App\Http\Controllers\AdminController::class, 'destroyReportingLine']);

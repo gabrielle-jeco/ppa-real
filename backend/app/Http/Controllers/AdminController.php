@@ -24,37 +24,20 @@ class AdminController extends Controller
     {
         $this->authorizeSuperadmin();
 
-        $users = User::with(['accountRole', 'jobLevel', 'locations', 'leaderLines.leader', 'subordinateLines.subordinate'])
-            ->orderBy('name')
-            ->get()
-            ->map(fn(User $user) => $this->formatUser($user));
-
-        $reportingLines = ReportingLine::with(['leader.jobLevel', 'subordinate.jobLevel'])
-            ->orderBy('leader_id')
-            ->orderBy('subordinate_id')
-            ->get()
-            ->map(fn(ReportingLine $line) => $this->formatReportingLine($line));
-
         $workStations = WorkStation::orderBy('name')->get()->map(fn(WorkStation $station) => [
             'id' => $station->id,
             'name' => $station->name,
             'guide_content' => $station->guide_content ?: [],
         ]);
 
-        $userLocations = UserLocation::with(['user', 'location'])
-            ->orderBy('user_id')
-            ->orderBy('location_id')
-            ->get()
-            ->map(fn(UserLocation $assignment) => $this->formatUserLocation($assignment));
-
         return response()->json([
             'stats' => [
-                'users' => $users->count(),
-                'active_users' => $users->where('active', true)->count(),
+                'users' => User::count(),
+                'active_users' => User::where('active', true)->count(),
                 'locations' => Location::count(),
-                'reporting_lines' => $reportingLines->where('status', 'active')->count(),
+                'reporting_lines' => ReportingLine::where('status', 'active')->count(),
                 'work_stations' => $workStations->count(),
-                'user_locations' => $userLocations->count(),
+                'user_locations' => UserLocation::count(),
                 'regionals' => Regional::count(),
                 'account_roles' => Role::count(),
             ],
@@ -71,13 +54,106 @@ class AdminController extends Controller
                 'is_active',
                 'type_store',
             ]),
-            'users' => $users,
-            'reporting_lines' => $reportingLines,
             'work_stations' => $workStations,
-            'user_locations' => $userLocations,
             'app_job_levels' => self::APP_JOB_LEVELS,
             'regionals' => Regional::orderBy('kode_regional')->get(),
         ]);
+    }
+
+    public function getUsers(Request $request)
+    {
+        $this->authorizeSuperadmin();
+
+        $query = User::with(['accountRole', 'jobLevel', 'locations', 'leaderLines.leader', 'subordinateLines.subordinate'])
+            ->orderBy('name');
+
+        if ($request->has('search') && $request->search !== '') {
+            $searchTerm = '%' . $request->search . '%';
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('name', 'like', $searchTerm)
+                  ->orWhere('username', 'like', $searchTerm);
+            });
+        }
+
+        $paginator = $query->paginate(50);
+        
+        $paginator->getCollection()->transform(function (User $user) {
+            return $this->formatUser($user);
+        });
+
+        return response()->json($paginator);
+    }
+
+    public function getUserLocations(Request $request)
+    {
+        $this->authorizeSuperadmin();
+
+        $query = UserLocation::with(['user', 'location']);
+
+        if ($request->has('search')) {
+            $search = strtolower($request->query('search'));
+            $query->whereHas('user', function ($q) use ($search) {
+                $q->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                  ->orWhereRaw('LOWER(username) like ?', ["%{$search}%"]);
+            })->orWhereHas('location', function ($q) use ($search) {
+                $q->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                  ->orWhereRaw('LOWER(initial) like ?', ["%{$search}%"]);
+            });
+        }
+
+        $paginator = $query->orderBy('user_id')
+            ->orderBy('location_id')
+            ->paginate(50);
+
+        $paginator->getCollection()->transform(function (UserLocation $assignment) {
+            return $this->formatUserLocation($assignment);
+        });
+
+        return response()->json($paginator);
+    }
+
+    public function getLeaders(Request $request)
+    {
+        $this->authorizeSuperadmin();
+        
+        $leaderUsernames = UserLocation::whereIn('job_level', ['supervisor', 'manager', 'regional_manager'])->pluck('user_id');
+        
+        $leaders = User::whereIn('username', $leaderUsernames)
+            ->orWhereHas('accountRole', function($q) {
+                $q->where('name', 'admin');
+            })
+            ->orderBy('name')
+            ->get(['username', 'name']);
+            
+        // We actually want just username, name and maybe role_type for the dropdown label.
+        $leadersArray = $leaders->map(function(User $u) {
+            return [
+                'username' => $u->username,
+                'name' => $u->name,
+                'role_type' => $u->role_type // accessor
+            ];
+        });
+
+        return response()->json($leadersArray);
+    }
+
+    public function getReportingLines(Request $request)
+    {
+        $this->authorizeSuperadmin();
+        
+        $query = ReportingLine::with(['leader.jobLevel', 'subordinate.jobLevel'])
+            ->orderBy('leader_id')
+            ->orderBy('subordinate_id');
+            
+        if ($request->has('leader_id') && $request->leader_id !== '') {
+            $query->where('leader_id', $request->leader_id);
+        }
+
+        $lines = $query->get()->map(function (ReportingLine $line) {
+            return $this->formatReportingLine($line);
+        });
+
+        return response()->json($lines);
     }
 
     public function storeUser(Request $request)
@@ -178,50 +254,7 @@ class AdminController extends Controller
         return response()->json(['message' => 'Location deleted.']);
     }
 
-    public function storeJobLevel(Request $request)
-    {
-        $this->authorizeSuperadmin();
 
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:job_levels,name'],
-            'description' => ['nullable', 'string', 'max:1000'],
-        ]);
-
-        $data['name'] = strtolower(trim($data['name']));
-        $jobLevel = JobLevel::create($data);
-
-        return response()->json($jobLevel, 201);
-    }
-
-    public function updateJobLevel(Request $request, JobLevel $jobLevel)
-    {
-        $this->authorizeSuperadmin();
-
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('job_levels', 'name')->ignore($jobLevel->id)],
-            'description' => ['nullable', 'string', 'max:1000'],
-        ]);
-
-        $data['name'] = strtolower(trim($data['name']));
-        $jobLevel->update($data);
-
-        return response()->json($jobLevel->fresh());
-    }
-
-    public function destroyJobLevel(JobLevel $jobLevel)
-    {
-        $this->authorizeSuperadmin();
-
-        if ($jobLevel->users()->exists()) {
-            throw ValidationException::withMessages([
-                'job_level' => ['This role is still assigned to one or more users. Move those users first.'],
-            ]);
-        }
-
-        $jobLevel->delete();
-
-        return response()->json(['message' => 'Role deleted.']);
-    }
 
     public function updateUser(Request $request, string $username)
     {
@@ -270,6 +303,8 @@ class AdminController extends Controller
             'status' => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
+        $this->validateReportingLineHierarchy($data['leader_id'], $data['subordinate_id']);
+
         $line = ReportingLine::updateOrCreate(
             ['subordinate_id' => $data['subordinate_id']],
             [
@@ -290,6 +325,8 @@ class AdminController extends Controller
             'subordinate_id' => ['required', 'exists:users,username'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
         ]);
+
+        $this->validateReportingLineHierarchy($data['leader_id'], $data['subordinate_id']);
 
         $reportingLine->update($data);
 
@@ -508,5 +545,36 @@ class AdminController extends Controller
             'subordinate_name' => $line->subordinate?->name,
             'status' => $line->status,
         ];
+    }
+
+    private function validateReportingLineHierarchy(string $leaderId, string $subordinateId)
+    {
+        $leader = User::where('username', $leaderId)->first();
+        $subordinate = User::where('username', $subordinateId)->first();
+
+        if (!$leader || !$subordinate) return;
+
+        $levels = [
+            'employee' => 1,
+            'supervisor' => 2,
+            'manager' => 3,
+            'superadmin' => 4,
+        ];
+
+        $leaderRank = $levels[$leader->role_type] ?? 0;
+        if ($leader->role_type === 'manager' && $leader->manager_type === 'RM') {
+            $leaderRank = 3.5;
+        }
+
+        $subRank = $levels[$subordinate->role_type] ?? 0;
+        if ($subordinate->role_type === 'manager' && $subordinate->manager_type === 'RM') {
+            $subRank = 3.5;
+        }
+
+        if ($leaderRank <= $subRank) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'leader_id' => ['Leader must have a higher role level than the subordinate (e.g. Supervisor leads Employee, Manager leads Supervisor).']
+            ]);
+        }
     }
 }

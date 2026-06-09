@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { BookOpenCheck, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { BookOpenCheck, ChevronDown, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
-type Tab = 'users' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'roles';
+type Tab = 'users' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals';
 
 type JobLevel = {
     id: number;
@@ -74,14 +74,20 @@ type WorkStation = {
 };
 
 type CmsData = {
-    stats: Record<string, number>;
-    users: CmsUser[];
-    roles: AccountRole[];
+    stats: {
+        users: number;
+        active_users: number;
+        locations: number;
+        reporting_lines: number;
+        work_stations: number;
+        user_locations: number;
+        regionals: number;
+        account_roles: number;
+    };
+    roles: Array<{ id: number; name: string }>;
     job_levels: JobLevel[];
     locations: Location[];
-    reporting_lines: ReportingLine[];
     work_stations: WorkStation[];
-    user_locations: UserLocationAssignment[];
     app_job_levels: string[];
     regionals: Regional[];
 };
@@ -104,6 +110,26 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState('');
+    
+    const [usersData, setUsersData] = useState<CmsUser[]>([]);
+    const [usersPage, setUsersPage] = useState(1);
+    const [usersTotalPages, setUsersTotalPages] = useState(1);
+    const [usersSearch, setUsersSearch] = useState('');
+
+    const [userLocationsData, setUserLocationsData] = useState<UserLocationAssignment[]>([]);
+    const [userLocationsPage, setUserLocationsPage] = useState(1);
+    const [userLocationsTotalPages, setUserLocationsTotalPages] = useState(1);
+    const [userLocationsSearch, setUserLocationsSearch] = useState('');
+
+    const [locationsSearch, setLocationsSearch] = useState('');
+    const [regionalsSearch, setRegionalsSearch] = useState('');
+    const [guidesSearch, setGuidesSearch] = useState('');
+    const [hierarchySearch, setHierarchySearch] = useState('');
+
+    const [leadersData, setLeadersData] = useState<Array<{username: string, name: string, role_type: string}>>([]);
+    const [selectedLeaderId, setSelectedLeaderId] = useState('');
+    const [reportingLinesData, setReportingLinesData] = useState<ReportingLine[]>([]);
+
     const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
     const [userForm, setUserForm] = useState(emptyUserForm);
     const [lineForm, setLineForm] = useState({ leader_id: '', subordinate_id: '', status: 'active' as 'active' | 'inactive' });
@@ -120,37 +146,81 @@ export default function AdminDashboard() {
         type_store: '',
         is_active: true,
     });
-    const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
-    const [roleForm, setRoleForm] = useState({ name: '', description: '' });
     const [selectedRegionalId, setSelectedRegionalId] = useState<number | null>(null);
     const [regionalForm, setRegionalForm] = useState({ kode_regional: '', nama_regional: '', cabang: '' });
+
+    const [isUserFormOpen, setIsUserFormOpen] = useState(false);
+    const [isGuideFormOpen, setIsGuideFormOpen] = useState(false);
+    const [isLocationFormOpen, setIsLocationFormOpen] = useState(false);
+    const [isRegionalFormOpen, setIsRegionalFormOpen] = useState(false);
 
     useEffect(() => {
         fetchOverview();
     }, []);
 
+    useEffect(() => {
+        if (!data) return;
+        if (activeTab === 'users') fetchUsers();
+        else if (activeTab === 'appRoles') fetchUserLocations();
+        else if (activeTab === 'hierarchy') {
+            fetchLeaders();
+            fetchReportingLines();
+        }
+    }, [activeTab, usersPage, usersSearch, userLocationsPage, userLocationsSearch, selectedLeaderId, data?.stats]);
+
     const fetchOverview = async () => {
         setLoading(true);
         setMessage('');
         try {
-            const token = localStorage.getItem('auth_token');
-            const response = await fetch('/api/cms/overview', {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: 'application/json',
-                },
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to load CMS data.');
-            }
-
-            const payload = await response.json();
+            const payload = await requestJson('/api/cms/overview', 'GET');
             setData(payload);
         } catch (error: any) {
             setMessage(error.message || 'Failed to load CMS data.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchUsers = async () => {
+        try {
+            const query = new URLSearchParams({ page: String(usersPage) });
+            if (usersSearch) query.append('search', usersSearch);
+            const res = await requestJson(`/api/cms/users?${query.toString()}`, 'GET');
+            setUsersData(res.data || []);
+            setUsersTotalPages(res.last_page || 1);
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to load users.');
+        }
+    };
+
+    const fetchUserLocations = async () => {
+        try {
+            const query = new URLSearchParams({ page: String(userLocationsPage) });
+            if (userLocationsSearch) query.append('search', userLocationsSearch);
+            const res = await requestJson(`/api/cms/user-locations?${query.toString()}`, 'GET');
+            setUserLocationsData(res.data || []);
+            setUserLocationsTotalPages(res.last_page || 1);
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to load user locations.');
+        }
+    };
+
+    const fetchLeaders = async () => {
+        try {
+            const res = await requestJson('/api/cms/leaders', 'GET');
+            setLeadersData(res || []);
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to load leaders.');
+        }
+    };
+
+    const fetchReportingLines = async () => {
+        try {
+            const query = selectedLeaderId ? `?leader_id=${selectedLeaderId}` : '';
+            const res = await requestJson(`/api/cms/reporting-lines${query}`, 'GET');
+            setReportingLinesData(res || []);
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to load reporting lines.');
         }
     };
 
@@ -168,7 +238,14 @@ export default function AdminDashboard() {
 
         if (!response.ok) {
             const payload = await response.json().catch(() => null);
-            throw new Error(payload?.message || 'Request failed.');
+            let errorMessage = payload?.message || 'Request failed.';
+            if (payload?.errors && typeof payload.errors === 'object') {
+                const firstErrorKey = Object.keys(payload.errors)[0];
+                if (firstErrorKey && Array.isArray(payload.errors[firstErrorKey])) {
+                    errorMessage = payload.errors[firstErrorKey][0];
+                }
+            }
+            throw new Error(errorMessage);
         }
 
         return response.json().catch(() => null);
@@ -187,11 +264,19 @@ export default function AdminDashboard() {
             active: user.active,
             location_ids: user.locations.map((location) => location.initial),
         });
+        setIsUserFormOpen(true);
     };
 
     const resetUserForm = () => {
         setSelectedUsername(null);
         setUserForm(emptyUserForm);
+        setIsUserFormOpen(true);
+    };
+
+    const closeUserForm = () => {
+        setSelectedUsername(null);
+        setUserForm(emptyUserForm);
+        setIsUserFormOpen(false);
     };
 
     const toggleLocation = (initial: string) => {
@@ -223,7 +308,8 @@ export default function AdminDashboard() {
                 setMessage('User created.');
             }
 
-            resetUserForm();
+            closeUserForm();
+            await fetchUsers();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to save user.');
@@ -240,6 +326,7 @@ export default function AdminDashboard() {
             await requestJson('/api/cms/reporting-lines', 'POST', lineForm);
             setLineForm({ leader_id: '', subordinate_id: '', status: 'active' });
             setMessage('Reporting line saved.');
+            await fetchReportingLines();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to save reporting line.');
@@ -256,6 +343,7 @@ export default function AdminDashboard() {
         try {
             await requestJson(`/api/cms/reporting-lines/${id}`, 'DELETE');
             setMessage('Reporting line deleted.');
+            await fetchReportingLines();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to delete reporting line.');
@@ -274,6 +362,7 @@ export default function AdminDashboard() {
                 status: line.status === 'active' ? 'inactive' : 'active',
             });
             setMessage(`Reporting line ${line.status === 'active' ? 'deactivated' : 'activated'}.`);
+            await fetchReportingLines();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to update reporting line.');
@@ -288,6 +377,12 @@ export default function AdminDashboard() {
             name: station.name,
             guideText: station.guide_content.join('\n'),
         });
+        setIsGuideFormOpen(true);
+    };
+
+    const closeGuideForm = () => {
+        setGuideForm({ id: '', name: '', guideText: '' });
+        setIsGuideFormOpen(false);
     };
 
     const saveGuide = async (event: React.FormEvent) => {
@@ -311,7 +406,7 @@ export default function AdminDashboard() {
                 setMessage('Guide created.');
             }
 
-            setGuideForm({ id: '', name: '', guideText: '' });
+            closeGuideForm();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to save guide.');
@@ -333,6 +428,7 @@ export default function AdminDashboard() {
             type_store: location.type_store || '',
             is_active: Boolean(location.is_active ?? true),
         });
+        setIsLocationFormOpen(true);
     };
 
     const resetLocationForm = () => {
@@ -348,6 +444,23 @@ export default function AdminDashboard() {
             type_store: '',
             is_active: true,
         });
+        setIsLocationFormOpen(true);
+    };
+
+    const closeLocationForm = () => {
+        setSelectedLocationInitial(null);
+        setLocationForm({
+            initial: '',
+            name: '',
+            store_code: '',
+            address: '',
+            city: '',
+            phone: '',
+            region_code: '',
+            type_store: '',
+            is_active: true,
+        });
+        setIsLocationFormOpen(false);
     };
 
     const saveLocation = async (event: React.FormEvent) => {
@@ -369,7 +482,7 @@ export default function AdminDashboard() {
                 setMessage('Location created.');
             }
 
-            resetLocationForm();
+            closeLocationForm();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to save location.');
@@ -386,42 +499,10 @@ export default function AdminDashboard() {
         try {
             await requestJson(`/api/cms/locations/${initial}`, 'DELETE');
             setMessage('Location deleted.');
-            resetLocationForm();
+            closeLocationForm();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to delete location.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const selectRole = (role: JobLevel) => {
-        setSelectedRoleId(role.id);
-        setRoleForm({ name: role.name, description: role.description || '' });
-    };
-
-    const resetRoleForm = () => {
-        setSelectedRoleId(null);
-        setRoleForm({ name: '', description: '' });
-    };
-
-    const saveRole = async (event: React.FormEvent) => {
-        event.preventDefault();
-        setSaving(true);
-        setMessage('');
-        try {
-            if (selectedRoleId) {
-                await requestJson(`/api/cms/job-levels/${selectedRoleId}`, 'PATCH', roleForm);
-                setMessage('Role updated.');
-            } else {
-                await requestJson('/api/cms/job-levels', 'POST', roleForm);
-                setMessage('Role created.');
-            }
-
-            resetRoleForm();
-            await fetchOverview();
-        } catch (error: any) {
-            setMessage(error.message || 'Failed to save role.');
         } finally {
             setSaving(false);
         }
@@ -433,7 +514,7 @@ export default function AdminDashboard() {
         try {
             await requestJson(`/api/cms/user-locations/${assignment.id}`, 'PATCH', { job_level: jobLevel });
             setMessage('Application role updated.');
-            await fetchOverview();
+            await fetchUserLocations();
         } catch (error: any) {
             setMessage(error.message || 'Failed to update application role.');
         } finally {
@@ -447,6 +528,7 @@ export default function AdminDashboard() {
         try {
             const payload = await requestJson('/api/cms/user-locations/sync', 'POST');
             setMessage(payload?.message || 'User locations synchronized.');
+            await fetchUserLocations();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to synchronize user locations.');
@@ -462,11 +544,19 @@ export default function AdminDashboard() {
             nama_regional: regional.nama_regional,
             cabang: regional.cabang || '',
         });
+        setIsRegionalFormOpen(true);
     };
 
     const resetRegionalForm = () => {
         setSelectedRegionalId(null);
         setRegionalForm({ kode_regional: '', nama_regional: '', cabang: '' });
+        setIsRegionalFormOpen(true);
+    };
+
+    const closeRegionalForm = () => {
+        setSelectedRegionalId(null);
+        setRegionalForm({ kode_regional: '', nama_regional: '', cabang: '' });
+        setIsRegionalFormOpen(false);
     };
 
     const saveRegional = async (event: React.FormEvent) => {
@@ -482,7 +572,7 @@ export default function AdminDashboard() {
                 setMessage('Regional created.');
             }
 
-            resetRegionalForm();
+            closeRegionalForm();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to save regional.');
@@ -499,27 +589,10 @@ export default function AdminDashboard() {
         try {
             await requestJson(`/api/cms/regionals/${id}`, 'DELETE');
             setMessage('Regional deleted.');
-            resetRegionalForm();
+            closeRegionalForm();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to delete regional.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const deleteRole = async (id: number) => {
-        if (!window.confirm('Delete this role? Roles assigned to users cannot be deleted.')) return;
-
-        setSaving(true);
-        setMessage('');
-        try {
-            await requestJson(`/api/cms/job-levels/${id}`, 'DELETE');
-            setMessage('Role deleted.');
-            resetRoleForm();
-            await fetchOverview();
-        } catch (error: any) {
-            setMessage(error.message || 'Failed to delete role.');
         } finally {
             setSaving(false);
         }
@@ -538,7 +611,6 @@ export default function AdminDashboard() {
         );
     }
 
-    const managersAndSupervisors = data.users.filter((user) => ['manager', 'supervisor', 'superadmin'].includes(user.role_type || ''));
 
     return (
         <div className="h-full overflow-y-auto px-8 py-8">
@@ -582,22 +654,32 @@ export default function AdminDashboard() {
                 <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Crew Guides" onClick={() => setActiveTab('guides')} />
                 <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Location Master" onClick={() => setActiveTab('locations')} />
                 <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Regional Master" onClick={() => setActiveTab('regionals')} />
-                <TabButton active={activeTab === 'roles'} icon={<ShieldCheck size={16} />} label="HR Job Levels" onClick={() => setActiveTab('roles')} />
             </div>
 
             {activeTab === 'users' && (
-                <div className="grid grid-cols-[1.2fr_0.8fr] gap-6">
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <h2 className="font-black text-gray-900">User Master</h2>
-                            <button onClick={resetUserForm} className="text-sm text-primary font-bold flex items-center gap-2">
+                <div className={`grid gap-6 transition-all duration-300 ${isUserFormOpen ? 'grid-cols-[1.2fr_0.8fr]' : 'grid-cols-1'}`}>
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+                            <h2 className="font-black text-gray-900 whitespace-nowrap">User Master</h2>
+                            <div className="flex-1 max-w-md relative">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search name or NIK..." 
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                    value={usersSearch}
+                                    onChange={(e) => { setUsersSearch(e.target.value); setUsersPage(1); }}
+                                />
+                            </div>
+                            <button onClick={() => { resetUserForm(); setIsUserFormOpen(true); }} className="text-sm text-primary font-bold flex items-center gap-2 whitespace-nowrap">
                                 <UserPlus size={16} />
                                 New User
                             </button>
                         </div>
-                        <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
-                            {data.users.map((user) => (
-                                <button key={user.username} onClick={() => selectUser(user)} className={`w-full text-left px-6 py-4 hover:bg-purple-50 transition ${selectedUsername === user.username ? 'bg-purple-50' : ''}`}>
+                        <div className="divide-y divide-gray-100 max-h-[560px] overflow-y-auto">
+                            {usersData.length === 0 ? (
+                                <div className="p-8 text-center text-gray-400 text-sm">No users found.</div>
+                            ) : usersData.map((user) => (
+                                <button key={user.username} onClick={() => { selectUser(user); setIsUserFormOpen(true); }} className={`w-full text-left px-6 py-4 hover:bg-purple-50 transition ${selectedUsername === user.username ? 'bg-purple-50' : ''}`}>
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <p className="font-black text-gray-900">{user.name}</p>
@@ -613,84 +695,116 @@ export default function AdminDashboard() {
                                 </button>
                             ))}
                         </div>
+                        <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                            <button 
+                                disabled={usersPage <= 1} 
+                                onClick={() => setUsersPage(p => p - 1)}
+                                className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
+                            >
+                                Previous
+                            </button>
+                            <span className="text-xs font-bold text-gray-400">Page {usersPage} of {usersTotalPages}</span>
+                            <button 
+                                disabled={usersPage >= usersTotalPages} 
+                                onClick={() => setUsersPage(p => p + 1)}
+                                className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
+                            >
+                                Next
+                            </button>
+                        </div>
                     </div>
 
-                    <form onSubmit={saveUser} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
-                        <div>
-                            <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">User Editor</p>
-                            <h2 className="text-xl font-black text-gray-900">{selectedUsername ? 'Edit User' : 'Create User'}</h2>
-                        </div>
-                        <Field label="NIK / Username">
-                            <input disabled={!!selectedUsername} value={userForm.username} onChange={(e) => setUserForm({ ...userForm, username: e.target.value })} className="input" required />
-                        </Field>
-                        <Field label="Name">
-                            <input value={userForm.name} onChange={(e) => setUserForm({ ...userForm, name: e.target.value })} className="input" required />
-                        </Field>
-                        <Field label="Email">
-                            <input value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="input" />
-                        </Field>
-                        <Field label="Initial Store">
-                            <CustomSelect
-                                value={userForm.initial_store}
-                                placeholder="Choose initial store"
-                                options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
-                                onChange={(value) => setUserForm({ ...userForm, initial_store: value })}
-                            />
-                        </Field>
-                        <Field label="Password">
-                            <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="input" placeholder={selectedUsername ? 'Leave blank to keep current password' : 'Default: password'} />
-                        </Field>
-                        <Field label="Account Role">
-                            <CustomSelect
-                                value={userForm.role_id}
-                                placeholder="Choose account role"
-                                options={data.roles.map((role) => ({ value: String(role.id), label: role.name }))}
-                                onChange={(value) => setUserForm({ ...userForm, role_id: value })}
-                            />
-                        </Field>
-                        <Field label="HR/Corporate Job Level">
-                            <CustomSelect
-                                value={userForm.job_level_id}
-                                placeholder="Choose HR job level"
-                                options={data.job_levels.map((level) => ({ value: String(level.id), label: level.name }))}
-                                onChange={(value) => setUserForm({ ...userForm, job_level_id: value })}
-                            />
-                        </Field>
-                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                            <input type="checkbox" checked={userForm.active} onChange={(e) => setUserForm({ ...userForm, active: e.target.checked })} />
-                            Active user
-                        </label>
-                        <div>
-                            <p className="text-sm font-bold text-gray-700 mb-2">Locations</p>
-                            <div className="grid grid-cols-2 gap-2">
-                                {data.locations.map((location) => (
-                                    <label key={location.initial} className={`text-xs rounded-xl px-3 py-2 border cursor-pointer ${userForm.location_ids.includes(location.initial) ? 'border-primary bg-purple-50 text-primary' : 'border-gray-100 bg-gray-50 text-gray-500'}`}>
-                                        <input type="checkbox" className="hidden" checked={userForm.location_ids.includes(location.initial)} onChange={() => toggleLocation(location.initial)} />
-                                        {location.initial} · {location.name}
-                                    </label>
-                                ))}
+                    {isUserFormOpen && (
+                        <form onSubmit={saveUser} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">User Data</p>
+                                    <h2 className="text-xl font-black text-gray-900">{selectedUsername ? 'Edit User' : 'Create User'}</h2>
+                                </div>
+                                <button type="button" onClick={closeUserForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
                             </div>
-                        </div>
-                        <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
-                            {saving ? 'Saving...' : 'Save User'}
-                        </button>
-                    </form>
+                            <Field label="NIK / Username">
+                                <input disabled={!!selectedUsername} value={userForm.username} onChange={(e) => setUserForm({ ...userForm, username: e.target.value })} className="input" required />
+                            </Field>
+                            <Field label="Name">
+                                <input value={userForm.name} onChange={(e) => setUserForm({ ...userForm, name: e.target.value })} className="input" required />
+                            </Field>
+                            <Field label="Email">
+                                <input value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="input" />
+                            </Field>
+                            <Field label="Initial Store">
+                                <CustomSelect
+                                    value={userForm.initial_store}
+                                    placeholder="Choose initial store"
+                                    options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
+                                    onChange={(value) => setUserForm({ ...userForm, initial_store: value })}
+                                />
+                            </Field>
+                            <Field label="Password">
+                                <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="input" placeholder={selectedUsername ? 'Leave blank to keep current password' : 'Default: password'} />
+                            </Field>
+                            <Field label="Account Role">
+                                <CustomSelect
+                                    value={userForm.role_id}
+                                    placeholder="Choose account role"
+                                    options={data.roles.map((role) => ({ value: String(role.id), label: role.name }))}
+                                    onChange={(value) => setUserForm({ ...userForm, role_id: value })}
+                                />
+                            </Field>
+                            <Field label="HR/Corporate Job Level">
+                                <CustomSelect
+                                    value={userForm.job_level_id}
+                                    placeholder="Choose HR job level"
+                                    options={data.job_levels.map((level) => ({ value: String(level.id), label: level.name }))}
+                                    onChange={(value) => setUserForm({ ...userForm, job_level_id: value })}
+                                />
+                            </Field>
+                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                                <input type="checkbox" checked={userForm.active} onChange={(e) => setUserForm({ ...userForm, active: e.target.checked })} />
+                                Active user
+                            </label>
+                            <div>
+                                <p className="text-sm font-bold text-gray-700 mb-2">Locations</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {data.locations.map((location) => (
+                                        <label key={location.initial} className={`text-xs rounded-xl px-3 py-2 border cursor-pointer ${userForm.location_ids.includes(location.initial) ? 'border-primary bg-purple-50 text-primary' : 'border-gray-100 bg-gray-50 text-gray-500'}`}>
+                                            <input type="checkbox" className="hidden" checked={userForm.location_ids.includes(location.initial)} onChange={() => toggleLocation(location.initial)} />
+                                            {location.initial} · {location.name}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
+                                {saving ? 'Saving...' : 'Save User'}
+                            </button>
+                        </form>
+                    )}
                 </div>
             )}
 
             {activeTab === 'appRoles' && (
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                         <div>
                             <h2 className="font-black text-gray-900">Application Role by Location</h2>
-                            <p className="text-xs text-gray-400 mt-1">This controls YoDaily routing. HR job level remains separate.</p>
                         </div>
-                        <button disabled={saving} onClick={syncUserLocations} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                        <div className="flex-1 max-w-sm relative">
+                            <input 
+                                type="text" 
+                                placeholder="Search user or location..." 
+                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                value={userLocationsSearch}
+                                onChange={(e) => { setUserLocationsSearch(e.target.value); setUserLocationsPage(1); }}
+                            />
+                        </div>
+                        <button disabled={saving} onClick={syncUserLocations} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50 whitespace-nowrap">
                             Sync From Users
                         </button>
                     </div>
-                    <div className="divide-y divide-gray-100 max-h-[680px] overflow-y-auto">
-                        {data.user_locations.map((assignment) => (
+                    <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
+                        {userLocationsData.length === 0 ? (
+                            <div className="p-8 text-center text-gray-400 text-sm">No assignments found.</div>
+                        ) : userLocationsData.map((assignment) => (
                             <div key={assignment.id} className="px-6 py-4 grid grid-cols-[1fr_1fr_260px] gap-4 items-center">
                                 <div>
                                     <p className="font-black text-gray-900">{assignment.user_name || assignment.user_id}</p>
@@ -709,6 +823,23 @@ export default function AdminDashboard() {
                             </div>
                         ))}
                     </div>
+                    <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                        <button 
+                            disabled={userLocationsPage <= 1} 
+                            onClick={() => setUserLocationsPage(p => p - 1)}
+                            className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
+                        >
+                            Previous
+                        </button>
+                        <span className="text-xs font-bold text-gray-400">Page {userLocationsPage} of {userLocationsTotalPages}</span>
+                        <button 
+                            disabled={userLocationsPage >= userLocationsTotalPages} 
+                            onClick={() => setUserLocationsPage(p => p + 1)}
+                            className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -723,16 +854,18 @@ export default function AdminDashboard() {
                             <CustomSelect
                                 value={lineForm.leader_id}
                                 placeholder="Choose leader"
-                                options={managersAndSupervisors.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
+                                options={leadersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
                                 onChange={(value) => setLineForm({ ...lineForm, leader_id: value })}
+                                searchable
                             />
                         </Field>
                         <Field label="Subordinate">
                             <CustomSelect
                                 value={lineForm.subordinate_id}
                                 placeholder="Choose subordinate"
-                                options={data.users.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
+                                options={usersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
                                 onChange={(value) => setLineForm({ ...lineForm, subordinate_id: value })}
+                                searchable
                             />
                         </Field>
                         <Field label="Status">
@@ -746,22 +879,44 @@ export default function AdminDashboard() {
                                 onChange={(value) => setLineForm({ ...lineForm, status: value as 'active' | 'inactive' })}
                             />
                         </Field>
+                        <p className="text-xs text-gray-400 mt-2">Note: To find subordinates, please make sure to use the Users search first if they are not on the first page.</p>
                         <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
                             Save Relation
                         </button>
                     </form>
 
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100">
-                            <h2 className="font-black text-gray-900">Current Reporting Lines</h2>
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 bg-purple-50 flex items-center gap-4">
+                            <div className="flex-1">
+                                <h2 className="font-black text-gray-900 mb-2">Filter Subordinates by Leader</h2>
+                                <CustomSelect
+                                    value={selectedLeaderId}
+                                    placeholder="Select a leader to view their reporting lines..."
+                                    options={leadersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
+                                    onChange={(value) => setSelectedLeaderId(value)}
+                                    searchable
+                                />
+                            </div>
+                            <div className="flex-1 self-end relative">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search subordinate..." 
+                                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                    value={hierarchySearch}
+                                    onChange={(e) => setHierarchySearch(e.target.value)}
+                                />
+                            </div>
                         </div>
-                        <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
-                            {data.reporting_lines.map((line) => (
-                                <div key={line.id} className="px-6 py-4 flex items-center justify-between">
+                        <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
+                            {!selectedLeaderId ? (
+                                <div className="p-8 text-center text-gray-400 text-sm">Please select a leader above to view their subordinates.</div>
+                            ) : reportingLinesData.length === 0 ? (
+                                <div className="p-8 text-center text-gray-400 text-sm">No subordinates found for this leader.</div>
+                            ) : reportingLinesData.filter(line => (line.subordinate_name || line.subordinate_id).toLowerCase().includes(hierarchySearch.toLowerCase())).map((line) => (
+                                <div key={line.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition">
                                     <div>
-                                        <p className="font-black text-gray-900">{line.leader_name || line.leader_id}</p>
-                                        <p className="text-xs text-gray-400">leads</p>
-                                        <p className="font-bold text-gray-700">{line.subordinate_name || line.subordinate_id}</p>
+                                        <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-0.5">Subordinate</p>
+                                        <p className="font-black text-gray-900 text-lg">{line.subordinate_name || line.subordinate_id}</p>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${line.status === 'active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
@@ -780,13 +935,23 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'guides' && (
-                <div className="grid grid-cols-[0.8fr_1.2fr] gap-6">
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100">
-                            <h2 className="font-black text-gray-900">Work Stations</h2>
+                <div className={`grid gap-6 transition-all duration-300 ${isGuideFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+                            <h2 className="font-black text-gray-900 whitespace-nowrap">Work Stations</h2>
+                            <div className="flex-1 max-w-sm relative">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search station..." 
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                    value={guidesSearch}
+                                    onChange={(e) => setGuidesSearch(e.target.value)}
+                                />
+                            </div>
+                            <button onClick={() => { setGuideForm({ id: '', name: '', guideText: '' }); setIsGuideFormOpen(true); }} className="text-sm text-primary font-bold whitespace-nowrap">New Guide</button>
                         </div>
-                        <div className="divide-y divide-gray-100">
-                            {data.work_stations.map((station) => (
+                        <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
+                            {data.work_stations.filter(station => station.name.toLowerCase().includes(guidesSearch.toLowerCase())).map((station) => (
                                 <button key={station.id} onClick={() => selectGuide(station)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 ${guideForm.id === String(station.id) ? 'bg-purple-50' : ''}`}>
                                     <p className="font-black text-gray-900 capitalize">{station.name}</p>
                                     <p className="text-xs text-gray-400">{station.guide_content.length} guide item(s)</p>
@@ -795,14 +960,15 @@ export default function AdminDashboard() {
                         </div>
                     </div>
 
-                    <form onSubmit={saveGuide} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Crew Guide</p>
-                                <h2 className="text-xl font-black text-gray-900">{guideForm.id ? 'Edit Guide' : 'Create Station Guide'}</h2>
+                    {isGuideFormOpen && (
+                        <form onSubmit={saveGuide} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Crew Guide</p>
+                                    <h2 className="text-xl font-black text-gray-900">{guideForm.id ? 'Edit Guide' : 'Create Station Guide'}</h2>
+                                </div>
+                                <button type="button" onClick={closeGuideForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
                             </div>
-                            <button type="button" onClick={() => setGuideForm({ id: '', name: '', guideText: '' })} className="text-sm text-primary font-bold">New Guide</button>
-                        </div>
                         <Field label="Station Name">
                             <input value={guideForm.name} onChange={(e) => setGuideForm({ ...guideForm, name: e.target.value })} className="input" required />
                         </Field>
@@ -819,19 +985,29 @@ export default function AdminDashboard() {
                             {saving ? 'Saving...' : 'Save Guide'}
                         </button>
                     </form>
+                )}
                 </div>
             )}
 
             {activeTab === 'locations' && (
-                <div className="grid grid-cols-[1fr_1fr] gap-6">
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <h2 className="font-black text-gray-900">Location Master</h2>
-                            <button onClick={resetLocationForm} className="text-sm text-primary font-bold">New Location</button>
+                <div className={`grid gap-6 transition-all duration-300 ${isLocationFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+                            <h2 className="font-black text-gray-900 whitespace-nowrap">Location Master</h2>
+                            <div className="flex-1 max-w-sm relative">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search location..." 
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                    value={locationsSearch}
+                                    onChange={(e) => setLocationsSearch(e.target.value)}
+                                />
+                            </div>
+                            <button onClick={resetLocationForm} className="text-sm text-primary font-bold whitespace-nowrap">New Location</button>
                         </div>
-                        <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
-                            {data.locations.map((location) => (
-                                <button key={location.initial} onClick={() => selectLocation(location)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 ${selectedLocationInitial === location.initial ? 'bg-purple-50' : ''}`}>
+                        <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
+                            {data.locations.filter(loc => loc.name.toLowerCase().includes(locationsSearch.toLowerCase()) || loc.initial.toLowerCase().includes(locationsSearch.toLowerCase()) || String(loc.store_code || '').includes(locationsSearch)).map((location) => (
+                                <button key={location.initial} onClick={() => selectLocation(location)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 transition ${selectedLocationInitial === location.initial ? 'bg-purple-50' : ''}`}>
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <p className="font-black text-gray-900">{location.name}</p>
@@ -846,16 +1022,20 @@ export default function AdminDashboard() {
                         </div>
                     </div>
 
-                    <form onSubmit={saveLocation} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Store Data</p>
-                                <h2 className="text-xl font-black text-gray-900">{selectedLocationInitial ? 'Edit Location' : 'Create Location'}</h2>
+                    {isLocationFormOpen && (
+                        <form onSubmit={saveLocation} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Location Data</p>
+                                    <h2 className="text-xl font-black text-gray-900">{selectedLocationInitial ? 'Edit Location' : 'Create Location'}</h2>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {selectedLocationInitial && (
+                                        <button type="button" onClick={() => deleteLocation(selectedLocationInitial)} className="text-sm font-bold text-red-500">Delete</button>
+                                    )}
+                                    <button type="button" onClick={closeLocationForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
+                                </div>
                             </div>
-                            {selectedLocationInitial && (
-                                <button type="button" onClick={() => deleteLocation(selectedLocationInitial)} className="text-sm font-bold text-red-500">Delete</button>
-                            )}
-                        </div>
                         <Field label="Initial">
                             <input disabled={!!selectedLocationInitial} value={locationForm.initial} onChange={(e) => setLocationForm({ ...locationForm, initial: e.target.value.toUpperCase() })} className="input" required />
                         </Field>
@@ -890,36 +1070,50 @@ export default function AdminDashboard() {
                             {saving ? 'Saving...' : 'Save Location'}
                         </button>
                     </form>
+                    )}
                 </div>
             )}
 
             {activeTab === 'regionals' && (
-                <div className="grid grid-cols-[0.9fr_1.1fr] gap-6">
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <h2 className="font-black text-gray-900">Regional Master</h2>
-                            <button onClick={resetRegionalForm} className="text-sm text-primary font-bold">New Regional</button>
+                <div className={`grid gap-6 transition-all duration-300 ${isRegionalFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+                            <h2 className="font-black text-gray-900 whitespace-nowrap">Regional Master</h2>
+                            <div className="flex-1 max-w-sm relative">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search regional..." 
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                    value={regionalsSearch}
+                                    onChange={(e) => setRegionalsSearch(e.target.value)}
+                                />
+                            </div>
+                            <button onClick={resetRegionalForm} className="text-sm text-primary font-bold whitespace-nowrap">New Regional</button>
                         </div>
-                        <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
-                            {data.regionals.map((regional) => (
-                                <button key={regional.id} onClick={() => selectRegional(regional)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 ${selectedRegionalId === regional.id ? 'bg-purple-50' : ''}`}>
+                        <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
+                            {data.regionals.filter(reg => reg.nama_regional.toLowerCase().includes(regionalsSearch.toLowerCase()) || String(reg.kode_regional).includes(regionalsSearch)).map((regional) => (
+                                <button key={regional.id} onClick={() => selectRegional(regional)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 transition ${selectedRegionalId === regional.id ? 'bg-purple-50' : ''}`}>
                                     <p className="font-black text-gray-900">{regional.nama_regional}</p>
-                                    <p className="text-xs text-gray-400">{regional.kode_regional} - Cabang: {regional.cabang || '-'}</p>
+                                    <p className="text-xs text-gray-400">Kode: {regional.kode_regional} · Cabang: {regional.cabang || '-'}</p>
                                 </button>
                             ))}
                         </div>
                     </div>
 
-                    <form onSubmit={saveRegional} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Regional Data</p>
-                                <h2 className="text-xl font-black text-gray-900">{selectedRegionalId ? 'Edit Regional' : 'Create Regional'}</h2>
+                    {isRegionalFormOpen && (
+                        <form onSubmit={saveRegional} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Regional Data</p>
+                                    <h2 className="text-xl font-black text-gray-900">{selectedRegionalId ? 'Edit Regional' : 'Create Regional'}</h2>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {selectedRegionalId && (
+                                        <button type="button" onClick={() => deleteRegional(selectedRegionalId)} className="text-sm font-bold text-red-500">Delete</button>
+                                    )}
+                                    <button type="button" onClick={closeRegionalForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
+                                </div>
                             </div>
-                            {selectedRegionalId && (
-                                <button type="button" onClick={() => deleteRegional(selectedRegionalId)} className="text-sm font-bold text-red-500">Delete</button>
-                            )}
-                        </div>
                         <Field label="Kode Regional">
                             <input value={regionalForm.kode_regional} onChange={(e) => setRegionalForm({ ...regionalForm, kode_regional: e.target.value })} className="input" required />
                         </Field>
@@ -933,51 +1127,11 @@ export default function AdminDashboard() {
                             {saving ? 'Saving...' : 'Save Regional'}
                         </button>
                     </form>
+                    )}
                 </div>
             )}
 
-            {activeTab === 'roles' && (
-                <div className="grid grid-cols-[0.9fr_1.1fr] gap-6">
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <h2 className="font-black text-gray-900">HR Job Level Master</h2>
-                            <button onClick={resetRoleForm} className="text-sm text-primary font-bold">New Job Level</button>
-                        </div>
-                        <div className="divide-y divide-gray-100">
-                            {data.job_levels.map((role) => (
-                                <button key={role.id} onClick={() => selectRole(role)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 ${selectedRoleId === role.id ? 'bg-purple-50' : ''}`}>
-                                    <p className="font-black text-gray-900">{role.name}</p>
-                                    <p className="text-xs text-gray-400">{role.description || 'No description'}</p>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
 
-                    <form onSubmit={saveRole} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">HR Job Level Data</p>
-                                <h2 className="text-xl font-black text-gray-900">{selectedRoleId ? 'Edit HR Job Level' : 'Create HR Job Level'}</h2>
-                            </div>
-                            {selectedRoleId && (
-                                <button type="button" onClick={() => deleteRole(selectedRoleId)} className="text-sm font-bold text-red-500">Delete</button>
-                            )}
-                        </div>
-                        <Field label="HR Job Level Name">
-                            <input value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} className="input" required />
-                        </Field>
-                        <Field label="Description">
-                            <textarea value={roleForm.description} onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })} className="input min-h-[180px]" />
-                        </Field>
-                        <div className="rounded-2xl bg-yellow-50 border border-yellow-100 p-4 text-xs text-yellow-700">
-                            HR job levels are company data. YoDaily access is controlled from App Roles on user-location assignments.
-                        </div>
-                        <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
-                            {saving ? 'Saving...' : 'Save Role'}
-                        </button>
-                    </form>
-                </div>
-            )}
         </div>
     );
 }
@@ -1000,22 +1154,50 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     );
 }
 
-function CustomSelect({ value, placeholder, options, onChange }: { value: string; placeholder: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void }) {
+function CustomSelect({ value, placeholder, options, onChange, searchable }: { value: string; placeholder: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void; searchable?: boolean }) {
     const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState('');
     const selected = options.find((option) => option.value === value);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (ref.current && !ref.current.contains(event.target as Node)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const filteredOptions = searchable ? options.filter(opt => opt.label.toLowerCase().includes(search.toLowerCase())) : options;
 
     return (
-        <div className="relative">
+        <div className="relative" ref={ref}>
             <button
                 type="button"
-                onClick={() => setOpen((current) => !current)}
-                className="input flex items-center justify-between text-left"
+                onClick={() => { setOpen((current) => !current); setSearch(''); }}
+                className="input flex items-center justify-between text-left gap-4"
             >
-                <span className={selected ? 'text-gray-800' : 'text-gray-400'}>{selected?.label || placeholder}</span>
-                <span className="text-gray-400">⌄</span>
+                <span className={`truncate ${selected ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>{selected?.label || placeholder}</span>
+                <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className="absolute left-0 right-0 z-50 mt-2 max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
+                <div className="absolute left-0 right-0 z-50 mt-2 max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
+                    {searchable && (
+                        <div className="p-2 sticky top-0 bg-white z-10 border-b border-gray-100">
+                            <input 
+                                type="text"
+                                autoFocus
+                                placeholder="Search..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </div>
+                    )}
                     <button
                         type="button"
                         onMouseDown={(event) => {
@@ -1027,7 +1209,9 @@ function CustomSelect({ value, placeholder, options, onChange }: { value: string
                     >
                         {placeholder}
                     </button>
-                    {options.map((option) => (
+                    {filteredOptions.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-xs text-gray-400">No matching options</div>
+                    ) : filteredOptions.map((option) => (
                         <button
                             key={option.value}
                             type="button"
