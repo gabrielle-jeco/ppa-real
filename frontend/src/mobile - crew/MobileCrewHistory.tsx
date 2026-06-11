@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Camera } from 'lucide-react';
 import CrewLayout from './CrewLayout';
+import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 
 interface MobileCrewHistoryProps {
     user: any;
@@ -59,29 +60,22 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
 
 
 
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
-
-    const isFutureDate = (date: Date) => date > today;
+    const isFutureDate = (date: Date) => isAfterTaskWindow(date);
 
     const getAvailableMonths = (year: number) => {
-        if (year === currentYear) {
-            return Array.from({ length: currentMonth + 1 }, (_, i) => i);
-        }
-        return Array.from({ length: 12 }, (_, i) => i);
+        return getAvailableTaskMonths(year);
     };
 
     const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newDate = new Date(selectedDate);
         newDate.setMonth(parseInt(e.target.value));
-        setSelectedDate(newDate);
+        setSelectedDate(clampToTaskWindow(newDate));
     };
 
     const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newDate = new Date(selectedDate);
         newDate.setFullYear(parseInt(e.target.value));
-        setSelectedDate(newDate);
+        setSelectedDate(clampToTaskWindow(newDate));
     };
 
     const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -158,7 +152,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                     onChange={handleYearChange}
                                     className="w-full appearance-none bg-gray-50 border border-transparent hover:border-blue-100 rounded-xl px-3 py-2 text-gray-700 font-bold text-sm cursor-pointer outline-none transition-colors"
                                 >
-                                    {Array.from({ length: currentYear - 2024 + 1 }, (_, i) => 2024 + i).map(year => (
+                                    {getAvailableTaskYears().map(year => (
                                         <option key={year} value={year}>{year}</option>
                                     ))}
                                 </select>

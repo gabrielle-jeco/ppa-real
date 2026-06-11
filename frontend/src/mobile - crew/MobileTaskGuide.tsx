@@ -49,20 +49,20 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
 
     const station = dbGuides.find(g => g.name.toLowerCase() === role.toLowerCase());
 
-    // Normalize DB guides which might be just an array of strings
-    const normalizedDbSteps = station?.guide_content?.map((step: any) => {
-        if (typeof step === 'string') {
-            return { title: 'Instruction', desc: step };
-        }
-        return step;
-    });
+    const guideText = station?.guide_content
+        ?.map((step: any) => {
+            if (typeof step === 'string') return step;
+            return [step?.title, step?.desc].filter(Boolean).join('\n');
+        })
+        .filter(Boolean)
+        .join('\n');
 
     const content = station?.guide_content ? {
         title: `Crew - ${station.name} Guide`,
-        steps: normalizedDbSteps
+        text: guideText || 'No specific guide assigned for this workstation currently.'
     } : {
         title: `Crew - ${role.charAt(0).toUpperCase() + role.slice(1)} Guide`,
-        steps: [{ title: 'Information', desc: 'No specific guide assigned for this workstation currently.' }]
+        text: 'No specific guide assigned for this workstation currently.'
     };
 
     const handleConfirm = async () => {
@@ -110,13 +110,8 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
                                 <h2 className="font-bold text-lg">{content.title}</h2>
                             </div>
 
-                            <div className="space-y-4 text-sm text-gray-600 leading-relaxed">
-                                {content.steps.map((step: any, index: number) => (
-                                    <p key={index}>
-                                        <strong>{index + 1}. {step.title}:</strong><br />
-                                        {step.desc}
-                                    </p>
-                                ))}
+                            <div className="whitespace-pre-wrap text-sm text-gray-600 leading-relaxed">
+                                {content.text}
                             </div>
                         </div>
 

@@ -3,6 +3,7 @@ import { Camera, ChevronDown } from 'lucide-react';
 import TaskPreview from '../general/TaskPreview';
 import ManagerReviewForm from './ManagerReviewForm';
 import { getAttendanceColor as getAttendanceStatusColor, getAttendanceDay } from '../utils/attendanceCalendar';
+import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 
 interface SupervisorDetailProps {
     supervisor: any;
@@ -114,6 +115,8 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
         today.setHours(0, 0, 0, 0);
         return d > today;
     };
+
+    const isUnavailableTaskDate = (date: Date) => isAfterTaskWindow(date);
 
     const getAttendanceColor = (day: Date) => {
         const attendanceDay = getAttendanceDay(stats?.attendance_calendar, day);
@@ -230,12 +233,12 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                             onChange={(event) => {
                                                 const newDate = new Date(selectedDate);
                                                 newDate.setMonth(parseInt(event.target.value));
-                                                setSelectedDate(newDate);
+                                                setSelectedDate(clampToTaskWindow(newDate));
                                             }}
                                             className="w-full appearance-none bg-gray-50 border border-transparent hover:border-primary rounded-xl px-3 py-2 font-bold text-gray-700 text-sm cursor-pointer outline-none transition-colors"
                                         >
                                             {Array.from({ length: 12 }, (_, i) => i)
-                                                .filter((month) => selectedDate.getFullYear() < new Date().getFullYear() || month <= new Date().getMonth())
+                                                .filter((month) => getAvailableTaskMonths(selectedDate.getFullYear()).includes(month))
                                                 .map((month) => (
                                                     <option key={month} value={month}>
                                                         {new Date(0, month).toLocaleString('en-US', { month: 'long' })}
@@ -252,15 +255,11 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                                 const newDate = new Date(selectedDate);
                                                 const year = parseInt(event.target.value);
                                                 newDate.setFullYear(year);
-                                                const today = new Date();
-                                                if (year === today.getFullYear() && newDate.getMonth() > today.getMonth()) {
-                                                    newDate.setMonth(today.getMonth());
-                                                }
-                                                setSelectedDate(newDate);
+                                                setSelectedDate(clampToTaskWindow(newDate));
                                             }}
                                             className="w-full appearance-none bg-gray-50 border border-transparent hover:border-primary rounded-xl px-3 py-2 text-gray-700 font-bold text-sm cursor-pointer outline-none transition-colors"
                                         >
-                                            {Array.from({ length: new Date().getFullYear() - 2024 + 1 }, (_, i) => 2024 + i).map((year) => (
+                                            {getAvailableTaskYears().map((year) => (
                                                 <option key={year} value={year}>{year}</option>
                                             ))}
                                         </select>
@@ -295,7 +294,7 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                         );
                                     }
 
-                                    const isFuture = isFutureDate(day);
+                                    const isFuture = isUnavailableTaskDate(day);
 
                                     return (
                                         <div key={idx} className="flex justify-center">

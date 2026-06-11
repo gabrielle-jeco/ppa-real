@@ -3,6 +3,7 @@ import { Camera, ChevronDown } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileTaskPreview from './MobileTaskPreview';
 import MobileSupervisorTaskDetail from './MobileSupervisorTaskDetail';
+import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 
 interface MobileChecklistProps {
     supervisor: any; // The logged-in supervisor
@@ -13,23 +14,12 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
     const [myTasks, setMyTasks] = useState<any[]>([]);
     const [selectedDate, setSelectedDate] = useState(new Date());
 
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
-
     const isFutureDate = (date: Date) => {
-        const d = new Date(date);
-        d.setHours(0, 0, 0, 0);
-        const t = new Date(today);
-        t.setHours(0, 0, 0, 0);
-        return d > t;
+        return isAfterTaskWindow(date);
     };
 
     const getAvailableMonths = (year: number) => {
-        if (year === currentYear) {
-            return Array.from({ length: currentMonth + 1 }, (_, i) => i);
-        }
-        return Array.from({ length: 12 }, (_, i) => i);
+        return getAvailableTaskMonths(year);
     };
 
     // Upload & Detail State
@@ -75,13 +65,13 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
     const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newDate = new Date(selectedDate);
         newDate.setMonth(parseInt(e.target.value));
-        setSelectedDate(newDate);
+        setSelectedDate(clampToTaskWindow(newDate));
     };
 
     const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newDate = new Date(selectedDate);
         newDate.setFullYear(parseInt(e.target.value));
-        setSelectedDate(newDate);
+        setSelectedDate(clampToTaskWindow(newDate));
     };
 
     const getDaysInMonth = () => {
@@ -166,7 +156,7 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                                 onChange={handleYearChange}
                                 className="w-full appearance-none bg-gray-50 border border-transparent hover:border-blue-100 rounded-xl px-3 py-2 text-gray-700 font-bold text-sm cursor-pointer outline-none transition-colors"
                             >
-                                {Array.from({ length: new Date().getFullYear() - 2024 + 1 }, (_, i) => 2024 + i).map(year => (
+                                {getAvailableTaskYears().map(year => (
                                     <option key={year} value={year}>{year}</option>
                                 ))}
                             </select>

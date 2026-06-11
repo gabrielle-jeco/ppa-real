@@ -8,7 +8,13 @@ interface MobileCrewEvaluationProps {
     onBack: () => void;
 }
 
-const CRITERIA = [
+type Criterion = {
+    id: string;
+    label: string;
+    desc: string;
+};
+
+const FALLBACK_CRITERIA: Criterion[] = [
     {
         id: 'self_development',
         label: 'Pengembangan Diri',
@@ -25,6 +31,8 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [evaluationData, setEvaluationData] = useState<any>(null); // To store checked evaluation
     const [loading, setLoading] = useState(true);
+    const [criteria, setCriteria] = useState<Criterion[]>(FALLBACK_CRITERIA);
+    const [evaluationSubtitle, setEvaluationSubtitle] = useState('SIKAP KEPRIBADIAN');
     const [scores, setScores] = useState<Record<string, number>>({});
     const [submitLoading, setSubmitLoading] = useState(false);
     const [showQuestionnaire, setShowQuestionnaire] = useState(false);
@@ -100,6 +108,35 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
     }, [selectedDate, crew.id]);
 
     useEffect(() => {
+        const fetchEvaluationMaster = async () => {
+            try {
+                const token = localStorage.getItem('auth_token');
+                const response = await fetch('/api/evaluation-master/active', {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: 'application/json',
+                    },
+                });
+                if (!response.ok) return;
+
+                const payload = await response.json();
+                if (Array.isArray(payload.criteria) && payload.criteria.length > 0) {
+                    setEvaluationSubtitle(payload.subtitle || 'SIKAP KEPRIBADIAN');
+                    setCriteria(payload.criteria.map((item: any) => ({
+                        id: item.key || `evaluation_${item.id}`,
+                        label: item.label || item.question,
+                        desc: item.desc || (item.answers || []).map((answer: string, index: number) => `${index + 1}. ${answer}`).join('\n'),
+                    })));
+                }
+            } catch (error) {
+                console.warn('Using fallback evaluation master.', error);
+            }
+        };
+
+        fetchEvaluationMaster();
+    }, []);
+
+    useEffect(() => {
         setShowQuestionnaire(false);
         setScores({});
     }, [selectedDate, crew.id]);
@@ -109,7 +146,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
     };
 
     const handleSubmit = async () => {
-        if (Object.keys(scores).length < CRITERIA.length) {
+        if (Object.keys(scores).length < criteria.length) {
             alert("Please score all criteria.");
             return;
         }
@@ -117,7 +154,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
         setSubmitLoading(true);
         try {
             const token = localStorage.getItem('auth_token');
-            const totalScore = Object.values(scores).reduce((a, b) => a + b, 0) / CRITERIA.length * 20; // Scale to 100? Or just raw sum? 
+            const totalScore = Object.values(scores).reduce((a, b) => a + b, 0) / criteria.length * 20; // Scale to 100? Or just raw sum? 
             // In Desktop it was: / CRITERIA.length * 20 (Average * 20? If 5/5 -> 1 * 20 = 20? Wait. 5 is max. 5 * 20 = 100. Correct.)
 
             const dateStr = selectedDate.toLocaleDateString('en-CA');
@@ -323,9 +360,9 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                     ) : (
                         // === QUESTIONNAIRE VIEW ===
                         <div className="space-y-6">
-                            <h3 className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-2">SIKAP KEPRIBADIAN</h3>
+                            <h3 className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-2">{evaluationSubtitle}</h3>
 
-                            {CRITERIA.map((criterion, idx) => (
+                            {criteria.map((criterion, idx) => (
                                 <div key={criterion.id}>
                                     <p className="text-sm font-bold text-gray-700 mb-3">{String.fromCharCode(97 + idx)}. {criterion.label}</p>
 

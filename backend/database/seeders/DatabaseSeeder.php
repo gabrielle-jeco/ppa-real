@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\UserLocation;
 use App\Models\ReportingLine;
 use App\Models\Role;
+use App\Models\AppRole;
 
 class DatabaseSeeder extends Seeder
 {
@@ -23,8 +24,28 @@ class DatabaseSeeder extends Seeder
             ['name' => 'superadmin'],
             ['description' => 'System administrator for CMS and master data']
         );
-        $adminRole = Role::firstOrCreate(['name' => 'admin']);
-        $userRole = Role::firstOrCreate(['name' => 'user']);
+        $adminRole = Role::updateOrCreate(
+            ['name' => 'admin'],
+            [
+                'description' => 'Full CMS administrator',
+                'permissions' => ['users_locations', 'reporting_lines', 'locations', 'regionals', 'evaluation_masters', 'role_management'],
+            ]
+        );
+        $userRole = Role::updateOrCreate(
+            ['name' => 'user'],
+            [
+                'description' => 'Operational app user',
+                'permissions' => [],
+            ]
+        );
+        foreach ([
+            ['name' => 'sc', 'description' => 'Service crew'],
+            ['name' => 'supervisor', 'description' => 'Supervisor'],
+            ['name' => 'manager', 'description' => 'Store manager'],
+            ['name' => 'regional_manager', 'description' => 'Regional manager'],
+        ] as $appRole) {
+            AppRole::updateOrCreate(['name' => $appRole['name']], [...$appRole, 'active' => true]);
+        }
 
         WorkStation::create(['name' => 'cashier', 'guide_content' => ['Check register', 'Greet customers']]);
         WorkStation::create(['name' => 'supermarket', 'guide_content' => ['Stock shelves', 'Check expiry dates']]);
