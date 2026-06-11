@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\JobLevel;
+use App\Models\AppRole;
+use App\Models\EvaluationMaster;
 use App\Models\Location;
 use App\Models\Regional;
 use App\Models\ReportingLine;
@@ -18,7 +20,14 @@ use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
-    private const APP_JOB_LEVELS = ['sc', 'supervisor', 'manager', 'regional_manager'];
+    private const DEFAULT_APP_JOB_LEVELS = ['sc', 'supervisor', 'manager', 'regional_manager'];
+    private const CMS_PERMISSIONS = [
+        'users_locations' => 'User & Location',
+        'reporting_lines' => 'Reporting Lines',
+        'locations' => 'Location',
+        'regionals' => 'Region Master',
+        'evaluation_masters' => 'Evaluation Master',
+    ];
 
     public function overview()
     {
@@ -40,8 +49,13 @@ class AdminController extends Controller
                 'user_locations' => UserLocation::count(),
                 'regionals' => Regional::count(),
                 'account_roles' => Role::count(),
+                'app_roles' => AppRole::count(),
+                'evaluation_masters' => EvaluationMaster::count(),
             ],
-            'roles' => Role::orderBy('name')->get(['id', 'name']),
+            'roles' => Role::orderBy('name')->get()->map(fn(Role $role) => $this->formatRole($role)),
+            'cms_permissions' => collect(self::CMS_PERMISSIONS)->map(fn($label, $key) => ['key' => $key, 'label' => $label])->values(),
+            'current_account_role' => Auth::user()?->accountRole?->name,
+            'current_permissions' => Auth::user()?->accountRole?->permissions ?: [],
             'job_levels' => JobLevel::orderBy('name')->get(['id', 'name', 'description']),
             'locations' => Location::orderBy('name')->get([
                 'initial',
@@ -55,14 +69,16 @@ class AdminController extends Controller
                 'type_store',
             ]),
             'work_stations' => $workStations,
-            'app_job_levels' => self::APP_JOB_LEVELS,
+            'app_roles' => AppRole::orderBy('name')->get()->map(fn(AppRole $role) => $this->formatAppRole($role)),
+            'app_job_levels' => $this->appJobLevelNames(),
             'regionals' => Regional::orderBy('kode_regional')->get(),
+            'evaluation_masters' => EvaluationMaster::orderBy('sort_order')->orderBy('id')->get()->map(fn(EvaluationMaster $master) => $this->formatEvaluationMaster($master)),
         ]);
     }
 
     public function getUsers(Request $request)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('users_locations');
 
         $query = User::with(['accountRole', 'jobLevel', 'locations', 'leaderLines.leader', 'subordinateLines.subordinate'])
             ->orderBy('name');
@@ -73,6 +89,10 @@ class AdminController extends Controller
                 $q->where('name', 'like', $searchTerm)
                   ->orWhere('username', 'like', $searchTerm);
             });
+        }
+
+        if ($request->filled('store')) {
+            $query->whereHas('locations', fn($q) => $q->where('locations.initial', $request->query('store')));
         }
 
         $paginator = $query->paginate(50);
@@ -86,19 +106,25 @@ class AdminController extends Controller
 
     public function getUserLocations(Request $request)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('users_locations');
 
         $query = UserLocation::with(['user', 'location']);
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $search = strtolower($request->query('search'));
-            $query->whereHas('user', function ($q) use ($search) {
-                $q->whereRaw('LOWER(name) like ?', ["%{$search}%"])
-                  ->orWhereRaw('LOWER(username) like ?', ["%{$search}%"]);
-            })->orWhereHas('location', function ($q) use ($search) {
-                $q->whereRaw('LOWER(name) like ?', ["%{$search}%"])
-                  ->orWhereRaw('LOWER(initial) like ?', ["%{$search}%"]);
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('user', function ($userQuery) use ($search) {
+                    $userQuery->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                        ->orWhereRaw('LOWER(username) like ?', ["%{$search}%"]);
+                })->orWhereHas('location', function ($locationQuery) use ($search) {
+                    $locationQuery->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                        ->orWhereRaw('LOWER(initial) like ?', ["%{$search}%"]);
+                });
             });
+        }
+
+        if ($request->filled('store')) {
+            $query->where('location_id', $request->query('store'));
         }
 
         $paginator = $query->orderBy('user_id')
@@ -114,14 +140,23 @@ class AdminController extends Controller
 
     public function getLeaders(Request $request)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('reporting_lines');
         
-        $leaderUsernames = UserLocation::whereIn('job_level', ['supervisor', 'manager', 'regional_manager'])->pluck('user_id');
+        $leaderRoles = $this->appJobLevelNames()->reject(fn($role) => $role === 'sc')->values();
+        $leaderUsernames = UserLocation::whereIn('job_level', $leaderRoles)->pluck('user_id');
         
-        $leaders = User::whereIn('username', $leaderUsernames)
-            ->orWhereHas('accountRole', function($q) {
-                $q->where('name', 'admin');
-            })
+        $leaders = User::where(function ($query) use ($leaderUsernames) {
+            $query->whereIn('username', $leaderUsernames)
+                ->orWhereHas('accountRole', function($q) {
+                    $q->where('name', 'admin');
+                });
+            });
+
+        if ($request->filled('store')) {
+            $leaders->whereHas('locations', fn($q) => $q->where('locations.initial', $request->query('store')));
+        }
+
+        $leaders = $leaders
             ->orderBy('name')
             ->get(['username', 'name']);
             
@@ -139,7 +174,7 @@ class AdminController extends Controller
 
     public function getReportingLines(Request $request)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('reporting_lines');
         
         $query = ReportingLine::with(['leader.jobLevel', 'subordinate.jobLevel'])
             ->orderBy('leader_id')
@@ -147,6 +182,14 @@ class AdminController extends Controller
             
         if ($request->has('leader_id') && $request->leader_id !== '') {
             $query->where('leader_id', $request->leader_id);
+        }
+
+        if ($request->filled('store')) {
+            $store = $request->query('store');
+            $query->where(function ($q) use ($store) {
+                $q->whereHas('leader.locations', fn($locationQuery) => $locationQuery->where('locations.initial', $store))
+                    ->orWhereHas('subordinate.locations', fn($locationQuery) => $locationQuery->where('locations.initial', $store));
+            });
         }
 
         $lines = $query->get()->map(function (ReportingLine $line) {
@@ -158,7 +201,7 @@ class AdminController extends Controller
 
     public function storeUser(Request $request)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('users_locations');
 
         $data = $request->validate([
             'username' => ['required', 'string', 'max:255', 'unique:users,username'],
@@ -191,7 +234,7 @@ class AdminController extends Controller
 
     public function storeLocation(Request $request)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('locations');
 
         $data = $request->validate([
             'initial' => ['required', 'string', 'max:255', 'unique:locations,initial'],
@@ -215,7 +258,7 @@ class AdminController extends Controller
 
     public function updateLocation(Request $request, string $initial)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('locations');
 
         $location = Location::where('initial', $initial)->firstOrFail();
 
@@ -240,7 +283,7 @@ class AdminController extends Controller
 
     public function destroyLocation(string $initial)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('locations');
 
         $location = Location::where('initial', $initial)->firstOrFail();
         if (UserLocation::where('location_id', $location->initial)->exists()) {
@@ -258,7 +301,7 @@ class AdminController extends Controller
 
     public function updateUser(Request $request, string $username)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('users_locations');
 
         $user = User::where('username', $username)->firstOrFail();
 
@@ -295,7 +338,7 @@ class AdminController extends Controller
 
     public function storeReportingLine(Request $request)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('reporting_lines');
 
         $data = $request->validate([
             'leader_id' => ['required', 'exists:users,username', 'different:subordinate_id'],
@@ -318,7 +361,7 @@ class AdminController extends Controller
 
     public function updateReportingLine(Request $request, ReportingLine $reportingLine)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('reporting_lines');
 
         $data = $request->validate([
             'leader_id' => ['required', 'exists:users,username', 'different:subordinate_id'],
@@ -335,7 +378,7 @@ class AdminController extends Controller
 
     public function destroyReportingLine(ReportingLine $reportingLine)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('reporting_lines');
 
         $reportingLine->delete();
 
@@ -380,10 +423,10 @@ class AdminController extends Controller
 
     public function updateUserLocation(Request $request, UserLocation $userLocation)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('users_locations');
 
         $data = $request->validate([
-            'job_level' => ['required', Rule::in(self::APP_JOB_LEVELS)],
+            'job_level' => ['required', Rule::exists('app_roles', 'name')->where('active', true)],
         ]);
 
         $userLocation->update([
@@ -393,9 +436,27 @@ class AdminController extends Controller
         return response()->json($this->formatUserLocation($userLocation->fresh(['user', 'location'])));
     }
 
+    public function storeUserLocation(Request $request)
+    {
+        $this->authorizePermission('users_locations');
+
+        $data = $request->validate([
+            'user_id' => ['required', 'exists:users,username'],
+            'location_id' => ['required', 'exists:locations,initial'],
+            'job_level' => ['required', Rule::exists('app_roles', 'name')->where('active', true)],
+        ]);
+
+        $assignment = UserLocation::updateOrCreate(
+            ['user_id' => $data['user_id'], 'location_id' => $data['location_id']],
+            ['job_level' => strtolower(trim($data['job_level']))]
+        );
+
+        return response()->json($this->formatUserLocation($assignment->fresh(['user', 'location'])), $assignment->wasRecentlyCreated ? 201 : 200);
+    }
+
     public function syncUserLocationsFromUsers()
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('users_locations');
 
         $created = 0;
         $users = User::whereNotNull('initial_store')->get();
@@ -421,7 +482,7 @@ class AdminController extends Controller
 
     public function storeRegional(Request $request)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('regionals');
 
         $data = $request->validate([
             'kode_regional' => ['required', 'string', 'max:255', 'unique:regional,kode_regional'],
@@ -434,7 +495,7 @@ class AdminController extends Controller
 
     public function updateRegional(Request $request, Regional $regional)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('regionals');
 
         $data = $request->validate([
             'kode_regional' => ['required', 'string', 'max:255', Rule::unique('regional', 'kode_regional')->ignore($regional->id)],
@@ -449,15 +510,155 @@ class AdminController extends Controller
 
     public function destroyRegional(Regional $regional)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('regionals');
         $regional->delete();
 
         return response()->json(['message' => 'Regional deleted.']);
     }
 
+    public function activeEvaluationMaster()
+    {
+        $masters = EvaluationMaster::where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get()
+            ->map(fn(EvaluationMaster $master) => $this->formatEvaluationMaster($master));
+
+        return response()->json([
+            'title' => $masters->first()['title'] ?? 'MONTHLY EVALUATION',
+            'subtitle' => $masters->first()['subtitle'] ?? 'SIKAP KEPRIBADIAN',
+            'criteria' => $masters,
+        ]);
+    }
+
+    public function storeEvaluationMaster(Request $request)
+    {
+        $this->authorizePermission('evaluation_masters');
+
+        $master = EvaluationMaster::create($this->validatedEvaluationMaster($request));
+
+        return response()->json($this->formatEvaluationMaster($master), 201);
+    }
+
+    public function updateEvaluationMaster(Request $request, EvaluationMaster $evaluationMaster)
+    {
+        $this->authorizePermission('evaluation_masters');
+
+        $evaluationMaster->update($this->validatedEvaluationMaster($request));
+
+        return response()->json($this->formatEvaluationMaster($evaluationMaster->fresh()));
+    }
+
+    public function destroyEvaluationMaster(EvaluationMaster $evaluationMaster)
+    {
+        $this->authorizePermission('evaluation_masters');
+
+        $evaluationMaster->delete();
+
+        return response()->json(['message' => 'Evaluation item deleted.']);
+    }
+
+    public function storeAppRole(Request $request)
+    {
+        $this->authorizeRoleManagement();
+
+        $role = AppRole::create($this->validatedAppRole($request));
+
+        return response()->json($this->formatAppRole($role), 201);
+    }
+
+    public function updateAppRole(Request $request, AppRole $appRole)
+    {
+        $this->authorizeRoleManagement();
+
+        $appRole->update($this->validatedAppRole($request, $appRole));
+
+        return response()->json($this->formatAppRole($appRole->fresh()));
+    }
+
+    public function destroyAppRole(AppRole $appRole)
+    {
+        $this->authorizeRoleManagement();
+
+        if (UserLocation::where('job_level', $appRole->name)->exists()) {
+            throw ValidationException::withMessages([
+                'app_role' => ['This app role is still assigned to one or more users. Move those users first.'],
+            ]);
+        }
+
+        $appRole->delete();
+
+        return response()->json(['message' => 'App role deleted.']);
+    }
+
+    public function storeRole(Request $request)
+    {
+        $this->authorizeRoleManagement();
+
+        $data = $this->validatedRole($request);
+        $data['name'] = strtolower(trim($data['name']));
+        if ($data['name'] === 'admin') {
+            $data['permissions'] = array_keys(self::CMS_PERMISSIONS + ['role_management' => 'Role Management']);
+        }
+
+        $role = Role::create($data);
+
+        return response()->json($this->formatRole($role), 201);
+    }
+
+    public function updateRole(Request $request, Role $role)
+    {
+        $this->authorizeRoleManagement();
+
+        $data = $this->validatedRole($request, $role);
+        $data['name'] = strtolower(trim($data['name']));
+        if ($data['name'] === 'admin') {
+            $data['permissions'] = array_keys(self::CMS_PERMISSIONS + ['role_management' => 'Role Management']);
+        }
+
+        $role->update($data);
+
+        return response()->json($this->formatRole($role->fresh()));
+    }
+
+    public function destroyRole(Role $role)
+    {
+        $this->authorizeRoleManagement();
+
+        if (in_array(strtolower($role->name), ['admin', 'user'], true)) {
+            throw ValidationException::withMessages([
+                'role' => ['Default roles cannot be deleted.'],
+            ]);
+        }
+
+        if ($role->users()->exists()) {
+            throw ValidationException::withMessages([
+                'role' => ['This role is still assigned to one or more users. Move those users first.'],
+            ]);
+        }
+
+        $role->delete();
+
+        return response()->json(['message' => 'Role deleted.']);
+    }
+
     private function authorizeSuperadmin(): void
     {
         abort_if(Auth::user()?->role_type !== 'superadmin', 403, 'Unauthorized');
+    }
+
+    private function authorizePermission(string $permission): void
+    {
+        $this->authorizeSuperadmin();
+
+        abort_if(!Auth::user()?->accountRole?->hasPermission($permission), 403, 'Unauthorized');
+    }
+
+    private function authorizeRoleManagement(): void
+    {
+        $this->authorizeSuperadmin();
+
+        abort_if(strtolower((string) Auth::user()?->accountRole?->name) !== 'admin', 403, 'Unauthorized');
     }
 
     private function syncUserLocations(User $user, array $locationIds): void
@@ -505,6 +706,85 @@ class AdminController extends Controller
         ];
     }
 
+    private function validatedRole(Request $request, ?Role $role = null): array
+    {
+        $data = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('roles', 'name')->ignore($role?->id),
+            ],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'permissions' => ['array'],
+            'permissions.*' => [Rule::in(array_keys(self::CMS_PERMISSIONS))],
+        ]);
+
+        return [
+            'name' => $data['name'],
+            'description' => $data['description'] ?? null,
+            'permissions' => array_values(array_unique($data['permissions'] ?? [])),
+        ];
+    }
+
+    private function validatedAppRole(Request $request, ?AppRole $appRole = null): array
+    {
+        $request->merge([
+            'name' => strtolower(str_replace(' ', '_', trim((string) $request->input('name')))),
+        ]);
+
+        $data = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^[a-z0-9_]+$/',
+                Rule::unique('app_roles', 'name')->ignore($appRole?->id),
+            ],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'active' => ['boolean'],
+        ]);
+
+        return [
+            'name' => $data['name'],
+            'description' => $data['description'] ?? null,
+            'active' => $data['active'] ?? true,
+        ];
+    }
+
+    private function formatRole(Role $role): array
+    {
+        return [
+            'id' => $role->id,
+            'name' => $role->name,
+            'description' => $role->description,
+            'permissions' => $role->permissions ?: [],
+            'users_count' => $role->users()->count(),
+        ];
+    }
+
+    private function formatAppRole(AppRole $role): array
+    {
+        return [
+            'id' => $role->id,
+            'name' => $role->name,
+            'description' => $role->description,
+            'active' => (bool) $role->active,
+            'users_count' => UserLocation::where('job_level', $role->name)->count(),
+        ];
+    }
+
+    private function appJobLevelNames()
+    {
+        $roles = AppRole::where('active', true)->orderBy('name')->pluck('name');
+
+        if ($roles->isEmpty()) {
+            return collect(self::DEFAULT_APP_JOB_LEVELS);
+        }
+
+        return $roles;
+    }
+
     private function formatUserLocation(UserLocation $assignment): array
     {
         return [
@@ -544,6 +824,44 @@ class AdminController extends Controller
             'subordinate_id' => $line->subordinate_id,
             'subordinate_name' => $line->subordinate?->name,
             'status' => $line->status,
+        ];
+    }
+
+    private function validatedEvaluationMaster(Request $request): array
+    {
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'subtitle' => ['required', 'string', 'max:255'],
+            'question' => ['required', 'string', 'max:255'],
+            'answers' => ['required', 'array', 'size:5'],
+            'answers.*' => ['required', 'string', 'max:1000'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+            'active' => ['boolean'],
+        ]);
+
+        return [
+            'title' => $data['title'],
+            'subtitle' => $data['subtitle'],
+            'question' => $data['question'],
+            'answers' => array_values($data['answers']),
+            'sort_order' => $data['sort_order'] ?? 0,
+            'active' => $data['active'] ?? true,
+        ];
+    }
+
+    private function formatEvaluationMaster(EvaluationMaster $master): array
+    {
+        return [
+            'id' => $master->id,
+            'key' => 'evaluation_' . $master->id,
+            'title' => $master->title,
+            'subtitle' => $master->subtitle,
+            'question' => $master->question,
+            'label' => $master->question,
+            'answers' => $master->answers ?: [],
+            'desc' => collect($master->answers ?: [])->map(fn($answer, $index) => ($index + 1) . '. ' . $answer)->implode("\n"),
+            'sort_order' => $master->sort_order,
+            'active' => (bool) $master->active,
         ];
     }
 

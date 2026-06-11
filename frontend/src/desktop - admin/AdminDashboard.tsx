@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { BookOpenCheck, ChevronDown, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
-type Tab = 'users' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals';
+type Tab = 'users' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations';
 
 type JobLevel = {
     id: number;
@@ -12,6 +12,17 @@ type JobLevel = {
 type AccountRole = {
     id: number;
     name: string;
+    description?: string | null;
+    permissions: string[];
+    users_count?: number;
+};
+
+type AppRole = {
+    id: number;
+    name: string;
+    description?: string | null;
+    active: boolean;
+    users_count?: number;
 };
 
 type Location = {
@@ -73,6 +84,17 @@ type WorkStation = {
     guide_content: string[];
 };
 
+type EvaluationMaster = {
+    id: number;
+    key: string;
+    title: string;
+    subtitle: string;
+    question: string;
+    answers: string[];
+    sort_order: number;
+    active: boolean;
+};
+
 type CmsData = {
     stats: {
         users: number;
@@ -83,13 +105,20 @@ type CmsData = {
         user_locations: number;
         regionals: number;
         account_roles: number;
+        app_roles: number;
+        evaluation_masters: number;
     };
-    roles: Array<{ id: number; name: string }>;
+    roles: AccountRole[];
+    app_roles: AppRole[];
+    cms_permissions: Array<{ key: string; label: string }>;
+    current_account_role?: string | null;
+    current_permissions: string[];
     job_levels: JobLevel[];
     locations: Location[];
     work_stations: WorkStation[];
     app_job_levels: string[];
     regionals: Regional[];
+    evaluation_masters: EvaluationMaster[];
 };
 
 const emptyUserForm = {
@@ -102,6 +131,30 @@ const emptyUserForm = {
     job_level_id: '',
     active: true,
     location_ids: [] as string[],
+};
+
+const emptyEvaluationForm = {
+    id: '',
+    title: 'MONTHLY EVALUATION',
+    subtitle: 'SIKAP KEPRIBADIAN',
+    question: '',
+    answers: ['', '', '', '', ''],
+    sort_order: '',
+    active: true,
+};
+
+const emptyRoleForm = {
+    id: '',
+    name: '',
+    description: '',
+    permissions: [] as string[],
+};
+
+const emptyAppRoleForm = {
+    id: '',
+    name: '',
+    description: '',
+    active: true,
 };
 
 export default function AdminDashboard() {
@@ -121,6 +174,7 @@ export default function AdminDashboard() {
     const [userLocationsTotalPages, setUserLocationsTotalPages] = useState(1);
     const [userLocationsSearch, setUserLocationsSearch] = useState('');
 
+    const [storeFilter, setStoreFilter] = useState('');
     const [locationsSearch, setLocationsSearch] = useState('');
     const [regionalsSearch, setRegionalsSearch] = useState('');
     const [guidesSearch, setGuidesSearch] = useState('');
@@ -134,6 +188,7 @@ export default function AdminDashboard() {
     const [userForm, setUserForm] = useState(emptyUserForm);
     const [lineForm, setLineForm] = useState({ leader_id: '', subordinate_id: '', status: 'active' as 'active' | 'inactive' });
     const [guideForm, setGuideForm] = useState({ id: '', name: '', guideText: '' });
+    const [evaluationForm, setEvaluationForm] = useState(emptyEvaluationForm);
     const [selectedLocationInitial, setSelectedLocationInitial] = useState<string | null>(null);
     const [locationForm, setLocationForm] = useState({
         initial: '',
@@ -148,9 +203,14 @@ export default function AdminDashboard() {
     });
     const [selectedRegionalId, setSelectedRegionalId] = useState<number | null>(null);
     const [regionalForm, setRegionalForm] = useState({ kode_regional: '', nama_regional: '', cabang: '' });
+    const [roleForm, setRoleForm] = useState(emptyRoleForm);
+    const [appRoleForm, setAppRoleForm] = useState(emptyAppRoleForm);
 
     const [isUserFormOpen, setIsUserFormOpen] = useState(false);
+    const [isRoleFormOpen, setIsRoleFormOpen] = useState(false);
+    const [isAppRoleFormOpen, setIsAppRoleFormOpen] = useState(false);
     const [isGuideFormOpen, setIsGuideFormOpen] = useState(false);
+    const [isEvaluationFormOpen, setIsEvaluationFormOpen] = useState(false);
     const [isLocationFormOpen, setIsLocationFormOpen] = useState(false);
     const [isRegionalFormOpen, setIsRegionalFormOpen] = useState(false);
 
@@ -161,12 +221,16 @@ export default function AdminDashboard() {
     useEffect(() => {
         if (!data) return;
         if (activeTab === 'users') fetchUsers();
-        else if (activeTab === 'appRoles') fetchUserLocations();
+        else if (activeTab === 'appRoles') {
+            fetchUserLocations();
+            fetchUsers();
+        }
         else if (activeTab === 'hierarchy') {
+            fetchUsers();
             fetchLeaders();
             fetchReportingLines();
         }
-    }, [activeTab, usersPage, usersSearch, userLocationsPage, userLocationsSearch, selectedLeaderId, data?.stats]);
+    }, [activeTab, usersPage, usersSearch, userLocationsPage, userLocationsSearch, selectedLeaderId, storeFilter, data?.stats]);
 
     const fetchOverview = async () => {
         setLoading(true);
@@ -185,6 +249,7 @@ export default function AdminDashboard() {
         try {
             const query = new URLSearchParams({ page: String(usersPage) });
             if (usersSearch) query.append('search', usersSearch);
+            if (storeFilter) query.append('store', storeFilter);
             const res = await requestJson(`/api/cms/users?${query.toString()}`, 'GET');
             setUsersData(res.data || []);
             setUsersTotalPages(res.last_page || 1);
@@ -197,6 +262,7 @@ export default function AdminDashboard() {
         try {
             const query = new URLSearchParams({ page: String(userLocationsPage) });
             if (userLocationsSearch) query.append('search', userLocationsSearch);
+            if (storeFilter) query.append('store', storeFilter);
             const res = await requestJson(`/api/cms/user-locations?${query.toString()}`, 'GET');
             setUserLocationsData(res.data || []);
             setUserLocationsTotalPages(res.last_page || 1);
@@ -207,7 +273,9 @@ export default function AdminDashboard() {
 
     const fetchLeaders = async () => {
         try {
-            const res = await requestJson('/api/cms/leaders', 'GET');
+            const query = new URLSearchParams();
+            if (storeFilter) query.append('store', storeFilter);
+            const res = await requestJson(`/api/cms/leaders?${query.toString()}`, 'GET');
             setLeadersData(res || []);
         } catch (error: any) {
             setMessage(error.message || 'Failed to load leaders.');
@@ -216,8 +284,10 @@ export default function AdminDashboard() {
 
     const fetchReportingLines = async () => {
         try {
-            const query = selectedLeaderId ? `?leader_id=${selectedLeaderId}` : '';
-            const res = await requestJson(`/api/cms/reporting-lines${query}`, 'GET');
+            const query = new URLSearchParams();
+            if (selectedLeaderId) query.append('leader_id', selectedLeaderId);
+            if (storeFilter) query.append('store', storeFilter);
+            const res = await requestJson(`/api/cms/reporting-lines?${query.toString()}`, 'GET');
             setReportingLinesData(res || []);
         } catch (error: any) {
             setMessage(error.message || 'Failed to load reporting lines.');
@@ -537,6 +607,219 @@ export default function AdminDashboard() {
         }
     };
 
+    const selectEvaluation = (item: EvaluationMaster) => {
+        setEvaluationForm({
+            id: String(item.id),
+            title: item.title,
+            subtitle: item.subtitle,
+            question: item.question,
+            answers: [...item.answers, '', '', '', '', ''].slice(0, 5),
+            sort_order: String(item.sort_order || ''),
+            active: item.active,
+        });
+        setIsEvaluationFormOpen(true);
+    };
+
+    const resetEvaluationForm = () => {
+        setEvaluationForm({
+            ...emptyEvaluationForm,
+            sort_order: String((data?.evaluation_masters.length || 0) + 1),
+        });
+        setIsEvaluationFormOpen(true);
+    };
+
+    const closeEvaluationForm = () => {
+        setEvaluationForm(emptyEvaluationForm);
+        setIsEvaluationFormOpen(false);
+    };
+
+    const saveEvaluationMaster = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setSaving(true);
+        setMessage('');
+        try {
+            const payload = {
+                title: evaluationForm.title,
+                subtitle: evaluationForm.subtitle,
+                question: evaluationForm.question,
+                answers: evaluationForm.answers,
+                sort_order: evaluationForm.sort_order ? Number(evaluationForm.sort_order) : 0,
+                active: evaluationForm.active,
+            };
+
+            if (evaluationForm.id) {
+                await requestJson(`/api/cms/evaluation-masters/${evaluationForm.id}`, 'PATCH', payload);
+                setMessage('Evaluation master updated.');
+            } else {
+                await requestJson('/api/cms/evaluation-masters', 'POST', payload);
+                setMessage('Evaluation master created.');
+            }
+
+            closeEvaluationForm();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to save evaluation master.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const deleteEvaluationMaster = async (id: string) => {
+        if (!id || !window.confirm('Delete this evaluation item?')) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson(`/api/cms/evaluation-masters/${id}`, 'DELETE');
+            setMessage('Evaluation item deleted.');
+            closeEvaluationForm();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to delete evaluation item.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const selectRole = (role: AccountRole) => {
+        setRoleForm({
+            id: String(role.id),
+            name: role.name,
+            description: role.description || '',
+            permissions: role.permissions || [],
+        });
+        setIsRoleFormOpen(true);
+    };
+
+    const resetRoleForm = () => {
+        setRoleForm(emptyRoleForm);
+        setIsRoleFormOpen(true);
+    };
+
+    const closeRoleForm = () => {
+        setRoleForm(emptyRoleForm);
+        setIsRoleFormOpen(false);
+    };
+
+    const toggleRolePermission = (permission: string) => {
+        setRoleForm((current) => ({
+            ...current,
+            permissions: current.permissions.includes(permission)
+                ? current.permissions.filter((item) => item !== permission)
+                : [...current.permissions, permission],
+        }));
+    };
+
+    const saveRole = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setSaving(true);
+        setMessage('');
+        try {
+            const payload = {
+                name: roleForm.name,
+                description: roleForm.description,
+                permissions: roleForm.permissions,
+            };
+
+            if (roleForm.id) {
+                await requestJson(`/api/cms/roles/${roleForm.id}`, 'PATCH', payload);
+                setMessage('Role updated.');
+            } else {
+                await requestJson('/api/cms/roles', 'POST', payload);
+                setMessage('Role created.');
+            }
+
+            closeRoleForm();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to save role.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const deleteRole = async (id: string) => {
+        if (!id || !window.confirm('Delete this role?')) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson(`/api/cms/roles/${id}`, 'DELETE');
+            setMessage('Role deleted.');
+            closeRoleForm();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to delete role.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const selectAppRole = (role: AppRole) => {
+        setAppRoleForm({
+            id: String(role.id),
+            name: role.name,
+            description: role.description || '',
+            active: role.active,
+        });
+        setIsAppRoleFormOpen(true);
+    };
+
+    const resetAppRoleForm = () => {
+        setAppRoleForm(emptyAppRoleForm);
+        setIsAppRoleFormOpen(true);
+    };
+
+    const closeAppRoleForm = () => {
+        setAppRoleForm(emptyAppRoleForm);
+        setIsAppRoleFormOpen(false);
+    };
+
+    const saveAppRole = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setSaving(true);
+        setMessage('');
+        try {
+            const payload = {
+                name: appRoleForm.name,
+                description: appRoleForm.description,
+                active: appRoleForm.active,
+            };
+
+            if (appRoleForm.id) {
+                await requestJson(`/api/cms/app-roles/${appRoleForm.id}`, 'PATCH', payload);
+                setMessage('App role updated.');
+            } else {
+                await requestJson('/api/cms/app-roles', 'POST', payload);
+                setMessage('App role created.');
+            }
+
+            closeAppRoleForm();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to save app role.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const deleteAppRole = async (id: string) => {
+        if (!id || !window.confirm('Delete this app role? Assigned roles cannot be deleted.')) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson(`/api/cms/app-roles/${id}`, 'DELETE');
+            setMessage('App role deleted.');
+            closeAppRoleForm();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to delete app role.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const selectRegional = (regional: Regional) => {
         setSelectedRegionalId(regional.id);
         setRegionalForm({
@@ -611,6 +894,8 @@ export default function AdminDashboard() {
         );
     }
 
+    const isAdminRole = data.current_account_role === 'admin';
+    const canAccess = (permission: string) => isAdminRole || data.current_permissions.includes(permission);
 
     return (
         <div className="h-full overflow-y-auto px-8 py-8">
@@ -632,7 +917,7 @@ export default function AdminDashboard() {
                     ['Active', data.stats.active_users],
                     ['Locations', data.stats.locations],
                     ['Relations', data.stats.reporting_lines],
-                    ['App Roles', data.stats.user_locations],
+                    ['App Roles', data.stats.app_roles],
                 ].map(([label, value]) => (
                     <div key={label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
                         <p className="text-xs text-gray-400 font-bold uppercase">{label}</p>
@@ -648,19 +933,35 @@ export default function AdminDashboard() {
             )}
 
             <div className="flex gap-3 mb-6">
-                <TabButton active={activeTab === 'users'} icon={<UsersRound size={16} />} label="Users & Locations" onClick={() => setActiveTab('users')} />
-                <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="App Roles" onClick={() => setActiveTab('appRoles')} />
-                <TabButton active={activeTab === 'hierarchy'} icon={<GitBranch size={16} />} label="Reporting Lines" onClick={() => setActiveTab('hierarchy')} />
+                {canAccess('users_locations') && <TabButton active={activeTab === 'users'} icon={<UsersRound size={16} />} label="Users & Locations" onClick={() => setActiveTab('users')} />}
+                {canAccess('users_locations') && <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="App Roles" onClick={() => setActiveTab('appRoles')} />}
+                {canAccess('reporting_lines') && <TabButton active={activeTab === 'hierarchy'} icon={<GitBranch size={16} />} label="Reporting Lines" onClick={() => setActiveTab('hierarchy')} />}
                 <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Crew Guides" onClick={() => setActiveTab('guides')} />
-                <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Location Master" onClick={() => setActiveTab('locations')} />
-                <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Regional Master" onClick={() => setActiveTab('regionals')} />
+                {canAccess('locations') && <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Location Master" onClick={() => setActiveTab('locations')} />}
+                {canAccess('regionals') && <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Regional Master" onClick={() => setActiveTab('regionals')} />}
+                {canAccess('evaluation_masters') && <TabButton active={activeTab === 'evaluations'} icon={<ShieldCheck size={16} />} label="Evaluation Master" onClick={() => setActiveTab('evaluations')} />}
             </div>
 
             {activeTab === 'users' && (
-                <div className={`grid gap-6 transition-all duration-300 ${isUserFormOpen ? 'grid-cols-[1.2fr_0.8fr]' : 'grid-cols-1'}`}>
+                <div className={`grid gap-6 transition-all duration-300 ${
+                    isUserFormOpen && isRoleFormOpen
+                        ? 'grid-cols-[1fr_0.75fr_0.75fr]'
+                        : (isUserFormOpen || isRoleFormOpen)
+                            ? 'grid-cols-[1.2fr_0.8fr]'
+                            : 'grid-cols-1'
+                }`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <h2 className="font-black text-gray-900 whitespace-nowrap">User Master</h2>
+                            <div className="w-64">
+                                <CustomSelect
+                                    value={storeFilter}
+                                    placeholder="Filter Store"
+                                    options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
+                                    onChange={(value) => { setStoreFilter(value); setUsersPage(1); }}
+                                    searchable
+                                />
+                            </div>
                             <div className="flex-1 max-w-md relative">
                                 <input 
                                     type="text" 
@@ -674,6 +975,11 @@ export default function AdminDashboard() {
                                 <UserPlus size={16} />
                                 New User
                             </button>
+                            {isAdminRole && (
+                                <button onClick={resetRoleForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">
+                                    Add Account Role
+                                </button>
+                            )}
                         </div>
                         <div className="divide-y divide-gray-100 max-h-[560px] overflow-y-auto">
                             {usersData.length === 0 ? (
@@ -779,67 +1085,225 @@ export default function AdminDashboard() {
                             </button>
                         </form>
                     )}
+
+                    {isRoleFormOpen && (
+                        <form onSubmit={saveRole} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-5">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Account Role Data</p>
+                                    <h2 className="text-xl font-black text-gray-900">{roleForm.id ? 'Edit Account Role' : 'Create Account Role'}</h2>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {roleForm.id && !['admin', 'user'].includes(roleForm.name.toLowerCase()) && (
+                                        <button type="button" onClick={() => deleteRole(roleForm.id)} className="text-sm font-bold text-red-500">Delete</button>
+                                    )}
+                                    <button type="button" onClick={closeRoleForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
+                                </div>
+                            </div>
+                            <Field label="Role Name">
+                                <input
+                                    value={roleForm.name}
+                                    onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
+                                    className="input"
+                                    disabled={['admin', 'user'].includes(roleForm.name.toLowerCase())}
+                                    required
+                                />
+                            </Field>
+                            <Field label="Description">
+                                <input
+                                    value={roleForm.description}
+                                    onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
+                                    className="input"
+                                    placeholder="Short role description"
+                                />
+                            </Field>
+                            <div>
+                                <p className="text-sm font-bold text-gray-700 mb-3">Permission</p>
+                                <div className="space-y-3">
+                                    {data.cms_permissions.map((permission) => (
+                                        <label key={permission.key} className="flex items-center gap-3 text-sm font-semibold text-gray-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={roleForm.name.toLowerCase() === 'admin' || roleForm.permissions.includes(permission.key)}
+                                                disabled={roleForm.name.toLowerCase() === 'admin'}
+                                                onChange={() => toggleRolePermission(permission.key)}
+                                                className="w-4 h-4"
+                                            />
+                                            {permission.label}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                                <p className="text-sm font-black text-gray-800 mb-3">Existing Account Roles</p>
+                                <div className="space-y-2 max-h-52 overflow-y-auto">
+                                    {data.roles.map((role) => (
+                                        <button
+                                            key={role.id}
+                                            type="button"
+                                            onClick={() => selectRole(role)}
+                                            className={`w-full text-left rounded-xl px-3 py-2 transition ${roleForm.id === String(role.id) ? 'bg-purple-100 text-primary' : 'bg-white hover:bg-purple-50'}`}
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="font-bold text-sm capitalize">{role.name}</span>
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-primary">{role.users_count || 0} user(s)</span>
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-1">{role.description || '-'}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <button disabled={saving} className="bg-primary text-white rounded-xl py-3 px-8 font-bold shadow-lg shadow-purple-100 disabled:opacity-50 self-start">
+                                {saving ? 'Saving...' : 'Submit'}
+                            </button>
+                        </form>
+                    )}
                 </div>
             )}
 
             {activeTab === 'appRoles' && (
-                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
-                        <div>
-                            <h2 className="font-black text-gray-900">Application Role by Location</h2>
-                        </div>
-                        <div className="flex-1 max-w-sm relative">
-                            <input 
-                                type="text" 
-                                placeholder="Search user or location..." 
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                                value={userLocationsSearch}
-                                onChange={(e) => { setUserLocationsSearch(e.target.value); setUserLocationsPage(1); }}
-                            />
-                        </div>
-                        <button disabled={saving} onClick={syncUserLocations} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50 whitespace-nowrap">
-                            Sync From Users
-                        </button>
-                    </div>
-                    <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
-                        {userLocationsData.length === 0 ? (
-                            <div className="p-8 text-center text-gray-400 text-sm">No assignments found.</div>
-                        ) : userLocationsData.map((assignment) => (
-                            <div key={assignment.id} className="px-6 py-4 grid grid-cols-[1fr_1fr_260px] gap-4 items-center">
-                                <div>
-                                    <p className="font-black text-gray-900">{assignment.user_name || assignment.user_id}</p>
-                                    <p className="text-xs text-gray-400">{assignment.user_id}</p>
-                                </div>
-                                <div>
-                                    <p className="font-bold text-gray-700">{assignment.location_name || assignment.location_id}</p>
-                                    <p className="text-xs text-gray-400">{assignment.location_id}</p>
-                                </div>
+                <div className={`grid gap-6 transition-all duration-300 ${isAppRoleFormOpen ? 'grid-cols-[1.2fr_0.8fr]' : 'grid-cols-1'}`}>
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+                            <div>
+                                <h2 className="font-black text-gray-900">Application Role by Location</h2>
+                            </div>
+                            <div className="w-64">
                                 <CustomSelect
-                                    value={assignment.job_level || ''}
-                                    placeholder="Choose app role"
-                                    options={data.app_job_levels.map((level) => ({ value: level, label: level }))}
-                                    onChange={(value) => value && updateUserLocationRole(assignment, value)}
+                                    value={storeFilter}
+                                    placeholder="Filter Store"
+                                    options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
+                                    onChange={(value) => { setStoreFilter(value); setUserLocationsPage(1); }}
+                                    searchable
                                 />
                             </div>
-                        ))}
+                            <div className="flex-1 max-w-sm relative">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search user or location..." 
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                    value={userLocationsSearch}
+                                    onChange={(e) => { setUserLocationsSearch(e.target.value); setUserLocationsPage(1); }}
+                                />
+                            </div>
+                            <button onClick={resetAppRoleForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">
+                                Add App Role
+                            </button>
+                            <button disabled={saving} onClick={syncUserLocations} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50 whitespace-nowrap">
+                                Sync From Users
+                            </button>
+                        </div>
+                        <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
+                            {userLocationsData.length === 0 ? (
+                                <div className="p-8 text-center text-gray-400 text-sm">No assignments found.</div>
+                            ) : userLocationsData.map((assignment) => (
+                                <div key={assignment.id} className="px-6 py-4 grid grid-cols-[1fr_1fr_260px] gap-4 items-center">
+                                    <div>
+                                        <p className="font-black text-gray-900">{assignment.user_name || assignment.user_id}</p>
+                                        <p className="text-xs text-gray-400">{assignment.user_id}</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-gray-700">{assignment.location_name || assignment.location_id}</p>
+                                        <p className="text-xs text-gray-400">{assignment.location_id}</p>
+                                    </div>
+                                    <CustomSelect
+                                        value={assignment.job_level || ''}
+                                        placeholder="Choose app role"
+                                        options={data.app_job_levels.map((level) => ({ value: level, label: level }))}
+                                        onChange={(value) => value && updateUserLocationRole(assignment, value)}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                        <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                            <button 
+                                disabled={userLocationsPage <= 1} 
+                                onClick={() => setUserLocationsPage(p => p - 1)}
+                                className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
+                            >
+                                Previous
+                            </button>
+                            <span className="text-xs font-bold text-gray-400">Page {userLocationsPage} of {userLocationsTotalPages}</span>
+                            <button 
+                                disabled={userLocationsPage >= userLocationsTotalPages} 
+                                onClick={() => setUserLocationsPage(p => p + 1)}
+                                className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
+                            >
+                                Next
+                            </button>
+                        </div>
                     </div>
-                    <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-                        <button 
-                            disabled={userLocationsPage <= 1} 
-                            onClick={() => setUserLocationsPage(p => p - 1)}
-                            className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
-                        >
-                            Previous
-                        </button>
-                        <span className="text-xs font-bold text-gray-400">Page {userLocationsPage} of {userLocationsTotalPages}</span>
-                        <button 
-                            disabled={userLocationsPage >= userLocationsTotalPages} 
-                            onClick={() => setUserLocationsPage(p => p + 1)}
-                            className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
-                        >
-                            Next
-                        </button>
-                    </div>
+
+                    {isAppRoleFormOpen && (
+                        <form onSubmit={saveAppRole} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-5">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">App Role Data</p>
+                                    <h2 className="text-xl font-black text-gray-900">{appRoleForm.id ? 'Edit App Role' : 'Create App Role'}</h2>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {appRoleForm.id && (
+                                        <button type="button" onClick={() => deleteAppRole(appRoleForm.id)} className="text-sm font-bold text-red-500">Delete</button>
+                                    )}
+                                    <button type="button" onClick={closeAppRoleForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
+                                </div>
+                            </div>
+                            <Field label="Role Name">
+                                <input
+                                    value={appRoleForm.name}
+                                    onChange={(e) => setAppRoleForm({ ...appRoleForm, name: e.target.value })}
+                                    className="input"
+                                    required
+                                />
+                            </Field>
+
+                            <Field label="Description">
+                                <input
+                                    value={appRoleForm.description}
+                                    onChange={(e) => setAppRoleForm({ ...appRoleForm, description: e.target.value })}
+                                    className="input"
+                                    placeholder="Short role description"
+                                />
+                            </Field>
+
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={appRoleForm.active}
+                                        onChange={(e) => setAppRoleForm({ ...appRoleForm, active: e.target.checked })}
+                                    />
+                                    Active app role
+                                </label>
+                            </div>
+
+                            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                                <p className="text-sm font-black text-gray-800 mb-3">Available App Roles</p>
+                                <div className="space-y-2 max-h-64 overflow-y-auto">
+                                    {data.app_roles.map((role) => (
+                                        <button
+                                            key={role.id}
+                                            type="button"
+                                            onClick={() => selectAppRole(role)}
+                                            className={`w-full text-left rounded-xl px-3 py-2 transition ${appRoleForm.id === String(role.id) ? 'bg-purple-100 text-primary' : 'bg-white hover:bg-purple-50'}`}
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="font-bold text-sm">{role.name}</span>
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${role.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                                    {role.active ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-1">{role.description || '-'} · {role.users_count || 0} assignment(s)</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <button disabled={saving} className="bg-primary text-white rounded-xl py-3 px-8 font-bold shadow-lg shadow-purple-100 disabled:opacity-50 self-start">
+                                {saving ? 'Saving...' : 'Submit'}
+                            </button>
+                        </form>
+                    )}
                 </div>
             )}
 
@@ -850,6 +1314,15 @@ export default function AdminDashboard() {
                             <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Hierarchy</p>
                             <h2 className="text-xl font-black text-gray-900">Assign Leader</h2>
                         </div>
+                        <Field label="Filter Store">
+                            <CustomSelect
+                                value={storeFilter}
+                                placeholder="Filter Store"
+                                options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
+                                onChange={(value) => { setStoreFilter(value); setSelectedLeaderId(''); setUsersPage(1); }}
+                                searchable
+                            />
+                        </Field>
                         <Field label="Leader">
                             <CustomSelect
                                 value={lineForm.leader_id}
@@ -886,7 +1359,7 @@ export default function AdminDashboard() {
                     </form>
 
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-                        <div className="px-6 py-4 border-b border-gray-100 bg-purple-50 flex items-center gap-4">
+                        <div className="px-6 py-4 border-b border-gray-100 bg-white flex items-center gap-4">
                             <div className="flex-1">
                                 <h2 className="font-black text-gray-900 mb-2">Filter Subordinates by Leader</h2>
                                 <CustomSelect
@@ -986,6 +1459,114 @@ export default function AdminDashboard() {
                         </button>
                     </form>
                 )}
+                </div>
+            )}
+
+            {activeTab === 'evaluations' && (
+                <div className={`grid gap-6 transition-all duration-300 ${isEvaluationFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+                            <div>
+                                <h2 className="font-black text-gray-900">Evaluation Master</h2>
+                                <p className="text-xs text-gray-400">Manage monthly evaluation questions.</p>
+                            </div>
+                            <button onClick={resetEvaluationForm} className="text-sm text-primary font-bold whitespace-nowrap">New Evaluation</button>
+                        </div>
+                        <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
+                            {data.evaluation_masters.length === 0 ? (
+                                <div className="p-8 text-center text-gray-400 text-sm">No evaluation item found.</div>
+                            ) : data.evaluation_masters.map((item) => (
+                                <button key={item.id} onClick={() => selectEvaluation(item)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 transition ${evaluationForm.id === String(item.id) ? 'bg-purple-50' : ''}`}>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-black text-gray-900">{item.question}</p>
+                                            <p className="text-xs text-gray-400">{item.title} - {item.subtitle}</p>
+                                        </div>
+                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full ${item.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                            {item.active ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {isEvaluationFormOpen && (
+                        <form onSubmit={saveEvaluationMaster} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Evaluation Data</p>
+                                    <h2 className="text-xl font-black text-gray-900">{evaluationForm.id ? 'Edit Evaluation' : 'Create Evaluation'}</h2>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {evaluationForm.id && (
+                                        <button type="button" onClick={() => deleteEvaluationMaster(evaluationForm.id)} className="text-sm font-bold text-red-500">Delete</button>
+                                    )}
+                                    <button type="button" onClick={closeEvaluationForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-[0.9fr_1.1fr] gap-6">
+                                <div className="space-y-4">
+                                    <Field label="Judul">
+                                        <input value={evaluationForm.title} onChange={(e) => setEvaluationForm({ ...evaluationForm, title: e.target.value })} className="input" required />
+                                    </Field>
+                                    <Field label="Sub Judul">
+                                        <input value={evaluationForm.subtitle} onChange={(e) => setEvaluationForm({ ...evaluationForm, subtitle: e.target.value })} className="input" required />
+                                    </Field>
+                                    <Field label="Question">
+                                        <input value={evaluationForm.question} onChange={(e) => setEvaluationForm({ ...evaluationForm, question: e.target.value })} className="input" required />
+                                    </Field>
+                                    {evaluationForm.answers.map((answer, index) => (
+                                        <Field key={index} label={`Answer ${index + 1}`}>
+                                            <input
+                                                value={answer}
+                                                onChange={(e) => {
+                                                    const nextAnswers = [...evaluationForm.answers];
+                                                    nextAnswers[index] = e.target.value;
+                                                    setEvaluationForm({ ...evaluationForm, answers: nextAnswers });
+                                                }}
+                                                className="input"
+                                                required
+                                            />
+                                        </Field>
+                                    ))}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <Field label="Sort Order">
+                                            <input type="number" value={evaluationForm.sort_order} onChange={(e) => setEvaluationForm({ ...evaluationForm, sort_order: e.target.value })} className="input" />
+                                        </Field>
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 pt-7">
+                                            <input type="checkbox" checked={evaluationForm.active} onChange={(e) => setEvaluationForm({ ...evaluationForm, active: e.target.checked })} />
+                                            Active
+                                        </label>
+                                    </div>
+                                    <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
+                                        {saving ? 'Saving...' : 'Save Evaluation'}
+                                    </button>
+                                </div>
+
+                                <div className="bg-gray-50 rounded-3xl border border-gray-100 p-6">
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Preview Evaluation</p>
+                                    <h2 className="text-xl font-bold text-gray-800 mb-2">{evaluationForm.title || 'MONTHLY EVALUATION'}</h2>
+                                    <p className="text-sm text-gray-400 mb-6 uppercase tracking-wider">{evaluationForm.subtitle || 'SIKAP KEPRIBADIAN'}</p>
+                                    <div>
+                                        <h3 className="font-semibold text-gray-700 mb-1">{evaluationForm.question || 'Question title'}</h3>
+                                        <div className="text-xs text-gray-500 mb-3 leading-relaxed space-y-1">
+                                            {evaluationForm.answers.map((answer, index) => (
+                                                <p key={index}>{index + 1}. {answer || `Answer ${index + 1}`}</p>
+                                            ))}
+                                        </div>
+                                        <div className="flex justify-between items-center px-2">
+                                            {[1, 2, 3, 4, 5].map((score) => (
+                                                <div key={score} className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold bg-white text-gray-400 shadow-sm">
+                                                    {score}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    )}
                 </div>
             )}
 

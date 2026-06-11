@@ -6,7 +6,13 @@ interface EvaluationFormProps {
     onSuccess: () => void;
 }
 
-const CRITERIA = [
+type Criterion = {
+    id: string;
+    label: string;
+    desc: string;
+};
+
+const FALLBACK_CRITERIA: Criterion[] = [
     {
         id: 'self_development',
         label: 'Pengembangan Diri',
@@ -20,8 +26,41 @@ const CRITERIA = [
 ];
 
 export default function EvaluationForm({ supervisor, targetDate, onSuccess }: EvaluationFormProps) {
+    const [criteria, setCriteria] = useState<Criterion[]>(FALLBACK_CRITERIA);
+    const [evaluationTitle, setEvaluationTitle] = useState('MONTHLY EVALUATION');
+    const [evaluationSubtitle, setEvaluationSubtitle] = useState('Sikap Kepribadian');
     const [scores, setScores] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchEvaluationMaster = async () => {
+            try {
+                const token = localStorage.getItem('auth_token');
+                const response = await fetch('/api/evaluation-master/active', {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: 'application/json',
+                    },
+                });
+                if (!response.ok) return;
+
+                const payload = await response.json();
+                if (Array.isArray(payload.criteria) && payload.criteria.length > 0) {
+                    setEvaluationTitle(payload.title || 'MONTHLY EVALUATION');
+                    setEvaluationSubtitle(payload.subtitle || 'Sikap Kepribadian');
+                    setCriteria(payload.criteria.map((item: any) => ({
+                        id: item.key || `evaluation_${item.id}`,
+                        label: item.label || item.question,
+                        desc: item.desc || (item.answers || []).map((answer: string, index: number) => `${index + 1}. ${answer}`).join('\n'),
+                    })));
+                }
+            } catch (error) {
+                console.warn('Using fallback evaluation master.', error);
+            }
+        };
+
+        fetchEvaluationMaster();
+    }, []);
 
     const handleScoreChange = (id: string, value: number) => {
         setScores(prev => ({ ...prev, [id]: value }));
@@ -29,7 +68,7 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
 
     const handleSubmit = async () => {
         // Validate
-        if (Object.keys(scores).length < CRITERIA.length) {
+        if (Object.keys(scores).length < criteria.length) {
             alert("Please score all criteria.");
             return;
         }
@@ -37,7 +76,7 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
         setLoading(true);
         try {
             const token = localStorage.getItem('auth_token');
-            const totalScore = Object.values(scores).reduce((a, b) => a + b, 0) / CRITERIA.length * 20;
+            const totalScore = Object.values(scores).reduce((a, b) => a + b, 0) / criteria.length * 20;
 
             // Use passed targetDate
             const dateStr = targetDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
@@ -72,11 +111,11 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
 
     return (
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-full overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-800 mb-2">MONTHLY EVALUATION</h2>
-            <p className="text-sm text-gray-400 mb-6 uppercase tracking-wider">Sikap Kepribadian</p>
+            <h2 className="text-xl font-bold text-gray-800 mb-2">{evaluationTitle}</h2>
+            <p className="text-sm text-gray-400 mb-6 uppercase tracking-wider">{evaluationSubtitle}</p>
 
             <div className="space-y-8">
-                {CRITERIA.map((criterion, idx) => (
+                {criteria.map((criterion, idx) => (
                     <div key={criterion.id}>
                         <h3 className="font-semibold text-gray-700 mb-1">
                             {String.fromCharCode(97 + idx)}. {criterion.label}

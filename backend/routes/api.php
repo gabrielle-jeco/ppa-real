@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/crew/check-guide', [App\Http\Controllers\TaskController::class, 'checkGuideStatus']);
     Route::get('/crew/stats', [App\Http\Controllers\CrewController::class, 'myStats']);
     Route::get('/work-stations', [App\Http\Controllers\ActivityController::class, 'getWorkStations']);
+    Route::get('/evaluation-master/active', [App\Http\Controllers\AdminController::class, 'activeEvaluationMaster']);
 
     // CMS / Superadmin Routes
     Route::prefix('cms')->group(function () {
@@ -56,7 +57,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'updateLocation']);
         Route::delete('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'destroyLocation']);
         Route::post('/user-locations/sync', [App\Http\Controllers\AdminController::class, 'syncUserLocationsFromUsers']);
+        Route::post('/user-locations', [App\Http\Controllers\AdminController::class, 'storeUserLocation']);
         Route::patch('/user-locations/{userLocation}', [App\Http\Controllers\AdminController::class, 'updateUserLocation']);
+        Route::post('/evaluation-masters', [App\Http\Controllers\AdminController::class, 'storeEvaluationMaster']);
+        Route::patch('/evaluation-masters/{evaluationMaster}', [App\Http\Controllers\AdminController::class, 'updateEvaluationMaster']);
+        Route::delete('/evaluation-masters/{evaluationMaster}', [App\Http\Controllers\AdminController::class, 'destroyEvaluationMaster']);
+        Route::post('/roles', [App\Http\Controllers\AdminController::class, 'storeRole']);
+        Route::patch('/roles/{role}', [App\Http\Controllers\AdminController::class, 'updateRole']);
+        Route::delete('/roles/{role}', [App\Http\Controllers\AdminController::class, 'destroyRole']);
+        Route::post('/app-roles', [App\Http\Controllers\AdminController::class, 'storeAppRole']);
+        Route::patch('/app-roles/{appRole}', [App\Http\Controllers\AdminController::class, 'updateAppRole']);
+        Route::delete('/app-roles/{appRole}', [App\Http\Controllers\AdminController::class, 'destroyAppRole']);
         Route::post('/regionals', [App\Http\Controllers\AdminController::class, 'storeRegional']);
         Route::patch('/regionals/{regional}', [App\Http\Controllers\AdminController::class, 'updateRegional']);
         Route::delete('/regionals/{regional}', [App\Http\Controllers\AdminController::class, 'destroyRegional']);

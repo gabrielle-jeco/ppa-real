@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
+import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateInputValue } from '../utils/taskDateWindow';
 
 interface MobileAddTaskModalProps {
     isOpen: boolean;
@@ -17,6 +18,11 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
     const [workStationId, setWorkStationId] = useState('');
     const [workStations, setWorkStations] = useState<any[]>([]);
     const [animateIn, setAnimateIn] = useState(false);
+    const minTaskDate = toDateInputValue(new Date());
+    const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
+    const minTaskTime = date === minTaskDate
+        ? new Date().toTimeString().slice(0, 5)
+        : undefined;
 
     useEffect(() => {
         if (isOpen) {
@@ -48,6 +54,15 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const dueAt = `${date} ${time}:00`;
+        const selectedTaskDate = new Date(`${date}T00:00:00`);
+        if (isBeforeToday(selectedTaskDate) || isAfterTaskWindow(selectedTaskDate)) {
+            alert('Task date is outside the allowed assignment window.');
+            return;
+        }
+        if (new Date(dueAt.replace(' ', 'T')) < new Date()) {
+            alert('Task deadline cannot be earlier than the current time.');
+            return;
+        }
         onSubmit({
             title,
             due_at: dueAt,
@@ -133,7 +148,8 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                                     type="date"
                                     value={date}
                                     onChange={(e) => setDate(e.target.value)}
-                                    max={new Date().toLocaleDateString('en-CA')}
+                                    min={minTaskDate}
+                                    max={maxTaskDate}
                                     className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
                                     required
                                 />
@@ -148,6 +164,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                                     type="time"
                                     value={time}
                                     onChange={(e) => setTime(e.target.value)}
+                                    min={minTaskTime}
                                     className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
                                     required
                                 />

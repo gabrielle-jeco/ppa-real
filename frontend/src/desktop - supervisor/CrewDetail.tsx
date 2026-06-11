@@ -5,6 +5,7 @@ import TaskPreview from '../general/TaskPreview';
 import EvaluationForm from '../general/EvaluationForm';
 import SubmissionHistory from './SubmissionHistory';
 import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
+import { canAssignTaskOnDate, clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 
 interface CrewDetailProps {
     crew: any;
@@ -263,6 +264,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
     const dotColors = ['bg-green-400', 'bg-purple-500', 'bg-blue-400', 'bg-yellow-400', 'bg-red-400', 'bg-pink-400'];
 
     const currentList = tasks;
+    const canAssignOnSelectedDate = canAssignTaskOnDate(selectedDate);
 
     return (
         <div className="flex flex-col h-full bg-gray-50 p-6 overflow-hidden relative">
@@ -316,14 +318,14 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                             <div className="relative mb-3 h-12">
                                 <button
                                     onClick={() => setIsTaskModalOpen(true)}
-                                    disabled={!isToday(selectedDate)}
-                                    className={`w-full h-full border rounded-lg px-4 flex items-center justify-between text-xs font-semibold shadow-sm transition group ${isToday(selectedDate)
+                                    disabled={!canAssignOnSelectedDate}
+                                    className={`w-full h-full border rounded-lg px-4 flex items-center justify-between text-xs font-semibold shadow-sm transition group ${canAssignOnSelectedDate
                                         ? 'bg-white border-gray-200 hover:border-primary text-gray-600 hover:text-primary cursor-pointer'
                                         : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
                                         }`}
                                 >
-                                    <span>{isToday(selectedDate) ? 'Choose Task' : 'History View'}</span>
-                                    {isToday(selectedDate) && (
+                                    <span>{canAssignOnSelectedDate ? 'Choose Task' : 'History View'}</span>
+                                    {canAssignOnSelectedDate && (
                                         <span className="bg-gray-100 group-hover:bg-purple-100 text-gray-500 group-hover:text-primary rounded-full w-5 h-5 flex items-center justify-center text-lg leading-none pb-0.5">+</span>
                                     )}
                                 </button>
@@ -353,12 +355,12 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                             onChange={(e) => {
                                                 const newDate = new Date(selectedDate);
                                                 newDate.setMonth(parseInt(e.target.value));
-                                                setSelectedDate(newDate);
+                                                setSelectedDate(clampToTaskWindow(newDate));
                                             }}
                                             className="w-full appearance-none bg-gray-50 border border-transparent hover:border-primary rounded-xl px-3 py-2 font-bold text-gray-700 text-sm cursor-pointer outline-none transition-colors"
                                         >
                                             {Array.from({ length: 12 }, (_, i) => i)
-                                                .filter(m => selectedDate.getFullYear() < new Date().getFullYear() || m <= new Date().getMonth())
+                                                .filter(m => getAvailableTaskMonths(selectedDate.getFullYear()).includes(m))
                                                 .map(i => (
                                                     <option key={i} value={i} className="text-sm">
                                                         {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
@@ -374,15 +376,11 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                             onChange={(e) => {
                                                 const newDate = new Date(selectedDate);
                                                 newDate.setFullYear(parseInt(e.target.value));
-                                                const today = new Date();
-                                                if (parseInt(e.target.value) === today.getFullYear() && newDate.getMonth() > today.getMonth()) {
-                                                    newDate.setMonth(today.getMonth());
-                                                }
-                                                setSelectedDate(newDate);
+                                                setSelectedDate(clampToTaskWindow(newDate));
                                             }}
                                             className="w-full appearance-none bg-gray-50 border border-transparent hover:border-primary rounded-xl px-3 py-2 text-gray-700 font-bold text-sm cursor-pointer outline-none transition-colors"
                                         >
-                                            {Array.from({ length: 2026 - 2024 + 1 }, (_, i) => 2024 + i).map(year => (
+                                            {getAvailableTaskYears().map(year => (
                                                 <option key={year} value={year} className="text-sm">{year}</option>
                                             ))}
                                         </select>
@@ -423,19 +421,18 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                     }
 
                                     const isSelected = day.getDate() === selectedDate.getDate() && day.getMonth() === selectedDate.getMonth() && day.getFullYear() === selectedDate.getFullYear();
-                                    const now = new Date();
-                                    const isFuture = day > now;
+                                    const isUnavailable = isAfterTaskWindow(day);
 
                                     return (
                                         <div key={idx} className="flex justify-center">
                                             <button
                                                 onClick={() => {
-                                                    if (!isFuture) setSelectedDate(day);
+                                                    if (!isUnavailable) setSelectedDate(day);
                                                 }}
-                                                disabled={isFuture}
+                                                disabled={isUnavailable}
                                                 className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] transition ${isSelected
                                                     ? 'bg-primary text-white shadow-md transform scale-110'
-                                                    : isFuture
+                                                    : isUnavailable
                                                         ? 'text-gray-300 cursor-not-allowed'
                                                         : 'hover:bg-purple-100 text-gray-700'
                                                     }`}

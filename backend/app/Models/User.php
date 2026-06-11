@@ -43,8 +43,7 @@ class User extends Authenticatable
 
     public function getRoleTypeAttribute()
     {
-        $accountRole = $this->accountRole ? strtolower(trim((string) $this->accountRole->name)) : null;
-        if ($accountRole === 'admin') {
+        if ($this->accountRole?->isCmsRole()) {
             return 'superadmin';
         }
 

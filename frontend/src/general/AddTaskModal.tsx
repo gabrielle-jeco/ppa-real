@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, Clock, X } from 'lucide-react';
+import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateInputValue } from '../utils/taskDateWindow';
 
 interface AddTaskModalProps {
     isOpen: boolean;
@@ -16,6 +17,11 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
     const [note, setNote] = useState('');
     const [workStationId, setWorkStationId] = useState('');
     const [workStations, setWorkStations] = useState<any[]>([]);
+    const minTaskDate = toDateInputValue(new Date());
+    const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
+    const minTaskTime = date === minTaskDate
+        ? new Date().toTimeString().slice(0, 5)
+        : undefined;
 
     // Reset/Update date when defaultDate changes or modal opens
     React.useEffect(() => {
@@ -46,6 +52,15 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
         e.preventDefault();
         // Combine date and time
         const dueAt = `${date} ${time}:00`;
+        const selectedTaskDate = new Date(`${date}T00:00:00`);
+        if (isBeforeToday(selectedTaskDate) || isAfterTaskWindow(selectedTaskDate)) {
+            alert('Task date is outside the allowed assignment window.');
+            return;
+        }
+        if (new Date(dueAt.replace(' ', 'T')) < new Date()) {
+            alert('Task deadline cannot be earlier than the current time.');
+            return;
+        }
         onSubmit({
             title,
             due_at: dueAt,
@@ -111,6 +126,8 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                             type="date"
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
+                            min={minTaskDate}
+                            max={maxTaskDate}
                             className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
                             required
                         />
@@ -125,6 +142,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                             type="time"
                             value={time}
                             onChange={(e) => setTime(e.target.value)}
+                            min={minTaskTime}
                             className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
                             required
                         />
