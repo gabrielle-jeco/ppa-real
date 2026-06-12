@@ -53,6 +53,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/overview', [App\Http\Controllers\AdminController::class, 'overview']);
         Route::post('/users', [App\Http\Controllers\AdminController::class, 'storeUser']);
         Route::patch('/users/{username}', [App\Http\Controllers\AdminController::class, 'updateUser']);
+        Route::get('/locations', [App\Http\Controllers\AdminController::class, 'getLocations']);
         Route::post('/locations', [App\Http\Controllers\AdminController::class, 'storeLocation']);
         Route::patch('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'updateLocation']);
         Route::delete('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'destroyLocation']);
@@ -68,6 +69,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/app-roles', [App\Http\Controllers\AdminController::class, 'storeAppRole']);
         Route::patch('/app-roles/{appRole}', [App\Http\Controllers\AdminController::class, 'updateAppRole']);
         Route::delete('/app-roles/{appRole}', [App\Http\Controllers\AdminController::class, 'destroyAppRole']);
+        Route::get('/regionals', [App\Http\Controllers\AdminController::class, 'getRegionals']);
         Route::post('/regionals', [App\Http\Controllers\AdminController::class, 'storeRegional']);
         Route::patch('/regionals/{regional}', [App\Http\Controllers\AdminController::class, 'updateRegional']);
         Route::delete('/regionals/{regional}', [App\Http\Controllers\AdminController::class, 'destroyRegional']);
