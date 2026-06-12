@@ -174,6 +174,14 @@ export default function AdminDashboard() {
     const [userLocationsTotalPages, setUserLocationsTotalPages] = useState(1);
     const [userLocationsSearch, setUserLocationsSearch] = useState('');
 
+    const [locationsData, setLocationsData] = useState<Location[]>([]);
+    const [locationsPage, setLocationsPage] = useState(1);
+    const [locationsTotalPages, setLocationsTotalPages] = useState(1);
+
+    const [regionalsData, setRegionalsData] = useState<Regional[]>([]);
+    const [regionalsPage, setRegionalsPage] = useState(1);
+    const [regionalsTotalPages, setRegionalsTotalPages] = useState(1);
+
     const [storeFilter, setStoreFilter] = useState('');
     const [locationsSearch, setLocationsSearch] = useState('');
     const [regionalsSearch, setRegionalsSearch] = useState('');
@@ -230,7 +238,9 @@ export default function AdminDashboard() {
             fetchLeaders();
             fetchReportingLines();
         }
-    }, [activeTab, usersPage, usersSearch, userLocationsPage, userLocationsSearch, selectedLeaderId, storeFilter, data?.stats]);
+        else if (activeTab === 'locations') fetchLocations();
+        else if (activeTab === 'regionals') fetchRegionals();
+    }, [activeTab, usersPage, usersSearch, userLocationsPage, userLocationsSearch, locationsPage, locationsSearch, regionalsPage, regionalsSearch, selectedLeaderId, storeFilter, data?.stats]);
 
     const fetchOverview = async () => {
         setLoading(true);
@@ -268,6 +278,30 @@ export default function AdminDashboard() {
             setUserLocationsTotalPages(res.last_page || 1);
         } catch (error: any) {
             setMessage(error.message || 'Failed to load user locations.');
+        }
+    };
+
+    const fetchLocations = async () => {
+        try {
+            const query = new URLSearchParams({ page: String(locationsPage) });
+            if (locationsSearch) query.append('search', locationsSearch);
+            const res = await requestJson(`/api/cms/locations?${query.toString()}`, 'GET');
+            setLocationsData(res.data || []);
+            setLocationsTotalPages(res.last_page || 1);
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to load locations.');
+        }
+    };
+
+    const fetchRegionals = async () => {
+        try {
+            const query = new URLSearchParams({ page: String(regionalsPage) });
+            if (regionalsSearch) query.append('search', regionalsSearch);
+            const res = await requestJson(`/api/cms/regionals?${query.toString()}`, 'GET');
+            setRegionalsData(res.data || []);
+            setRegionalsTotalPages(res.last_page || 1);
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to load regionals.');
         }
     };
 
@@ -553,6 +587,7 @@ export default function AdminDashboard() {
             }
 
             closeLocationForm();
+            await fetchLocations();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to save location.');
@@ -570,6 +605,7 @@ export default function AdminDashboard() {
             await requestJson(`/api/cms/locations/${initial}`, 'DELETE');
             setMessage('Location deleted.');
             closeLocationForm();
+            await fetchLocations();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to delete location.');
@@ -856,6 +892,7 @@ export default function AdminDashboard() {
             }
 
             closeRegionalForm();
+            await fetchRegionals();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to save regional.');
@@ -873,6 +910,7 @@ export default function AdminDashboard() {
             await requestJson(`/api/cms/regionals/${id}`, 'DELETE');
             setMessage('Regional deleted.');
             closeRegionalForm();
+            await fetchRegionals();
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Failed to delete regional.');
@@ -971,7 +1009,7 @@ export default function AdminDashboard() {
                                     onChange={(e) => { setUsersSearch(e.target.value); setUsersPage(1); }}
                                 />
                             </div>
-                            <button onClick={() => { resetUserForm(); setIsUserFormOpen(true); }} className="text-sm text-primary font-bold flex items-center gap-2 whitespace-nowrap">
+                            <button onClick={() => { resetUserForm(); setIsUserFormOpen(true); }} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 flex items-center gap-2 whitespace-nowrap">
                                 <UserPlus size={16} />
                                 New User
                             </button>
@@ -1001,23 +1039,11 @@ export default function AdminDashboard() {
                                 </button>
                             ))}
                         </div>
-                        <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-                            <button 
-                                disabled={usersPage <= 1} 
-                                onClick={() => setUsersPage(p => p - 1)}
-                                className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
-                            >
-                                Previous
-                            </button>
-                            <span className="text-xs font-bold text-gray-400">Page {usersPage} of {usersTotalPages}</span>
-                            <button 
-                                disabled={usersPage >= usersTotalPages} 
-                                onClick={() => setUsersPage(p => p + 1)}
-                                className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
-                            >
-                                Next
-                            </button>
-                        </div>
+                        <PaginationControls
+                            page={usersPage}
+                            totalPages={usersTotalPages}
+                            onPageChange={setUsersPage}
+                        />
                     </div>
 
                     {isUserFormOpen && (
@@ -1215,23 +1241,11 @@ export default function AdminDashboard() {
                                 </div>
                             ))}
                         </div>
-                        <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-                            <button 
-                                disabled={userLocationsPage <= 1} 
-                                onClick={() => setUserLocationsPage(p => p - 1)}
-                                className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
-                            >
-                                Previous
-                            </button>
-                            <span className="text-xs font-bold text-gray-400">Page {userLocationsPage} of {userLocationsTotalPages}</span>
-                            <button 
-                                disabled={userLocationsPage >= userLocationsTotalPages} 
-                                onClick={() => setUserLocationsPage(p => p + 1)}
-                                className="text-sm font-bold text-gray-600 disabled:opacity-30 hover:text-primary transition"
-                            >
-                                Next
-                            </button>
-                        </div>
+                        <PaginationControls
+                            page={userLocationsPage}
+                            totalPages={userLocationsTotalPages}
+                            onPageChange={setUserLocationsPage}
+                        />
                     </div>
 
                     {isAppRoleFormOpen && (
@@ -1421,7 +1435,7 @@ export default function AdminDashboard() {
                                     onChange={(e) => setGuidesSearch(e.target.value)}
                                 />
                             </div>
-                            <button onClick={() => { setGuideForm({ id: '', name: '', guideText: '' }); setIsGuideFormOpen(true); }} className="text-sm text-primary font-bold whitespace-nowrap">New Guide</button>
+                            <button onClick={() => { setGuideForm({ id: '', name: '', guideText: '' }); setIsGuideFormOpen(true); }} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Guide</button>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
                             {data.work_stations.filter(station => station.name.toLowerCase().includes(guidesSearch.toLowerCase())).map((station) => (
@@ -1470,7 +1484,7 @@ export default function AdminDashboard() {
                                 <h2 className="font-black text-gray-900">Evaluation Master</h2>
                                 <p className="text-xs text-gray-400">Manage monthly evaluation questions.</p>
                             </div>
-                            <button onClick={resetEvaluationForm} className="text-sm text-primary font-bold whitespace-nowrap">New Evaluation</button>
+                            <button onClick={resetEvaluationForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Evaluation</button>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
                             {data.evaluation_masters.length === 0 ? (
@@ -1581,13 +1595,15 @@ export default function AdminDashboard() {
                                     placeholder="Search location..." 
                                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     value={locationsSearch}
-                                    onChange={(e) => setLocationsSearch(e.target.value)}
+                                    onChange={(e) => { setLocationsSearch(e.target.value); setLocationsPage(1); }}
                                 />
                             </div>
-                            <button onClick={resetLocationForm} className="text-sm text-primary font-bold whitespace-nowrap">New Location</button>
+                            <button onClick={resetLocationForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Location</button>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
-                            {data.locations.filter(loc => loc.name.toLowerCase().includes(locationsSearch.toLowerCase()) || loc.initial.toLowerCase().includes(locationsSearch.toLowerCase()) || String(loc.store_code || '').includes(locationsSearch)).map((location) => (
+                            {locationsData.length === 0 ? (
+                                <div className="p-8 text-center text-gray-400 text-sm">No locations found.</div>
+                            ) : locationsData.map((location) => (
                                 <button key={location.initial} onClick={() => selectLocation(location)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 transition ${selectedLocationInitial === location.initial ? 'bg-purple-50' : ''}`}>
                                     <div className="flex items-center justify-between">
                                         <div>
@@ -1601,6 +1617,11 @@ export default function AdminDashboard() {
                                 </button>
                             ))}
                         </div>
+                        <PaginationControls
+                            page={locationsPage}
+                            totalPages={locationsTotalPages}
+                            onPageChange={setLocationsPage}
+                        />
                     </div>
 
                     {isLocationFormOpen && (
@@ -1666,19 +1687,26 @@ export default function AdminDashboard() {
                                     placeholder="Search regional..." 
                                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     value={regionalsSearch}
-                                    onChange={(e) => setRegionalsSearch(e.target.value)}
+                                    onChange={(e) => { setRegionalsSearch(e.target.value); setRegionalsPage(1); }}
                                 />
                             </div>
-                            <button onClick={resetRegionalForm} className="text-sm text-primary font-bold whitespace-nowrap">New Regional</button>
+                            <button onClick={resetRegionalForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Regional</button>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
-                            {data.regionals.filter(reg => reg.nama_regional.toLowerCase().includes(regionalsSearch.toLowerCase()) || String(reg.kode_regional).includes(regionalsSearch)).map((regional) => (
+                            {regionalsData.length === 0 ? (
+                                <div className="p-8 text-center text-gray-400 text-sm">No regionals found.</div>
+                            ) : regionalsData.map((regional) => (
                                 <button key={regional.id} onClick={() => selectRegional(regional)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 transition ${selectedRegionalId === regional.id ? 'bg-purple-50' : ''}`}>
                                     <p className="font-black text-gray-900">{regional.nama_regional}</p>
                                     <p className="text-xs text-gray-400">Kode: {regional.kode_regional} · Cabang: {regional.cabang || '-'}</p>
                                 </button>
                             ))}
                         </div>
+                        <PaginationControls
+                            page={regionalsPage}
+                            totalPages={regionalsTotalPages}
+                            onPageChange={setRegionalsPage}
+                        />
                     </div>
 
                     {isRegionalFormOpen && (
@@ -1732,6 +1760,94 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
             <span className="text-sm font-bold text-gray-700">{label}</span>
             <div className="mt-1">{children}</div>
         </label>
+    );
+}
+
+function PaginationControls({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (page: number) => void }) {
+    const [jumpPage, setJumpPage] = useState('');
+    const safeTotal = Math.max(totalPages, 1);
+    const safePage = Math.min(Math.max(page, 1), safeTotal);
+
+    const goToPage = (target: number) => {
+        const nextPage = Math.min(Math.max(target, 1), safeTotal);
+        if (nextPage !== safePage) onPageChange(nextPage);
+    };
+
+    const pageItems = (() => {
+        if (safeTotal <= 7) return Array.from({ length: safeTotal }, (_, i) => i + 1);
+
+        const items: Array<number | string> = [1];
+        const start = Math.max(2, safePage - 1);
+        const end = Math.min(safeTotal - 1, safePage + 1);
+
+        if (start > 2) items.push('left-ellipsis');
+        for (let current = start; current <= end; current++) items.push(current);
+        if (end < safeTotal - 1) items.push('right-ellipsis');
+        items.push(safeTotal);
+
+        return items;
+    })();
+
+    const submitJump = (event: React.FormEvent) => {
+        event.preventDefault();
+        const target = Number(jumpPage);
+        if (Number.isFinite(target)) goToPage(target);
+        setJumpPage('');
+    };
+
+    return (
+        <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+                <button
+                    disabled={safePage <= 1}
+                    onClick={() => goToPage(safePage - 1)}
+                    className="px-3 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-600 disabled:opacity-30 hover:text-primary hover:border-primary transition"
+                >
+                    Previous
+                </button>
+
+                <div className="flex items-center gap-1">
+                    {pageItems.map((item) => typeof item === 'number' ? (
+                        <button
+                            key={item}
+                            onClick={() => goToPage(item)}
+                            className={`min-w-9 px-3 py-2 rounded-xl text-xs font-black transition ${item === safePage
+                                ? 'bg-primary text-white shadow-md shadow-purple-100'
+                                : 'bg-white border border-gray-200 text-gray-600 hover:text-primary hover:border-primary'
+                                }`}
+                        >
+                            {item}
+                        </button>
+                    ) : (
+                        <span key={item} className="px-2 text-xs font-black text-gray-400">...</span>
+                    ))}
+                </div>
+
+                <button
+                    disabled={safePage >= safeTotal}
+                    onClick={() => goToPage(safePage + 1)}
+                    className="px-3 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-600 disabled:opacity-30 hover:text-primary hover:border-primary transition"
+                >
+                    Next
+                </button>
+            </div>
+
+            <form onSubmit={submitJump} className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-400">Page {safePage} of {safeTotal}</span>
+                <input
+                    type="number"
+                    min={1}
+                    max={safeTotal}
+                    value={jumpPage}
+                    onChange={(event) => setJumpPage(event.target.value)}
+                    placeholder="Go to"
+                    className="w-20 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 outline-none focus:border-primary focus:ring-2 focus:ring-purple-100"
+                />
+                <button className="px-3 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-600 hover:text-primary hover:border-primary transition">
+                    Go
+                </button>
+            </form>
+        </div>
     );
 }
 

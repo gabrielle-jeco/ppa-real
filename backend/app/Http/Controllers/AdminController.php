@@ -199,6 +199,42 @@ class AdminController extends Controller
         return response()->json($lines);
     }
 
+    public function getLocations(Request $request)
+    {
+        $this->authorizePermission('locations');
+
+        $query = Location::orderBy('name');
+
+        if ($request->filled('search')) {
+            $search = strtolower($request->query('search'));
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(initial) like ?', ["%{$search}%"])
+                    ->orWhereRaw('CAST(store_code AS TEXT) like ?', ["%{$search}%"]);
+            });
+        }
+
+        return response()->json($query->paginate(50));
+    }
+
+    public function getRegionals(Request $request)
+    {
+        $this->authorizePermission('regionals');
+
+        $query = Regional::orderBy('kode_regional');
+
+        if ($request->filled('search')) {
+            $search = strtolower($request->query('search'));
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(nama_regional) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(kode_regional) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(COALESCE(cabang, \'\')) like ?', ["%{$search}%"]);
+            });
+        }
+
+        return response()->json($query->paginate(50));
+    }
+
     public function storeUser(Request $request)
     {
         $this->authorizePermission('users_locations');
