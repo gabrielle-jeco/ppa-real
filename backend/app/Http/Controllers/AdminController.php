@@ -494,24 +494,48 @@ class AdminController extends Controller
     {
         $this->authorizePermission('users_locations');
 
-        $created = 0;
-        $users = User::whereNotNull('initial_store')->get();
+        $validLocations = Location::pluck('initial')
+            ->map(fn($initial) => strtoupper(trim((string) $initial)))
+            ->filter()
+            ->flip();
 
-        foreach ($users as $user) {
-            $locationId = strtoupper(trim((string) $user->initial_store));
-            if ($locationId === '' || !Location::where('initial', $locationId)->exists()) {
-                continue;
-            }
+        $existingAssignments = UserLocation::query()
+            ->selectRaw("user_id || '|' || location_id as assignment_key")
+            ->pluck('assignment_key')
+            ->flip();
 
-            $assignment = UserLocation::firstOrCreate(
-                ['user_id' => $user->username, 'location_id' => $locationId],
-                ['job_level' => $this->defaultAppJobLevel($user)]
+        $now = now();
+        $rows = User::with('jobLevel')
+            ->whereNotNull('initial_store')
+            ->get(['username', 'initial_store', 'job_level_id'])
+            ->map(function (User $user) use ($validLocations, $existingAssignments, $now) {
+                $locationId = strtoupper(trim((string) $user->initial_store));
+                $assignmentKey = $user->username . '|' . $locationId;
+
+                if ($locationId === '' || !$validLocations->has($locationId) || $existingAssignments->has($assignmentKey)) {
+                    return null;
+                }
+
+                return [
+                    'user_id' => $user->username,
+                    'location_id' => $locationId,
+                    'job_level' => $this->defaultAppJobLevel($user),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            })
+            ->filter()
+            ->values();
+
+        if ($rows->isNotEmpty()) {
+            UserLocation::upsert(
+                $rows->all(),
+                ['user_id', 'location_id'],
+                ['updated_at']
             );
-
-            if ($assignment->wasRecentlyCreated) {
-                $created++;
-            }
         }
+
+        $created = $rows->count();
 
         return response()->json(['message' => "{$created} user-location assignment(s) synchronized.", 'created' => $created]);
     }
