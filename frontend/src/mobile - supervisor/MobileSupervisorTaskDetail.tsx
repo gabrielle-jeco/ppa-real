@@ -11,13 +11,14 @@ interface MobileSupervisorTaskDetailProps {
     onClose: () => void;
     onUpload: (formData: FormData) => Promise<void>;
     onDelete?: (evidenceId: number) => Promise<void>;
+    readOnly?: boolean;
+    actionDate?: string;
 }
 
-export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, onDelete }: MobileSupervisorTaskDetailProps) {
-    // Calculated State
+export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, onDelete, readOnly = false, actionDate }: MobileSupervisorTaskDetailProps) {
     const isApproved = task.status === 'approved';
-    const isPastDue = new Date(task.due_at) < new Date(new Date().setHours(0, 0, 0, 0));
-    const isReadOnly = isApproved || isPastDue;
+    const isPastDue = new Date(task.due_at) < new Date();
+    const isReadOnly = readOnly || isApproved || isPastDue;
 
     const [animateIn, setAnimateIn] = useState(false);
 
@@ -98,6 +99,7 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
         try {
             const compressedFile = await compressImage(file, 1200, 1200, 0.7);
             const formData = new FormData();
+            if (actionDate) formData.append('action_date', actionDate);
             formData.append(`${activeUploadType}[]`, compressedFile);
 
             await onUpload(formData);
@@ -127,6 +129,7 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
             try {
                 const compressedFile = await compressImage(file, 1200, 1200, 0.7);
                 const formData = new FormData();
+                if (actionDate) formData.append('action_date', actionDate);
                 formData.append(`${activeUploadType}[]`, compressedFile);
 
                 await onUpload(formData);

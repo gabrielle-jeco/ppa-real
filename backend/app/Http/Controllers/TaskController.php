@@ -7,7 +7,6 @@ use App\Models\GuideRead;
 use Illuminate\Http\Request;
 use App\Models\Task;
 use App\Models\User;
-use App\Models\TaskEvidence;
 use App\Models\WorkStation;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -16,10 +15,6 @@ use Illuminate\Validation\ValidationException;
 
 class TaskController extends Controller
 {
-    /**
-     * Get tasks for a specific supervisor.
-     * Route: GET /api/supervisor/{id}/tasks
-     */
     public function index(Request $request, $supervisorId)
     {
         $user = Auth::user();
@@ -27,9 +22,8 @@ class TaskController extends Controller
             ? Carbon::parse($request->date)
             : Carbon::now();
 
-        // Security check: Only Managers/Supervisors can view tasks assigned to others
         if ($user->role_type !== 'manager' && $user->role_type !== 'supervisor') {
-            if ($user->username !== $supervisorId) { // Prevent Crews from viewing other Crew's tasks
+            if ($user->username !== $supervisorId) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
@@ -51,9 +45,7 @@ class TaskController extends Controller
                 ], 423);
             }
         } else {
-            // If it's a Manager/Supervisor trying to view someone else's tasks, verify hierarchy
             if ($user->username !== $supervisorId) {
-                // Ensure the requested $supervisorId is a valid subordinate
                 $isSubordinate = $user->subordinateLines()->where('subordinate_id', $supervisorId)->where('status', 'active')->exists();
                 if (!$isSubordinate) {
                     return response()->json(['message' => 'Unauthorized. This user is not your subordinate.'], 403);
@@ -64,7 +56,7 @@ class TaskController extends Controller
         $query = Task::where('employee_id', $supervisorId);
 
         if ($request->has('date')) {
-            $query->whereDate('due_at', $targetDate->toDateString());
+            $query->activeOnDate($targetDate);
         }
 
         if ($request->filled('role')) {
@@ -82,10 +74,6 @@ class TaskController extends Controller
         return response()->json($tasks);
     }
 
-    /**
-     * Create a new task.
-     * Route: POST /api/tasks
-     */
     public function store(Request $request)
     {
         $request->validate([
@@ -99,33 +87,40 @@ class TaskController extends Controller
         $employer = Auth::user();
         $assignee = User::where('username', $request->supervisor_id)->firstOrFail();
 
-        if ($employer->role_type === 'manager' && $assignee->role_type === 'supervisor') {
+        if ($employer->role_type === 'manager') {
             return response()->json([
                 'message' => 'Manager-to-supervisor assignments are handled through manager review, not task checklist.'
             ], 422);
         }
 
-        // Hierarchy Check: Prevent user from creating tasks for someone who is not their subordinate
-        if ($employer->username !== $request->supervisor_id) { // Allow self-assigned tasks for Supervisor's own checklist
-            $isSubordinate = $employer->subordinateLines()->where('subordinate_id', $request->supervisor_id)->where('status', 'active')->exists();
-            if (!$isSubordinate) {
-                return response()->json(['message' => 'Unauthorized. You can only assign tasks to your direct subordinates.'], 403);
-            }
+        if (
+            $employer->role_type !== 'supervisor'
+            || !in_array($assignee->role_type, ['employee', 'crew'], true)
+            || $employer->username === $assignee->username
+        ) {
+            return response()->json([
+                'message' => 'Unauthorized. Task checklist can only be assigned by a supervisor to a crew member.'
+            ], 403);
         }
 
-        if (
-            in_array($employer->role_type, ['supervisor'], true)
-            && in_array($assignee->role_type, ['employee', 'crew'], true)
-            && !$request->filled('work_station_id')
-        ) {
+        $isSubordinate = $employer->subordinateLines()
+            ->where('subordinate_id', $assignee->username)
+            ->where('status', 'active')
+            ->exists();
+
+        if (!$isSubordinate) {
+            return response()->json(['message' => 'Unauthorized. You can only assign tasks to your direct subordinates.'], 403);
+        }
+
+        if (!$request->filled('work_station_id')) {
             throw ValidationException::withMessages([
                 'work_station_id' => ['Task category is required for crew tasks.'],
             ]);
         }
 
         $task = Task::create([
-            'employee_id' => $request->supervisor_id, // Who is doing the task
-            'employer_id' => $employer->username, // Who assigned the task
+            'employee_id' => $request->supervisor_id,
+            'employer_id' => $employer->username,
             'work_station_id' => $request->work_station_id,
             'title' => $request->title,
             'description' => $request->note,
@@ -136,19 +131,14 @@ class TaskController extends Controller
         return response()->json($task, 201);
     }
 
-    /**
-     * Delete a task.
-     */
     public function destroy($id)
     {
         $task = Task::with('evidences')->findOrFail($id);
 
-        // Only the creator (employer) can delete a task
         if ($task->employer_id !== Auth::user()->username) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Prevent deletion of approved tasks to maintain historical/audit consistency
         if ($task->status === 'approved') {
             return response()->json(['message' => 'Cannot delete an approved task. Please un-approve it first if you must delete it.'], 400);
         }
@@ -157,7 +147,6 @@ class TaskController extends Controller
             return response()->json(['message' => 'This task is already past its deadline and can no longer be deleted.'], 400);
         }
 
-        // Delete all physical evidence files before deleting the task
         foreach ($task->evidences as $evidence) {
             if (Storage::disk('public')->exists($evidence->file_path)) {
                 Storage::disk('public')->delete($evidence->file_path);
@@ -168,19 +157,21 @@ class TaskController extends Controller
         return response()->json(['message' => 'Task deleted']);
     }
 
-    /**
-     * Update task status (Approve/Reject).
-     */
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
-            'status' => 'required|in:approved,rejected,pending'
+            'status' => 'required|in:approved,rejected,pending',
+            'action_date' => 'nullable|date',
         ]);
 
         $task = Task::findOrFail($id);
 
         if ($task->employer_id !== Auth::user()->username) {
             return response()->json(['message' => 'Unauthorized. Only the task assigner can update its status.'], 403);
+        }
+
+        if ($response = $this->rejectNonTodayActionDate($request, $task)) {
+            return $response;
         }
 
         if ($this->isTaskLocked($task)) {
@@ -194,17 +185,14 @@ class TaskController extends Controller
     }
 
 
-    /**
-     * Upload evidence (Before/After photos) for a task.
-     * Route: POST /api/tasks/{id}/evidence
-     */
     public function uploadEvidence(Request $request, $id)
     {
         $request->validate([
             'before' => 'nullable|array|max:1',
-            'before.*' => 'nullable|image|max:10240', // Max 10MB per file
+            'before.*' => 'nullable|image|max:10240',
             'after' => 'nullable|array|max:3',
             'after.*' => 'nullable|image|max:10240',
+            'action_date' => 'nullable|date',
         ]);
 
         $task = Task::with('evidences')->findOrFail($id);
@@ -217,10 +205,12 @@ class TaskController extends Controller
             return response()->json(['message' => 'This task is already past its deadline and evidence upload is locked.'], 400);
         }
 
-        // Security check: Ensure the authenticated user is the one assigned to the task
-        // But also allow Supervisors to upload evidence on tasks they assigned
         if ($task->employee_id !== Auth::user()->username && $task->employer_id !== Auth::user()->username) {
             return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if ($response = $this->rejectNonTodayActionDate($request, $task)) {
+            return $response;
         }
 
         $authUser = Auth::user();
@@ -258,7 +248,6 @@ class TaskController extends Controller
             }
         }
 
-        // Explicitly start a transaction to ensure all files or no files are saved
         DB::beginTransaction();
 
         try {
@@ -286,7 +275,6 @@ class TaskController extends Controller
                 }
             }
 
-            // Do not update status here; status remains pending until approved by supervisor.
             DB::commit();
 
             return response()->json($task->load('evidences'));
@@ -295,10 +283,6 @@ class TaskController extends Controller
             return response()->json(['message' => 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.'], 500);
         }
     }
-    /**
-     * Remove evidence image (before/after) from a task.
-     * Route: DELETE /api/tasks/{id}/evidence
-     */
     public function removeEvidence(Request $request, $id)
     {
         $request->validate([
@@ -315,7 +299,6 @@ class TaskController extends Controller
             return response()->json(['message' => 'This task is already past its deadline and evidence can no longer be changed.'], 400);
         }
 
-        // Security check: Ensure the authenticated user is authorized to delete
         if ($task->employee_id !== Auth::user()->username && $task->employer_id !== Auth::user()->username) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
@@ -331,7 +314,6 @@ class TaskController extends Controller
             ], 400);
         }
 
-        // Delete physical file
         if (Storage::disk('public')->exists($evidence->file_path)) {
             Storage::disk('public')->delete($evidence->file_path);
         }
@@ -341,19 +323,14 @@ class TaskController extends Controller
         return response()->json(['message' => 'Evidence removed', 'task' => $task->load('evidences')]);
     }
 
-    /**
-     * Confirm reading the guide for a specific workstation.
-     * Route: POST /api/crew/read-guide
-     */
     public function readGuide(Request $request)
     {
         $request->validate([
-            'role' => 'required|string', // e.g., 'cashier', 'fresh'
+            'role' => 'required|string',
         ]);
 
         $user = Auth::user();
 
-        // Find the workstation ID (Case Insensitive)
         $workStation = $this->findWorkStationByRole($request->role);
 
         if (!$workStation) {
@@ -362,7 +339,6 @@ class TaskController extends Controller
 
         $now = now();
 
-        // Insert or ignore into guide_reads
         $guideRead = GuideRead::firstOrCreate(
             [
                 'user_id' => $user->username,
@@ -378,10 +354,6 @@ class TaskController extends Controller
         ]);
     }
 
-    /**
-     * Check if the guide for a specific role has already been read today.
-     * Route: GET /api/crew/check-guide?role=cashier
-     */
     public function checkGuideStatus(Request $request)
     {
         $request->validate([
@@ -395,7 +367,6 @@ class TaskController extends Controller
             return response()->json(['message' => 'Invalid role'], 400);
         }
 
-        // Check if a guide read entry exists for today
         $hasRead = GuideRead::where('user_id', $user->username)
             ->where('work_station_id', $workStation->id)
             ->where('read_date', now()->toDateString())
@@ -424,18 +395,41 @@ class TaskController extends Controller
     private function hasConfirmedGuideForTask(User $user, Task $task): bool
     {
         if (!$task->work_station_id) {
-            return $this->hasConfirmedGuideForDate($user, $task->due_at);
+            return $this->hasConfirmedGuideForDate($user, Carbon::today());
         }
 
         return GuideRead::where('user_id', $user->username)
             ->where('work_station_id', $task->work_station_id)
-            ->whereDate('read_date', Carbon::parse($task->due_at)->toDateString())
+            ->whereDate('read_date', Carbon::today()->toDateString())
             ->exists();
     }
 
     private function findWorkStationByRole(string $role): ?WorkStation
     {
         return WorkStation::whereRaw('LOWER(name) = ?', [strtolower($role)])->first();
+    }
+
+    private function rejectNonTodayActionDate(Request $request, Task $task)
+    {
+        if (!$request->filled('action_date')) {
+            return null;
+        }
+
+        $actionDate = Carbon::parse($request->input('action_date'));
+
+        if (!$actionDate->isSameDay(Carbon::today())) {
+            return response()->json([
+                'message' => 'Task actions are only allowed from today\'s task view.'
+            ], 422);
+        }
+
+        if (!Task::whereKey($task->id)->activeOnDate($actionDate)->exists()) {
+            return response()->json([
+                'message' => 'This task is not active on the selected date.'
+            ], 422);
+        }
+
+        return null;
     }
 
     private function isTaskLocked(Task $task): bool

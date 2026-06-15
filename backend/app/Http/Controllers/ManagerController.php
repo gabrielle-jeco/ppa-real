@@ -11,19 +11,14 @@ use Carbon\Carbon;
 
 class ManagerController extends Controller
 {
-    /**
-     * Get list of supervisors for the logged-in manager.
-     */
     public function getSupervisors(Request $request, ScoringService $scoringService)
     {
         $user = Auth::user();
 
-        // Security Check: Must be a manager
         if ($user->role_type !== 'manager') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Fetch Supervisors through Reporting Lines
         $supervisorsCollection = $user->subordinateLines()->with(['subordinate.locations'])->get()
             ->pluck('subordinate')
             ->filter(function ($spv) {
@@ -36,7 +31,6 @@ class ManagerController extends Controller
 
         $filterLocationName = 'All Locations';
 
-        // LOGIC: Filter by Location
         if ($user->manager_type === 'SM') {
             $smLocationId = $user->locations->first() ? $user->locations->first()->initial : null;
             $filterLocationName = $user->locations->first() ? $user->locations->first()->name : 'Unknown Location';
@@ -47,7 +41,6 @@ class ManagerController extends Controller
                 });
             }
         } else {
-            // Regional Manager: Can filter by specific location dropdown
             if ($request->has('location_id') && $request->location_id) {
                 $supervisorsCollection = $supervisorsCollection->filter(function ($spv) use ($request) {
                     return $spv->locations->contains('initial', $request->location_id);
@@ -72,7 +65,7 @@ class ManagerController extends Controller
                 'activity_percentage' => $score,
                 'task_progress' => $score,
                 'has_tasks' => true,
-                'is_top_performer' => $score > 90 // Logic for the Star icon
+                'is_top_performer' => $score > 90
             ];
         });
 
@@ -81,28 +74,23 @@ class ManagerController extends Controller
             'manager' => [
                 'name' => $user->name,
                 'role' => $user->role_type === 'manager' ? ($user->manager_type === 'SM' ? 'Store Manager' : 'Regional Manager') : 'Manager',
-                'type' => $user->manager_type // identifying RM vs SM on frontend
+                'type' => $user->manager_type
             ],
             'location_name' => $filterLocationName,
-            'locations' => $locations, // List for dropdown
+            'locations' => $locations,
             'location_avg_progress' => round($supervisors->avg('task_progress') ?? 0, 1),
             'supervisors' => $supervisors
         ]);
     }
 
-    /**
-     * Get Detailed Stats for a specific supervisor under the manager
-     */
     public function getSupervisorStats($id, Request $request, \App\Services\ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
         $manager = Auth::user();
 
-        // Security Check: Must be a manager
         if ($manager->role_type !== 'manager') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Authorization check: Is this supervisor directly under the manager?
         $isSubordinate = $manager->subordinateLines()->where('subordinate_id', $id)->where('status', 'active')->exists();
         if (!$isSubordinate) {
             return response()->json(['message' => 'Unauthorized or Supervisor not found'], 403);
@@ -119,7 +107,6 @@ class ManagerController extends Controller
 
         try {
             if ($day) {
-                // If specific date requested, use it as target
                 $targetDate = Carbon::create($year, $month, $day);
             } else {
                 $targetDate = Carbon::create($year, $month, 1);
@@ -174,7 +161,7 @@ class ManagerController extends Controller
                 $tasks = \App\Models\Task::with(['evidences', 'workStation'])
                     ->where('employee_id', $crew->username)
                     ->where('employer_id', $supervisor->username)
-                    ->whereDate('due_at', $targetDate->toDateString())
+                    ->activeOnDate($targetDate)
                     ->orderBy('due_at', 'asc')
                     ->get();
 

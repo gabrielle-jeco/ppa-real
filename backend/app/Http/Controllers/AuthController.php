@@ -21,7 +21,7 @@ class AuthController extends Controller
         $request->validate([
             'username' => 'required',
             'password' => 'required',
-            'location_id' => 'nullable|string' // Optional: store initial if the frontend sends current location
+            'location_id' => 'nullable|string'
         ]);
 
         $user = User::where('username', $request->username)->first();
@@ -42,7 +42,6 @@ class AuthController extends Controller
             $this->syncYojadwalUserData($user, $yoabsenAuth->lastPayload());
         }
 
-        // Check if user is active
         if (!$user->active) {
             Auth::logout();
             throw ValidationException::withMessages([
@@ -50,20 +49,13 @@ class AuthController extends Controller
             ]);
         }
 
-        // Manager Logic: Location Lock
         if ($user->role_type === 'manager') {
-
-            // Store Manager (SM) must be locked to their assigned location
             if ($user->manager_type === 'SM') {
                 if (!$user->location_id) {
-                    // Safety check: SM must have a location assigned in DB
                     Auth::logout();
                     return response()->json(['message' => 'System Error: SM has no assigned location.'], 403);
                 }
 
-                // In a real PWA on-site, we might verify IP or geolocation here.
-                // For now, we assume the location_id passed (or lack thereof) implies checking the backend assignment
-                // Getting stricter: If the request includes a location_id (e.g. from a site kiosk), it must match.
                 if ($request->has('location_id') && $request->location_id != $user->location_id) {
                     Auth::logout();
                     throw ValidationException::withMessages([
@@ -72,8 +64,6 @@ class AuthController extends Controller
                 }
             }
 
-            // Regional Manager (RM) - No Lock
-            // Can access from anywhere.
         }
 
         $tokenExpirationMinutes = config('sanctum.expiration');

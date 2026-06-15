@@ -10,10 +10,6 @@ use Illuminate\Support\Facades\Auth;
 
 class ActivityController extends Controller
 {
-    /**
-     * Record a crew's workstation change.
-     * Route: POST /api/crew/activity
-     */
     public function logStationChange(Request $request)
     {
         $request->validate([
@@ -24,23 +20,20 @@ class ActivityController extends Controller
 
         $user = Auth::user();
 
-        // Find the workstation by normalized name (e.g., 'cashier', 'fresh').
         $workStation = WorkStation::whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($request->work_station_name))])->first();
 
         if (!$workStation) {
             return response()->json(['message' => 'Invalid workstation name'], 400);
         }
 
-        // If it's an initial login (page refresh), check if a log already exists for this station today
         if ($request->is_initial_login && !$request->force_log) {
             $existingLog = ActivityLog::where('user_id', $user->username)
                 ->where('work_station_id', $workStation->id)
-                ->where('action', 'station_changed') // Could also be 'initial_login' but keeping it consistent
+                ->where('action', 'station_changed')
                 ->whereDate('created_at', now()->toDateString())
                 ->first();
 
             if ($existingLog) {
-                // Already logged in to this station today, ignore
                 return response()->json([
                     'message' => 'Initial workstation already logged today',
                     'work_station' => $workStation,
@@ -49,7 +42,6 @@ class ActivityController extends Controller
             }
         }
 
-        // Log the activity (initial_login is safely aliased to station_changed)
         $log = ActivityLog::create([
             'user_id' => $user->username,
             'work_station_id' => $workStation->id,
@@ -63,20 +55,12 @@ class ActivityController extends Controller
         ], 201);
     }
 
-    /**
-     * Get all workstations and their guides.
-     * Route: GET /api/work-stations
-     */
     public function getWorkStations()
     {
         $stations = WorkStation::orderBy('name')->get();
         return response()->json($stations);
     }
 
-    /**
-     * Get user's activity logs.
-     * Route: GET /api/crew/activity-logs
-     */
     public function getLogs(Request $request)
     {
         $authUser = Auth::user();
@@ -87,14 +71,11 @@ class ActivityController extends Controller
             return response()->json(['message' => 'User not found'], 404);
         }
 
-        // Authorization logic
         if ($authUser->username !== $user->username) {
-            // Must be superior to view other's activity logs
             if ($authUser->role_type !== 'supervisor' && $authUser->role_type !== 'manager') {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
-            // Hierarchy Check: The superior must be the direct manager/supervisor of the user
             $isSubordinate = $authUser->subordinateLines()->where('subordinate_id', $user->username)->where('status', 'active')->exists();
             if (!$isSubordinate) {
                 return response()->json(['message' => 'Unauthorized. This user is not your subordinate.'], 403);

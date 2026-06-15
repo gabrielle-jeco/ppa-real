@@ -358,7 +358,6 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
 
                         </div>
                     ) : (
-                        // === QUESTIONNAIRE VIEW ===
                         <div className="space-y-6">
                             <h3 className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-2">{evaluationSubtitle}</h3>
 

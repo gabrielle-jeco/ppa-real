@@ -6,7 +6,7 @@ import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAft
 interface MobileCrewHistoryProps {
     user: any;
     onBack: () => void;
-    onSelectTask: (task: any) => void;
+    onSelectTask: (task: any, selectedDate?: string) => void;
     refreshTrigger?: number;
     selectedRole: string;
 }
@@ -252,7 +252,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                             </div>
                                         </div>
                                         <button
-                                            onClick={() => onSelectTask(task)}
+                                            onClick={() => onSelectTask(task, selectedDate.toLocaleDateString('en-CA'))}
                                             className="bg-blue-600 text-white shadow-blue-200 text-[10px] font-bold py-2 px-4 rounded-xl shadow-md active:scale-95 transition-transform flex items-center gap-1"
                                         >
                                             <Camera size={14} />

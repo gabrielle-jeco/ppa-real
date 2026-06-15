@@ -5,10 +5,9 @@ import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalenda
 
 interface MobileSupervisorReportProps {
     onBack: () => void;
-    supervisorId: string; // NIK/username for supervisor identity
 }
 
-export default function MobileSupervisorReport({ onBack, supervisorId }: MobileSupervisorReportProps) {
+export default function MobileSupervisorReport({ onBack }: MobileSupervisorReportProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(false);
@@ -45,10 +44,8 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
         const firstDay = getFirstDayOfMonth();
         const days = [];
 
-        // Empty slots
         for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-8 md:h-9"></div>);
 
-        // Days
         for (let i = 1; i <= daysInMonth; i++) {
             const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), i);
             const isSelected = i === selectedDate.getDate();
@@ -63,7 +60,7 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
             days.push(
                 <button
                     key={i}
-                    disabled={true} // Read Only for Report
+                    disabled={true}
                     className={`h-8 w-8 rounded-full flex flex-col items-center justify-center text-xs font-bold transition relative ${attendanceColor} ${isToday ? 'ring-2 ring-purple-500 ring-offset-2 z-10' : ''}`}
                 >
                     {i}
@@ -73,8 +70,6 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
         return days;
     };
 
-    // Mock Data for now, mirroring SupervisorPerformance structure
-    // In real app, fetch from /api/supervisor/stats?date=...
     useEffect(() => {
         const fetchStats = async () => {
             setLoading(true);
@@ -97,7 +92,6 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
         fetchStats();
     }, [selectedDate]);
 
-    // Calendar Handlers (Reuse logic)
     const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newDate = new Date(selectedDate);
         newDate.setMonth(parseInt(e.target.value));
@@ -117,7 +111,6 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
         >
             <div className="flex flex-col gap-4 pb-6">
 
-                {/* 1. Month/Year Selector (Pill Style) */}
                 <div className="bg-white rounded-3xl p-5 shadow-sm">
                     <div className="flex items-center gap-2 w-full">
                         <div className="relative group flex-1">
@@ -150,7 +143,6 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                     </div>
                 </div>
 
-                {/* 1.5. Attendance Calendar Grid */}
                 <div className="bg-white rounded-3xl p-5 shadow-sm">
                     <h3 className="text-sm font-bold text-gray-800 mb-4">Attendance History</h3>
                     <div className="grid grid-cols-7 text-center mb-2 border-b border-gray-100 pb-2">
@@ -163,7 +155,6 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                     </div>
                 </div>
 
-                {/* 2. My AVG Point */}
                 <div className="bg-white p-5 rounded-3xl shadow-sm">
                     <div className="flex justify-between items-center mb-2">
                         <h3 className="text-xs font-bold text-gray-600">My AVG Point</h3>
@@ -174,9 +165,7 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                     </div>
                 </div>
 
-                {/* 3. Task Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Task for SC */}
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
                         <h3 className="text-xs font-bold text-gray-600 mb-3">Task for SC</h3>
                         <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden mb-1">
@@ -185,7 +174,6 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                         <p className="text-[10px] text-gray-400">{stats?.task_for_sc?.completed || 0}% Completed</p>
                     </div>
 
-                    {/* Manager Review */}
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
                         <h3 className="text-xs font-bold text-gray-600 mb-3">{stats?.task_from_manager?.label || 'Manager Review'}</h3>
                         <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden mb-1">
@@ -195,9 +183,7 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                     </div>
                 </div>
 
-                {/* 4. Monthly Stats Grid (Grey Box Style) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Task Given */}
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
                         <h3 className="text-xs font-bold text-gray-600 mb-3">Task Given (Monthly)</h3>
                         <div className="bg-gray-200 rounded-xl py-3 px-4 text-center">
@@ -205,7 +191,6 @@ export default function MobileSupervisorReport({ onBack, supervisorId }: MobileS
                         </div>
                     </div>
 
-                    {/* AVG Service Point */}
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
                         <h3 className="text-xs font-bold text-gray-600 mb-3">AVG Service Crew Point</h3>
                         <div className="bg-gray-200 rounded-xl py-3 px-4 text-center">

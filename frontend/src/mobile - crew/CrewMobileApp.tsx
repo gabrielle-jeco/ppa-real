@@ -108,9 +108,10 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
         setSelectedTask(null);
     };
 
-    const handleSelectTask = (task: any) => {
-        pushCrewHistory(activePage, task);
-        setSelectedTask(task);
+    const handleSelectTask = (task: any, selectedDate?: string) => {
+        const taskWithViewDate = selectedDate ? { ...task, _selected_date: selectedDate } : task;
+        pushCrewHistory(activePage, taskWithViewDate);
+        setSelectedTask(taskWithViewDate);
     };
 
     const handleUploadEvidence = async (formData: FormData) => {

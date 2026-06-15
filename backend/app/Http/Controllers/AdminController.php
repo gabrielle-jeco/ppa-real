@@ -14,6 +14,7 @@ use App\Models\UserLocation;
 use App\Models\WorkStation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
@@ -80,7 +81,18 @@ class AdminController extends Controller
     {
         $this->authorizePermission('users_locations');
 
-        $query = User::with(['accountRole', 'jobLevel', 'locations', 'leaderLines.leader', 'subordinateLines.subordinate'])
+        $query = User::without(['jobLevel', 'locations', 'userLocations'])
+            ->with([
+                'accountRole:id,name,description,permissions',
+                'jobLevel:id,name',
+                'locations:initial,name',
+                'userLocations:user_id,job_level',
+                'leaderLines' => fn($q) => $q
+                    ->where('status', 'active')
+                    ->with('leader:username,name')
+                    ->select(['id', 'leader_id', 'subordinate_id', 'status']),
+            ])
+            ->withCount('subordinateLines')
             ->orderBy('name');
 
         if ($request->has('search') && $request->search !== '') {
@@ -160,12 +172,11 @@ class AdminController extends Controller
             ->orderBy('name')
             ->get(['username', 'name']);
             
-        // We actually want just username, name and maybe role_type for the dropdown label.
         $leadersArray = $leaders->map(function(User $u) {
             return [
                 'username' => $u->username,
                 'name' => $u->name,
-                'role_type' => $u->role_type // accessor
+                'role_type' => $u->role_type
             ];
         });
 
@@ -494,48 +505,36 @@ class AdminController extends Controller
     {
         $this->authorizePermission('users_locations');
 
-        $validLocations = Location::pluck('initial')
-            ->map(fn($initial) => strtoupper(trim((string) $initial)))
-            ->filter()
-            ->flip();
-
-        $existingAssignments = UserLocation::query()
-            ->selectRaw("user_id || '|' || location_id as assignment_key")
-            ->pluck('assignment_key')
-            ->flip();
-
-        $now = now();
-        $rows = User::with('jobLevel')
-            ->whereNotNull('initial_store')
-            ->get(['username', 'initial_store', 'job_level_id'])
-            ->map(function (User $user) use ($validLocations, $existingAssignments, $now) {
-                $locationId = strtoupper(trim((string) $user->initial_store));
-                $assignmentKey = $user->username . '|' . $locationId;
-
-                if ($locationId === '' || !$validLocations->has($locationId) || $existingAssignments->has($assignmentKey)) {
-                    return null;
-                }
-
-                return [
-                    'user_id' => $user->username,
-                    'location_id' => $locationId,
-                    'job_level' => $this->defaultAppJobLevel($user),
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
-            })
-            ->filter()
-            ->values();
-
-        if ($rows->isNotEmpty()) {
-            UserLocation::upsert(
-                $rows->all(),
-                ['user_id', 'location_id'],
-                ['updated_at']
-            );
-        }
-
-        $created = $rows->count();
+        $created = DB::affectingStatement(<<<'SQL'
+            INSERT INTO user_locations (user_id, location_id, job_level, created_at, updated_at)
+            SELECT
+                users.username,
+                locations.initial,
+                CASE
+                    WHEN LOWER(TRIM(job_levels.name)) IN ('crew', 'employee', 'sc') THEN 'sc'
+                    WHEN LOWER(TRIM(job_levels.name)) = 'supervisor' THEN 'supervisor'
+                    WHEN LOWER(TRIM(job_levels.name)) = 'manager' THEN 'manager'
+                    WHEN LOWER(TRIM(job_levels.name)) = 'regional_manager' THEN 'regional_manager'
+                    ELSE NULL
+                END AS job_level,
+                NOW(),
+                NOW()
+            FROM users
+            LEFT JOIN job_levels ON job_levels.id = users.job_level_id
+            INNER JOIN locations ON UPPER(TRIM(locations.initial)) = UPPER(TRIM(users.initial_store))
+            LEFT JOIN user_locations ON user_locations.user_id = users.username
+                AND user_locations.location_id = locations.initial
+            WHERE users.initial_store IS NOT NULL
+                AND TRIM(users.initial_store) <> ''
+                AND user_locations.id IS NULL
+                AND CASE
+                    WHEN LOWER(TRIM(job_levels.name)) IN ('crew', 'employee', 'sc') THEN 'sc'
+                    WHEN LOWER(TRIM(job_levels.name)) = 'supervisor' THEN 'supervisor'
+                    WHEN LOWER(TRIM(job_levels.name)) = 'manager' THEN 'manager'
+                    WHEN LOWER(TRIM(job_levels.name)) = 'regional_manager' THEN 'regional_manager'
+                    ELSE NULL
+                END IS NOT NULL
+        SQL);
 
         return response()->json(['message' => "{$created} user-location assignment(s) synchronized.", 'created' => $created]);
     }
@@ -762,7 +761,7 @@ class AdminController extends Controller
                 'username' => $leaderLine->leader->username,
                 'name' => $leaderLine->leader->name,
             ] : null,
-            'subordinates_count' => $user->subordinateLines->count(),
+            'subordinates_count' => $user->subordinate_lines_count ?? $user->subordinateLines->count(),
         ];
     }
 

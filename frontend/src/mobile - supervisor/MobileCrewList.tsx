@@ -92,8 +92,6 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                 {filteredCrews.map((crew, index) => {
                     const score = crew.score || 0;
                     const isTopPerformer = score === maxScore && score > 0;
-                    // Format Role consistent with other views if needed. API returns 'employee', maybe map to nice name?
-                    // For now displaying what API returns or capitalized.
                     const displayRole = crew.role === 'employee' ? 'Crew' : crew.role;
 
                     return (
@@ -109,7 +107,6 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                                 {isTopPerformer && <Star size={16} className={`${getStarColor(score)} fill-current`} />}
                             </div>
 
-                            {/* Progress Bar */}
                             <div className="w-full bg-white rounded-full h-3 mb-1">
                                 <div
                                     className={`${getProgressBarColor(score)} h-3 rounded-full transition-all duration-500`}

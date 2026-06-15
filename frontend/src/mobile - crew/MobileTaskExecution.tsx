@@ -11,11 +11,14 @@ interface MobileTaskExecutionProps {
     onClose: () => void;
     onUpload: (formData: FormData) => Promise<void>;
     onDelete?: (evidenceId: number) => Promise<void>;
+    readOnly?: boolean;
 }
 
-export default function MobileTaskExecution({ task, onClose, onUpload, onDelete }: MobileTaskExecutionProps) {
+export default function MobileTaskExecution({ task, onClose, onUpload, onDelete, readOnly = false }: MobileTaskExecutionProps) {
     const isPastDue = new Date(task.due_at) < new Date();
-    const isReadOnly = task.status === 'approved' || isPastDue;
+    const viewDate = task._selected_date;
+    const isNonTodayView = Boolean(viewDate && viewDate !== new Date().toLocaleDateString('en-CA'));
+    const isReadOnly = readOnly || task.status === 'approved' || isPastDue || isNonTodayView;
 
     const [animateIn, setAnimateIn] = useState(false);
 
@@ -83,6 +86,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
         try {
             const compressedFile = await compressImage(file, 1200, 1200, 0.7);
             const formData = new FormData();
+            if (viewDate) formData.append('action_date', viewDate);
             formData.append(`${activeUploadType}[]`, compressedFile);
 
             await onUpload(formData);
@@ -125,6 +129,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete 
             try {
                 const compressedFile = await compressImage(file, 1200, 1200, 0.7);
                 const formData = new FormData();
+                if (viewDate) formData.append('action_date', viewDate);
                 formData.append(`${activeUploadType}[]`, compressedFile);
 
                 await onUpload(formData);

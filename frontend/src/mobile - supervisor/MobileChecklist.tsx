@@ -22,7 +22,6 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
         return getAvailableTaskMonths(year);
     };
 
-    // Upload & Detail State
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [selectedTaskForUpload, setSelectedTaskForUpload] = useState<any>(null);
 
@@ -32,7 +31,6 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
         }
     }, [supervisor?.id, selectedDate]);
 
-    // FETCH MY TASKS (SUPERVISOR)
     const fetchMyTasks = async () => {
         if (!supervisor?.id) return;
         try {
@@ -50,11 +48,12 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
         }
     };
 
-    // --- NEW LOGIC: UNIFIED DETAIL & UPLOAD ---
     const handleTaskClick = (task: any) => {
         setSelectedTaskForUpload(task);
         setIsUploadModalOpen(true);
     };
+
+    const isSelectedDateToday = selectedDate.toLocaleDateString('en-CA') === new Date().toLocaleDateString('en-CA');
 
 
 
@@ -211,7 +210,7 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
 
                         {myTasks.map(task => {
                             const isApproved = task.status === 'approved';
-                            const isPastDue = new Date(task.due_at) < new Date(new Date().setHours(0, 0, 0, 0));
+                            const isPastDue = new Date(task.due_at) < new Date();
                             const isReadOnly = isApproved || isPastDue;
 
                             return (
@@ -295,6 +294,8 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                         setSelectedTaskForUpload(data.task);
                         fetchMyTasks();
                     }}
+                    readOnly={!isSelectedDateToday}
+                    actionDate={selectedDate.toLocaleDateString('en-CA')}
                 />
             )}
         </>
