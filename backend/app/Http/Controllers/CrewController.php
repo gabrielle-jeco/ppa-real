@@ -21,10 +21,6 @@ class CrewController extends Controller
         $this->presenceService = $presenceService;
     }
 
-    /**
-     * Get Crew's OWN Performance Stats.
-     * Route: GET /api/crew/stats
-     */
     public function myStats(Request $request)
     {
         $authUser = Auth::user();
@@ -35,20 +31,16 @@ class CrewController extends Controller
             return response()->json(['message' => 'User not found'], 404);
         }
 
-        // Authorization logic
         if ($authUser->username !== $user->username) {
-            // Must be superior to view other's stats
             if ($authUser->role_type !== 'supervisor' && $authUser->role_type !== 'manager') {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
-            // Hierarchy Check: The superior must be the direct manager/supervisor of the user
             $isSubordinate = $authUser->subordinateLines()->where('subordinate_id', $user->username)->where('status', 'active')->exists();
             if (!$isSubordinate) {
                 return response()->json(['message' => 'Unauthorized. This user is not your subordinate.'], 403);
             }
         } else {
-            // Allow both standard 'crew' and 'employee' alias for own stats
             if ($user->role_type !== 'employee' && $user->role_type !== 'crew') {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
@@ -65,16 +57,14 @@ class CrewController extends Controller
 
         $this->presenceService->syncMonthIfNeeded($user->username, (int) $targetDate->month, (int) $targetDate->year);
 
-        // Use ScoringService to calculate live data
         $dailyScore = $this->scoringService->getCrewDailyScore($user, Carbon::now());
         $monthlyScoreData = $this->scoringService->getCrewMonthlyScore($user, $targetDate);
         $monthlyScore = $monthlyScoreData['total_score'];
         $yearlyScore = $this->scoringService->getCrewYearlyScore($user, $targetDate);
         $detailedStats = $this->scoringService->getCrewMonthlyDetailedStats($user, $targetDate);
 
-        // Daily Task Progress
         $tasks = Task::where('employee_id', $user->username)
-            ->whereDate('due_at', Carbon::now()->toDateString())
+            ->activeOnDate(Carbon::today())
             ->get();
 
         $totalGiven = $tasks->count();

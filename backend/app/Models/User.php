@@ -29,7 +29,6 @@ class User extends Authenticatable
     ];
 
     protected $appends = ['role_type', 'location_id', 'manager_type', 'user_id', 'full_name'];
-    protected $with = ['jobLevel', 'locations', 'userLocations'];
 
     public function getUserIdAttribute()
     {

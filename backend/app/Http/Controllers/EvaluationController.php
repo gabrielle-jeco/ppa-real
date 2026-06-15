@@ -7,6 +7,8 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class EvaluationController extends Controller
 {
@@ -24,14 +26,11 @@ class EvaluationController extends Controller
             $evaluator = Auth::user();
             $evaluatee = User::where('username', $request->user_id)->firstOrFail();
 
-            // Security Check: Only managers and supervisors can evaluate
-            if ($evaluator->role_type !== 'manager' && $evaluator->role_type !== 'supervisor') {
+            if (!in_array($evaluator->role_type, ['manager', 'supervisor'], true)) {
                 return response()->json(['error' => 'Unauthorized. Only superiors can evaluate.'], 403);
             }
 
-            // Hierarchy Check: Ensure the target user is a subordinate
-            $isSubordinate = $evaluator->subordinateLines()->where('subordinate_id', $request->user_id)->where('status', 'active')->exists();
-            if (!$isSubordinate) {
+            if (!$this->canEvaluate($evaluator, $evaluatee)) {
                 return response()->json(['error' => 'Unauthorized. You can only evaluate your direct subordinates.'], 403);
             }
 
@@ -60,15 +59,21 @@ class EvaluationController extends Controller
                 ]
             );
 
-            // Frontend compatibility response
             $evaluation->setAttribute('total_score', $evaluation->score);
             $evaluation->setAttribute('user_id', $evaluation->evaluatee_id);
             $evaluation->setAttribute('date', $evaluation->evaluation_period);
 
             return response()->json($evaluation);
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Evaluation Store Error: ' . $e->getMessage());
-            return response()->json(['error' => $e->getMessage()], 500);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::error('Evaluation store failed.', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Unable to submit evaluation. Please try again.'
+            ], 500);
         }
     }
 
@@ -81,9 +86,19 @@ class EvaluationController extends Controller
 
         $evaluator = Auth::user();
         $evaluatee = User::where('username', $supervisorId)->first();
-        $evaluationType = $evaluatee ? $this->resolveEvaluationType($evaluator, $evaluatee) : 'personality';
+
+        if (!$evaluatee) {
+            return response()->json(['error' => 'Evaluatee not found.'], 404);
+        }
+
+        if (!$this->canEvaluate($evaluator, $evaluatee)) {
+            return response()->json(['error' => 'Unauthorized. You can only view evaluations for your direct subordinates.'], 403);
+        }
+
+        $evaluationType = $this->resolveEvaluationType($evaluator, $evaluatee);
 
         $evaluation = MonthlyPersonalityEvaluation::where('evaluatee_id', $supervisorId)
+            ->where('evaluator_id', $evaluator->username)
             ->where('evaluation_type', $evaluationType)
             ->whereYear('evaluation_period', $date->year)
             ->whereMonth('evaluation_period', $date->month)
@@ -95,7 +110,6 @@ class EvaluationController extends Controller
             $evaluation->setAttribute('date', $evaluation->evaluation_period);
         }
 
-        // Safe response
         return response()->json([
             'evaluated' => !!$evaluation,
             'can_evaluate' => $requestedPeriod->equalTo($currentPeriod),
@@ -103,6 +117,18 @@ class EvaluationController extends Controller
             'evaluation_type' => $evaluationType,
             'data' => $evaluation
         ]);
+    }
+
+    private function canEvaluate(User $evaluator, User $evaluatee): bool
+    {
+        if (!in_array($evaluator->role_type, ['manager', 'supervisor'], true)) {
+            return false;
+        }
+
+        return $evaluator->subordinateLines()
+            ->where('subordinate_id', $evaluatee->username)
+            ->where('status', 'active')
+            ->exists();
     }
 
     private function resolveEvaluationType(User $evaluator, User $evaluatee): string

@@ -111,7 +111,6 @@ const SupervisorMobileApp: React.FC = () => {
                 return (
                     <MobileSupervisorReport
                         onBack={() => handleNavigate('DASHBOARD', null, false)}
-                        supervisorId={supervisor?.id || ''}
                     />
                 );
             default:

@@ -518,10 +518,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                     )}
                 </div>
 
-                {/* 3. Right Panel (Activity) - Col Span 3 (LG) / 4 (XL) */}
-                {/* 3. Right Panel (Activity) - Compact: Span 4, Full: Span 4 */}
                 <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-4 flex flex-col h-full ease-in-out duration-300 min-h-0">
-                    {/* Render Logic: If Activity Mode OR Eval Mode -> Show Stats/Eval. Else (Preview/History) -> Show Preview/History */}
                     {(rightPanelMode === 'ACTIVITY' || viewMode === 'EVALUATION') ? (
                         viewMode === 'EVALUATION' ? (
                             <div className="h-full flex flex-col">
@@ -530,7 +527,6 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                         {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                                     </h2>
 
-                                    {/* Monthly Activity Monitor */}
                                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
                                         <h3 className="text-sm font-semibold text-gray-600 mb-4">{activityMonitorTitle}</h3>
 
@@ -556,7 +552,6 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                         )}
                                     </div>
 
-                                    {/* Result Card */}
                                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4 min-h-[100px] flex flex-col">
                                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
                                             POINT SIKAP KEPRIBADIAN Result ({selectedDate.toLocaleDateString('en-US', { month: 'long' })})
@@ -583,7 +578,6 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                         </div>
                                     </div>
 
-                                    {/* Yearly Overall Point */}
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
                                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">YEARLY OVERALL POINT</h3>
                                         <p className="text-sm font-medium text-gray-400 mb-1">Total Point :</p>
@@ -594,7 +588,6 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                 </div>
                             </div>
                         ) : (
-                            // ACTIVITY MODE (Default)
                             <div className="flex flex-col h-full min-h-0">
                                 <div className="mb-4 shrink-0">
                                     <h2 className="font-bold text-gray-800 text-lg">Activity</h2>

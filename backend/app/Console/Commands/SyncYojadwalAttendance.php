@@ -27,21 +27,35 @@ class SyncYojadwalAttendance extends Command
         $year = (int) ($this->option('year') ?: Carbon::now()->year);
         $niks = $this->option('nik');
 
-        if (empty($niks)) {
-            $niks = User::where('active', true)->get()
-                ->filter(fn(User $user) => in_array($user->role_type, ['employee', 'crew', 'supervisor', 'manager'], true))
-                ->pluck('username')
-                ->all();
-        }
-
         $totalRows = 0;
-        foreach ($niks as $nik) {
-            $count = $presenceService->syncMonth((string) $nik, $month, $year);
-            $totalRows += $count;
-            $this->line("{$nik}: {$count} attendance rows synced.");
+        if (!empty($niks)) {
+            foreach ($niks as $nik) {
+                $totalRows += $this->syncNik($presenceService, (string) $nik, $month, $year);
+            }
+        } else {
+            User::without(['jobLevel', 'locations', 'userLocations'])
+                ->where('active', true)
+                ->whereHas('userLocations', function ($query) {
+                    $query->whereIn('job_level', ['sc', 'supervisor', 'manager', 'regional_manager']);
+                })
+                ->orderBy('id')
+                ->select(['id', 'username'])
+                ->chunkById(250, function ($users) use ($presenceService, $month, $year, &$totalRows) {
+                    foreach ($users as $user) {
+                        $totalRows += $this->syncNik($presenceService, (string) $user->username, $month, $year);
+                    }
+                });
         }
 
         $this->info("Done. {$totalRows} attendance rows synced for {$month}/{$year}.");
         return self::SUCCESS;
+    }
+
+    private function syncNik(YojadwalPresenceService $presenceService, string $nik, int $month, int $year): int
+    {
+        $count = $presenceService->syncMonth($nik, $month, $year);
+        $this->line("{$nik}: {$count} attendance rows synced.");
+
+        return $count;
     }
 }

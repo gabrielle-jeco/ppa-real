@@ -13,10 +13,6 @@ use Illuminate\Support\Facades\Auth;
 
 class SupervisorController extends Controller
 {
-    /**
-     * Get list of Crews under this Supervisor.
-     * Logic: Crews in the same location (since Supervisor location is locked).
-     */
     public function index(Request $request, ScoringService $scoringService)
     {
         $user = Auth::user();
@@ -38,12 +34,12 @@ class SupervisorController extends Controller
 
                 $totalTasks = Task::where('employee_id', $crew->user_id)
                     ->where('employer_id', $user->username)
-                    ->whereDate('due_at', $today->toDateString())
+                    ->activeOnDate($today)
                     ->count();
 
                 $approvedTasks = Task::where('employee_id', $crew->user_id)
                     ->where('employer_id', $user->username)
-                    ->whereDate('due_at', $today->toDateString())
+                    ->activeOnDate($today)
                     ->whereIn('status', ['approved', 'completed'])
                     ->count();
 
@@ -89,10 +85,6 @@ class SupervisorController extends Controller
         ]);
     }
 
-    /**
-     * Get Supervisor's OWN Performance Stats.
-     * Mocking data based on 'Penilaian Supervisor' mockup.
-     */
     public function myStats(Request $request, ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
         $user = Auth::user();
@@ -112,10 +104,6 @@ class SupervisorController extends Controller
         return response()->json($detailedStats);
     }
 
-    /**
-     * Get Crew Evaluation Stats (Activity Monitor, Personality, Yearly Score).
-     * Route: GET /api/supervisor/crew/{id}/eval-stats
-     */
     public function getCrewEvalStats($id, Request $request, ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
         $user = Auth::user();
