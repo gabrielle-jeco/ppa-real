@@ -83,6 +83,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/reporting-lines/{reportingLine}', [App\Http\Controllers\AdminController::class, 'destroyReportingLine']);
         Route::post('/work-stations', [App\Http\Controllers\AdminController::class, 'storeWorkStation']);
         Route::patch('/work-stations/{workStation}', [App\Http\Controllers\AdminController::class, 'updateWorkStation']);
+        Route::delete('/work-stations/{workStation}', [App\Http\Controllers\AdminController::class, 'destroyWorkStation']);
     });
 });
 

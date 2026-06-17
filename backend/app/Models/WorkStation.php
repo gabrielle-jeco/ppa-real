@@ -9,10 +9,11 @@ class WorkStation extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'guide_content'];
+    protected $fillable = ['name', 'guide_content', 'active'];
 
     protected $casts = [
         'guide_content' => 'array',
+        'active' => 'boolean',
     ];
 
     public function activityLogs()

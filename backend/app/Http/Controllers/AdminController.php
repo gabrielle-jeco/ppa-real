@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\JobLevel;
 use App\Models\AppRole;
 use App\Models\EvaluationMaster;
+use App\Models\ActivityLog;
+use App\Models\GuideRead;
 use App\Models\Location;
 use App\Models\Regional;
 use App\Models\ReportingLine;
 use App\Models\Role;
+use App\Models\Task;
 use App\Models\User;
 use App\Models\UserLocation;
 use App\Models\WorkStation;
@@ -38,6 +41,7 @@ class AdminController extends Controller
             'id' => $station->id,
             'name' => $station->name,
             'guide_content' => $station->guide_content ?: [],
+            'active' => (bool) $station->active,
         ]);
 
         return response()->json([
@@ -96,10 +100,10 @@ class AdminController extends Controller
             ->orderBy('name');
 
         if ($request->has('search') && $request->search !== '') {
-            $searchTerm = '%' . $request->search . '%';
+            $searchTerm = '%' . strtolower($request->search) . '%';
             $query->where(function ($q) use ($searchTerm) {
-                $q->where('name', 'like', $searchTerm)
-                  ->orWhere('username', 'like', $searchTerm);
+                $q->whereRaw('LOWER(name) like ?', [$searchTerm])
+                  ->orWhereRaw('LOWER(username) like ?', [$searchTerm]);
             });
         }
 
@@ -436,15 +440,21 @@ class AdminController extends Controller
     {
         $this->authorizeSuperadmin();
 
+        if ($request->has('name')) {
+            $request->merge(['name' => strtolower(trim((string) $request->input('name')))]);
+        }
+
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', 'unique:work_stations,name'],
             'guide_content' => ['array'],
             'guide_content.*' => ['string', 'max:1000'],
+            'active' => ['boolean'],
         ]);
 
         $station = WorkStation::create([
             'name' => $data['name'],
             'guide_content' => array_values($data['guide_content'] ?? []),
+            'active' => $data['active'] ?? true,
         ]);
 
         return response()->json($station, 201);
@@ -454,18 +464,43 @@ class AdminController extends Controller
     {
         $this->authorizeSuperadmin();
 
+        if ($request->has('name')) {
+            $request->merge(['name' => strtolower(trim((string) $request->input('name')))]);
+        }
+
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', Rule::unique('work_stations', 'name')->ignore($workStation->id)],
             'guide_content' => ['array'],
             'guide_content.*' => ['string', 'max:1000'],
+            'active' => ['boolean'],
         ]);
 
         $workStation->update([
             'name' => $data['name'],
             'guide_content' => array_values($data['guide_content'] ?? []),
+            'active' => $data['active'] ?? false,
         ]);
 
         return response()->json($workStation->fresh());
+    }
+
+    public function destroyWorkStation(WorkStation $workStation)
+    {
+        $this->authorizeSuperadmin();
+
+        $hasHistory = Task::where('work_station_id', $workStation->id)->exists()
+            || ActivityLog::where('work_station_id', $workStation->id)->exists()
+            || GuideRead::where('work_station_id', $workStation->id)->exists();
+
+        if ($hasHistory) {
+            throw ValidationException::withMessages([
+                'work_station' => ['This work station already has history. Deactivate it instead.'],
+            ]);
+        }
+
+        $workStation->delete();
+
+        return response()->json(['message' => 'Work station deleted.']);
     }
 
     public function updateUserLocation(Request $request, UserLocation $userLocation)

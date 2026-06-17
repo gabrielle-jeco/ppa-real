@@ -20,7 +20,9 @@ class ActivityController extends Controller
 
         $user = Auth::user();
 
-        $workStation = WorkStation::whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($request->work_station_name))])->first();
+        $workStation = WorkStation::where('active', true)
+            ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($request->work_station_name))])
+            ->first();
 
         if (!$workStation) {
             return response()->json(['message' => 'Invalid workstation name'], 400);
@@ -57,7 +59,7 @@ class ActivityController extends Controller
 
     public function getWorkStations()
     {
-        $stations = WorkStation::orderBy('name')->get();
+        $stations = WorkStation::where('active', true)->orderBy('name')->get();
         return response()->json($stations);
     }
 
