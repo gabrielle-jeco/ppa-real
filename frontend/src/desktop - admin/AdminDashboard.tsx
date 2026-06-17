@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { BookOpenCheck, ChevronDown, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
+import { BookOpenCheck, Check, ChevronDown, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
 type Tab = 'users' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations';
 
@@ -82,6 +82,7 @@ type WorkStation = {
     id: number;
     name: string;
     guide_content: string[];
+    active: boolean;
 };
 
 type EvaluationMaster = {
@@ -195,7 +196,7 @@ export default function AdminDashboard() {
     const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
     const [userForm, setUserForm] = useState(emptyUserForm);
     const [lineForm, setLineForm] = useState({ leader_id: '', subordinate_id: '', status: 'active' as 'active' | 'inactive' });
-    const [guideForm, setGuideForm] = useState({ id: '', name: '', guideText: '' });
+    const [guideForm, setGuideForm] = useState({ id: '', name: '', guideText: '', active: true });
     const [evaluationForm, setEvaluationForm] = useState(emptyEvaluationForm);
     const [selectedLocationInitial, setSelectedLocationInitial] = useState<string | null>(null);
     const [locationForm, setLocationForm] = useState({
@@ -480,12 +481,13 @@ export default function AdminDashboard() {
             id: String(station.id),
             name: station.name,
             guideText: station.guide_content.join('\n'),
+            active: station.active,
         });
         setIsGuideFormOpen(true);
     };
 
     const closeGuideForm = () => {
-        setGuideForm({ id: '', name: '', guideText: '' });
+        setGuideForm({ id: '', name: '', guideText: '', active: true });
         setIsGuideFormOpen(false);
     };
 
@@ -500,20 +502,38 @@ export default function AdminDashboard() {
                     .split('\n')
                     .map((line) => line.trim())
                     .filter(Boolean),
+                active: guideForm.active,
             };
 
             if (guideForm.id) {
                 await requestJson(`/api/cms/work-stations/${guideForm.id}`, 'PATCH', payload);
-                setMessage('Guide updated.');
+                setMessage('Work station updated.');
             } else {
                 await requestJson('/api/cms/work-stations', 'POST', payload);
-                setMessage('Guide created.');
+                setMessage('Work station created.');
             }
 
             closeGuideForm();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to save guide.');
+            setMessage(error.message || 'Failed to save work station.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const deleteWorkStation = async (id: string) => {
+        if (!id || !window.confirm('Delete this work station? Stations with history cannot be deleted.')) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson(`/api/cms/work-stations/${id}`, 'DELETE');
+            setMessage('Work station deleted.');
+            closeGuideForm();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to delete work station.');
         } finally {
             setSaving(false);
         }
@@ -941,7 +961,7 @@ export default function AdminDashboard() {
                 <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-gray-400 font-bold">YoDaily CMS</p>
                     <h1 className="text-3xl font-extrabold text-gray-900 mt-2">Admin Panel</h1>
-                    <p className="text-gray-500 mt-2">Manage users, hierarchy, store assignment, and crew guides.</p>
+                    <p className="text-gray-500 mt-2">Manage users, hierarchy, store assignment, and work station guides.</p>
                 </div>
                 <button onClick={fetchOverview} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl shadow-sm text-sm font-semibold hover:bg-gray-50">
                     <RefreshCcw size={16} />
@@ -974,7 +994,7 @@ export default function AdminDashboard() {
                 {canAccess('users_locations') && <TabButton active={activeTab === 'users'} icon={<UsersRound size={16} />} label="Users & Locations" onClick={() => setActiveTab('users')} />}
                 {canAccess('users_locations') && <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="App Roles" onClick={() => setActiveTab('appRoles')} />}
                 {canAccess('reporting_lines') && <TabButton active={activeTab === 'hierarchy'} icon={<GitBranch size={16} />} label="Reporting Lines" onClick={() => setActiveTab('hierarchy')} />}
-                <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Crew Guides" onClick={() => setActiveTab('guides')} />
+                <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Work Station Master" onClick={() => setActiveTab('guides')} />
                 {canAccess('locations') && <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Location Master" onClick={() => setActiveTab('locations')} />}
                 {canAccess('regionals') && <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Regional Master" onClick={() => setActiveTab('regionals')} />}
                 {canAccess('evaluation_masters') && <TabButton active={activeTab === 'evaluations'} icon={<ShieldCheck size={16} />} label="Evaluation Master" onClick={() => setActiveTab('evaluations')} />}
@@ -1095,17 +1115,22 @@ export default function AdminDashboard() {
                                 <input type="checkbox" checked={userForm.active} onChange={(e) => setUserForm({ ...userForm, active: e.target.checked })} />
                                 Active user
                             </label>
-                            <div>
-                                <p className="text-sm font-bold text-gray-700 mb-2">Locations</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {data.locations.map((location) => (
+                            <Field label="Locations">
+                                <CustomMultiSelect
+                                    values={userForm.location_ids}
+                                    placeholder="Choose locations"
+                                    options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
+                                    onChange={(values) => setUserForm({ ...userForm, location_ids: values })}
+                                />
+                                <div className="hidden">
+                                    {([] as Location[]).map((location) => (
                                         <label key={location.initial} className={`text-xs rounded-xl px-3 py-2 border cursor-pointer ${userForm.location_ids.includes(location.initial) ? 'border-primary bg-purple-50 text-primary' : 'border-gray-100 bg-gray-50 text-gray-500'}`}>
                                             <input type="checkbox" className="hidden" checked={userForm.location_ids.includes(location.initial)} onChange={() => toggleLocation(location.initial)} />
                                             {location.initial} · {location.name}
                                         </label>
                                     ))}
                                 </div>
-                            </div>
+                            </Field>
                             <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
                                 {saving ? 'Saving...' : 'Save User'}
                             </button>
@@ -1425,7 +1450,10 @@ export default function AdminDashboard() {
                 <div className={`grid gap-6 transition-all duration-300 ${isGuideFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
-                            <h2 className="font-black text-gray-900 whitespace-nowrap">Work Stations</h2>
+                            <div>
+                                <h2 className="font-black text-gray-900 whitespace-nowrap">Work Station Master</h2>
+                                <p className="text-xs text-gray-400">Manage station availability and crew guide content.</p>
+                            </div>
                             <div className="flex-1 max-w-sm relative">
                                 <input 
                                     type="text" 
@@ -1435,13 +1463,20 @@ export default function AdminDashboard() {
                                     onChange={(e) => setGuidesSearch(e.target.value)}
                                 />
                             </div>
-                            <button onClick={() => { setGuideForm({ id: '', name: '', guideText: '' }); setIsGuideFormOpen(true); }} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Guide</button>
+                            <button onClick={() => { setGuideForm({ id: '', name: '', guideText: '', active: true }); setIsGuideFormOpen(true); }} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Work Station</button>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
                             {data.work_stations.filter(station => station.name.toLowerCase().includes(guidesSearch.toLowerCase())).map((station) => (
                                 <button key={station.id} onClick={() => selectGuide(station)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 ${guideForm.id === String(station.id) ? 'bg-purple-50' : ''}`}>
-                                    <p className="font-black text-gray-900 capitalize">{station.name}</p>
-                                    <p className="text-xs text-gray-400">{station.guide_content.length} guide item(s)</p>
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div>
+                                            <p className="font-black text-gray-900 capitalize">{station.name}</p>
+                                            <p className="text-xs text-gray-400">{station.guide_content.length} guide item(s)</p>
+                                        </div>
+                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full ${station.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                            {station.active ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </div>
                                 </button>
                             ))}
                         </div>
@@ -1451,13 +1486,29 @@ export default function AdminDashboard() {
                         <form onSubmit={saveGuide} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Crew Guide</p>
-                                    <h2 className="text-xl font-black text-gray-900">{guideForm.id ? 'Edit Guide' : 'Create Station Guide'}</h2>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Work Station</p>
+                                    <h2 className="text-xl font-black text-gray-900">{guideForm.id ? 'Edit Work Station' : 'Create Work Station'}</h2>
                                 </div>
-                                <button type="button" onClick={closeGuideForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
+                                <div className="flex items-center gap-3">
+                                    {guideForm.id && (
+                                        <button type="button" onClick={() => deleteWorkStation(guideForm.id)} className="text-sm font-bold text-red-500">Delete</button>
+                                    )}
+                                    <button type="button" onClick={closeGuideForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
+                                </div>
                             </div>
                         <Field label="Station Name">
                             <input value={guideForm.name} onChange={(e) => setGuideForm({ ...guideForm, name: e.target.value })} className="input" required />
+                        </Field>
+                        <Field label="Status">
+                            <CustomSelect
+                                value={guideForm.active ? 'active' : 'inactive'}
+                                placeholder="Choose status"
+                                options={[
+                                    { value: 'active', label: 'Active - available for new tasks and crew guide selection' },
+                                    { value: 'inactive', label: 'Inactive - hidden from new operational flows' },
+                                ]}
+                                onChange={(value) => setGuideForm({ ...guideForm, active: value !== 'inactive' })}
+                            />
                         </Field>
                         <Field label="Guide Content">
                             <textarea
@@ -1469,7 +1520,7 @@ export default function AdminDashboard() {
                         </Field>
                         <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50 flex items-center justify-center gap-2">
                             <Save size={16} />
-                            {saving ? 'Saving...' : 'Save Guide'}
+                            {saving ? 'Saving...' : 'Save Work Station'}
                         </button>
                     </form>
                 )}
@@ -1851,7 +1902,7 @@ function PaginationControls({ page, totalPages, onPageChange }: { page: number; 
     );
 }
 
-function CustomSelect({ value, placeholder, options, onChange, searchable }: { value: string; placeholder: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void; searchable?: boolean }) {
+function CustomSelect({ value, placeholder, options, onChange, searchable = true }: { value: string; placeholder: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void; searchable?: boolean }) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
     const selected = options.find((option) => option.value === value);
@@ -1920,6 +1971,93 @@ function CustomSelect({ value, placeholder, options, onChange, searchable }: { v
                             className={`w-full rounded-lg px-3 py-2 text-left text-sm ${option.value === value ? 'bg-purple-50 font-bold text-primary' : 'text-gray-700 hover:bg-gray-50'}`}
                         >
                             {option.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CustomMultiSelect({ values, placeholder, options, onChange }: { values: string[]; placeholder: string; options: Array<{ value: string; label: string }>; onChange: (values: string[]) => void }) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (ref.current && !ref.current.contains(event.target as Node)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const selectedOptions = options.filter((option) => values.includes(option.value));
+    const filteredOptions = options.filter((option) => option.label.toLowerCase().includes(search.toLowerCase()));
+    const summary = selectedOptions.length === 0
+        ? placeholder
+        : selectedOptions.length <= 2
+            ? selectedOptions.map((option) => option.label).join(', ')
+            : `${selectedOptions.length} selected`;
+
+    const toggleValue = (value: string) => {
+        onChange(values.includes(value)
+            ? values.filter((item) => item !== value)
+            : [...values, value]);
+    };
+
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                type="button"
+                onClick={() => { setOpen((current) => !current); setSearch(''); }}
+                className="input flex items-center justify-between text-left gap-4"
+            >
+                <span className={`truncate ${selectedOptions.length ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>{summary}</span>
+                <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            {open && (
+                <div className="absolute left-0 right-0 z-50 mt-2 max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
+                    <div className="p-2 sticky top-0 bg-white z-10 border-b border-gray-100">
+                        <input
+                            type="text"
+                            autoFocus
+                            placeholder="Search..."
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onClick={(event) => event.stopPropagation()}
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        onMouseDown={(event) => {
+                            event.preventDefault();
+                            onChange([]);
+                        }}
+                        className="w-full rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-500 hover:bg-gray-50"
+                    >
+                        Clear selection
+                    </button>
+                    {filteredOptions.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-xs text-gray-400">No matching options</div>
+                    ) : filteredOptions.map((option) => (
+                        <button
+                            key={option.value}
+                            type="button"
+                            onMouseDown={(event) => {
+                                event.preventDefault();
+                                toggleValue(option.value);
+                            }}
+                            className={`w-full rounded-lg px-3 py-2 text-left text-sm flex items-center gap-3 ${values.includes(option.value) ? 'bg-purple-50 font-bold text-primary' : 'text-gray-700 hover:bg-gray-50'}`}
+                        >
+                            <span className={`h-4 w-4 rounded border flex items-center justify-center ${values.includes(option.value) ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
+                                {values.includes(option.value) && <Check size={12} className="text-white" />}
+                            </span>
+                            <span className="truncate">{option.label}</span>
                         </button>
                     ))}
                 </div>

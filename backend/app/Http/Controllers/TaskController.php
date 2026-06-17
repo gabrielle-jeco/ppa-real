@@ -11,6 +11,7 @@ use App\Models\WorkStation;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class TaskController extends Controller
@@ -78,7 +79,10 @@ class TaskController extends Controller
     {
         $request->validate([
             'supervisor_id' => 'required|exists:users,username',
-            'work_station_id' => 'nullable|exists:work_stations,id',
+            'work_station_id' => [
+                'nullable',
+                Rule::exists('work_stations', 'id')->where('active', true),
+            ],
             'title' => 'required|string',
             'due_at' => 'required|date',
             'note' => 'nullable|string',
@@ -406,7 +410,9 @@ class TaskController extends Controller
 
     private function findWorkStationByRole(string $role): ?WorkStation
     {
-        return WorkStation::whereRaw('LOWER(name) = ?', [strtolower($role)])->first();
+        return WorkStation::where('active', true)
+            ->whereRaw('LOWER(name) = ?', [strtolower($role)])
+            ->first();
     }
 
     private function rejectNonTodayActionDate(Request $request, Task $task)

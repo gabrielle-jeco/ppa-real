@@ -10,20 +10,37 @@ interface CrewDashboardProps {
     onLogout?: () => void;
 }
 
-const ROLES = [
-    { id: 'cashier', label: 'Crew - Cashier' },
-    { id: 'supermarket', label: 'Crew - Supermarket' },
-    { id: 'fresh', label: 'Crew - Fresh' },
-    { id: 'fashion', label: 'Crew - Fashion' }
-];
-
 export default function CrewDashboardMobile({ user, onNavigate, selectedRole, onRoleChange, onLogout }: CrewDashboardProps) {
     const [isGuideRead, setIsGuideRead] = useState(false);
+    const [workStations, setWorkStations] = useState<Array<{ id: number; name: string }>>([]);
     const [stats, setStats] = useState<any>({
         yearly_score: 0,
         active_percentage: 0,
         task_progress: { completed: 0, total: 0 }
     });
+
+    useEffect(() => {
+        const fetchWorkStations = async () => {
+            try {
+                const response = await fetch('/api/work-stations', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+                });
+
+                if (response.ok) {
+                    const stations = await response.json();
+                    setWorkStations(stations);
+
+                    if (stations.length > 0 && !stations.some((station: any) => station.name === selectedRole)) {
+                        onRoleChange(stations[0].name);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch work stations", error);
+            }
+        };
+
+        fetchWorkStations();
+    }, [selectedRole, onRoleChange]);
 
     // Fetch Stats
     useEffect(() => {
@@ -138,8 +155,10 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                                         onChange={(e) => onRoleChange(e.target.value)}
                                         className="w-full appearance-none bg-gray-100 text-gray-800 font-bold py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 border border-transparent focus:bg-white transition-colors"
                                     >
-                                        {ROLES.map(role => (
-                                            <option key={role.id} value={role.id}>{role.label}</option>
+                                        {workStations.map(station => (
+                                            <option key={station.id} value={station.name}>
+                                                Crew - {station.name.charAt(0).toUpperCase() + station.name.slice(1)}
+                                            </option>
                                         ))}
                                     </select>
                                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
