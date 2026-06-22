@@ -1,12 +1,18 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { BookOpenCheck, Check, ChevronDown, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
-type Tab = 'users' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations';
+type Tab = 'users' | 'jobLevels' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations';
 
 type JobLevel = {
     id: number;
     name: string;
     description?: string;
+    position_code?: string | null;
+    grade?: string | null;
+    department?: string | null;
+    visible_in_yodaily?: boolean;
+    external_active?: boolean;
+    synced_at?: string | null;
 };
 
 type AccountRole = {
@@ -46,6 +52,7 @@ type CmsUser = {
     role_id?: number | null;
     account_role?: string | null;
     job_level_name?: string;
+    job_level_position_code?: string | null;
     role_type?: string;
     active: boolean;
     locations: Array<{ initial: string; name: string }>;
@@ -108,6 +115,7 @@ type CmsData = {
         account_roles: number;
         app_roles: number;
         evaluation_masters: number;
+        job_levels: number;
     };
     roles: AccountRole[];
     app_roles: AppRole[];
@@ -170,6 +178,12 @@ export default function AdminDashboard() {
     const [usersTotalPages, setUsersTotalPages] = useState(1);
     const [usersSearch, setUsersSearch] = useState('');
 
+    const [jobLevelsData, setJobLevelsData] = useState<JobLevel[]>([]);
+    const [jobLevelsPage, setJobLevelsPage] = useState(1);
+    const [jobLevelsTotalPages, setJobLevelsTotalPages] = useState(1);
+    const [jobLevelsSearch, setJobLevelsSearch] = useState('');
+    const [jobLevelsVisibility, setJobLevelsVisibility] = useState('');
+
     const [userLocationsData, setUserLocationsData] = useState<UserLocationAssignment[]>([]);
     const [userLocationsPage, setUserLocationsPage] = useState(1);
     const [userLocationsTotalPages, setUserLocationsTotalPages] = useState(1);
@@ -230,6 +244,7 @@ export default function AdminDashboard() {
     useEffect(() => {
         if (!data) return;
         if (activeTab === 'users') fetchUsers();
+        else if (activeTab === 'jobLevels') fetchJobLevels();
         else if (activeTab === 'appRoles') {
             fetchUserLocations();
             fetchUsers();
@@ -241,7 +256,7 @@ export default function AdminDashboard() {
         }
         else if (activeTab === 'locations') fetchLocations();
         else if (activeTab === 'regionals') fetchRegionals();
-    }, [activeTab, usersPage, usersSearch, userLocationsPage, userLocationsSearch, locationsPage, locationsSearch, regionalsPage, regionalsSearch, selectedLeaderId, storeFilter, data?.stats]);
+    }, [activeTab, usersPage, usersSearch, jobLevelsPage, jobLevelsSearch, jobLevelsVisibility, userLocationsPage, userLocationsSearch, locationsPage, locationsSearch, regionalsPage, regionalsSearch, selectedLeaderId, storeFilter, data?.stats]);
 
     const fetchOverview = async () => {
         setLoading(true);
@@ -266,6 +281,19 @@ export default function AdminDashboard() {
             setUsersTotalPages(res.last_page || 1);
         } catch (error: any) {
             setMessage(error.message || 'Failed to load users.');
+        }
+    };
+
+    const fetchJobLevels = async () => {
+        try {
+            const query = new URLSearchParams({ page: String(jobLevelsPage) });
+            if (jobLevelsSearch) query.append('search', jobLevelsSearch);
+            if (jobLevelsVisibility) query.append('visibility', jobLevelsVisibility);
+            const res = await requestJson(`/api/cms/job-levels?${query.toString()}`, 'GET');
+            setJobLevelsData(res.data || []);
+            setJobLevelsTotalPages(res.last_page || 1);
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to load job levels.');
         }
     };
 
@@ -663,6 +691,24 @@ export default function AdminDashboard() {
         }
     };
 
+    const toggleJobLevelVisibility = async (jobLevel: JobLevel) => {
+        setSaving(true);
+        setMessage('');
+        try {
+            const nextVisible = !jobLevel.visible_in_yodaily;
+            await requestJson(`/api/cms/job-levels/${jobLevel.id}`, 'PATCH', {
+                visible_in_yodaily: nextVisible,
+            });
+            setMessage(`${jobLevel.name} ${nextVisible ? 'shown in' : 'hidden from'} YoDaily.`);
+            await fetchJobLevels();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to update job level.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const selectEvaluation = (item: EvaluationMaster) => {
         setEvaluationForm({
             id: String(item.id),
@@ -992,6 +1038,7 @@ export default function AdminDashboard() {
 
             <div className="flex gap-3 mb-6">
                 {canAccess('users_locations') && <TabButton active={activeTab === 'users'} icon={<UsersRound size={16} />} label="Users & Locations" onClick={() => setActiveTab('users')} />}
+                {canAccess('users_locations') && <TabButton active={activeTab === 'jobLevels'} icon={<ShieldCheck size={16} />} label="HR Job Levels" onClick={() => setActiveTab('jobLevels')} />}
                 {canAccess('users_locations') && <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="App Roles" onClick={() => setActiveTab('appRoles')} />}
                 {canAccess('reporting_lines') && <TabButton active={activeTab === 'hierarchy'} icon={<GitBranch size={16} />} label="Reporting Lines" onClick={() => setActiveTab('hierarchy')} />}
                 <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Work Station Master" onClick={() => setActiveTab('guides')} />
@@ -1107,7 +1154,7 @@ export default function AdminDashboard() {
                                 <CustomSelect
                                     value={userForm.job_level_id}
                                     placeholder="Choose HR job level"
-                                    options={data.job_levels.map((level) => ({ value: String(level.id), label: level.name }))}
+                                    options={data.job_levels.map((level) => ({ value: String(level.id), label: level.position_code ? `${level.position_code} - ${level.name}` : level.name }))}
                                     onChange={(value) => setUserForm({ ...userForm, job_level_id: value })}
                                 />
                             </Field>
@@ -1209,6 +1256,75 @@ export default function AdminDashboard() {
                             </button>
                         </form>
                     )}
+                </div>
+            )}
+
+            {activeTab === 'jobLevels' && (
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                    <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+                        <div>
+                            <h2 className="font-black text-gray-900">HR Job Level Master</h2>
+                            <p className="text-xs text-gray-400">Show or hide official HR positions from YoDaily user setup.</p>
+                        </div>
+                        <div className="w-52">
+                            <CustomSelect
+                                value={jobLevelsVisibility}
+                                placeholder="All visibility"
+                                options={[
+                                    { value: 'visible', label: 'Visible in YoDaily' },
+                                    { value: 'hidden', label: 'Hidden from YoDaily' },
+                                ]}
+                                onChange={(value) => { setJobLevelsVisibility(value); setJobLevelsPage(1); }}
+                            />
+                        </div>
+                        <div className="flex-1 max-w-md relative">
+                            <input
+                                type="text"
+                                placeholder="Search position, code, grade, department..."
+                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                value={jobLevelsSearch}
+                                onChange={(event) => { setJobLevelsSearch(event.target.value); setJobLevelsPage(1); }}
+                            />
+                        </div>
+                    </div>
+                    <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
+                        {jobLevelsData.length === 0 ? (
+                            <div className="p-8 text-center text-gray-400 text-sm">No job levels found.</div>
+                        ) : jobLevelsData.map((jobLevel) => (
+                            <div key={jobLevel.id} className="px-6 py-4 grid grid-cols-[1.2fr_0.7fr_0.8fr_180px] gap-4 items-center hover:bg-gray-50 transition">
+                                <div>
+                                    <p className="font-black text-gray-900">{jobLevel.name}</p>
+                                    <p className="text-xs text-gray-400">{jobLevel.position_code || '-'} - {jobLevel.description || jobLevel.department || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Grade</p>
+                                    <p className="text-sm font-bold text-gray-700">{jobLevel.grade || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Department</p>
+                                    <p className="text-sm font-bold text-gray-700">{jobLevel.department || '-'}</p>
+                                </div>
+                                <div className="flex items-center justify-end gap-3">
+                                    <span className={`text-[10px] font-black px-2 py-1 rounded-full ${jobLevel.visible_in_yodaily ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                        {jobLevel.visible_in_yodaily ? 'Visible' : 'Hidden'}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        disabled={saving}
+                                        onClick={() => toggleJobLevelVisibility(jobLevel)}
+                                        className={`px-3 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 ${jobLevel.visible_in_yodaily ? 'bg-gray-100 text-gray-500 hover:bg-gray-200' : 'bg-primary text-white shadow-md shadow-purple-100'}`}
+                                    >
+                                        {jobLevel.visible_in_yodaily ? 'Hide' : 'Show'}
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <PaginationControls
+                        page={jobLevelsPage}
+                        totalPages={jobLevelsTotalPages}
+                        onPageChange={setJobLevelsPage}
+                    />
                 </div>
             )}
 

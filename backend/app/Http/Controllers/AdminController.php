@@ -55,13 +55,16 @@ class AdminController extends Controller
                 'regionals' => Regional::count(),
                 'account_roles' => Role::count(),
                 'app_roles' => AppRole::count(),
-                'evaluation_masters' => EvaluationMaster::count(),
+            'evaluation_masters' => EvaluationMaster::count(),
+            'job_levels' => JobLevel::where('visible_in_yodaily', true)->count(),
             ],
             'roles' => Role::orderBy('name')->get()->map(fn(Role $role) => $this->formatRole($role)),
             'cms_permissions' => collect(self::CMS_PERMISSIONS)->map(fn($label, $key) => ['key' => $key, 'label' => $label])->values(),
             'current_account_role' => Auth::user()?->accountRole?->name,
             'current_permissions' => Auth::user()?->accountRole?->permissions ?: [],
-            'job_levels' => JobLevel::orderBy('name')->get(['id', 'name', 'description']),
+            'job_levels' => JobLevel::where('visible_in_yodaily', true)
+                ->orderBy('name')
+                ->get(['id', 'position_code', 'name', 'description', 'grade', 'department', 'visible_in_yodaily', 'external_active']),
             'locations' => Location::orderBy('name')->get([
                 'initial',
                 'name',
@@ -81,14 +84,45 @@ class AdminController extends Controller
         ]);
     }
 
+    public function getJobLevels(Request $request)
+    {
+        $this->authorizePermission('users_locations');
+
+        $query = JobLevel::orderBy('name');
+
+        if ($request->filled('search')) {
+            $search = strtolower($request->query('search'));
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(COALESCE(position_code, \'\')) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(COALESCE(grade, \'\')) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(COALESCE(department, \'\')) like ?', ["%{$search}%"]);
+            });
+        }
+
+        if ($request->filled('visibility')) {
+            if ($request->query('visibility') === 'visible') {
+                $query->where('visible_in_yodaily', true);
+            } elseif ($request->query('visibility') === 'hidden') {
+                $query->where('visible_in_yodaily', false);
+            }
+        }
+
+        $paginator = $query->paginate(50);
+        $paginator->getCollection()->transform(fn(JobLevel $jobLevel) => $this->formatJobLevel($jobLevel));
+
+        return response()->json($paginator);
+    }
+
     public function getUsers(Request $request)
     {
         $this->authorizePermission('users_locations');
 
         $query = User::without(['jobLevel', 'locations', 'userLocations'])
+            ->whereHas('jobLevel', fn($q) => $q->where('visible_in_yodaily', true))
             ->with([
                 'accountRole:id,name,description,permissions',
-                'jobLevel:id,name',
+                'jobLevel:id,position_code,name,grade,department',
                 'locations:initial,name',
                 'userLocations:user_id,job_level',
                 'leaderLines' => fn($q) => $q
@@ -124,7 +158,8 @@ class AdminController extends Controller
     {
         $this->authorizePermission('users_locations');
 
-        $query = UserLocation::with(['user', 'location']);
+        $query = UserLocation::with(['user.jobLevel', 'location'])
+            ->whereHas('user.jobLevel', fn($q) => $q->where('visible_in_yodaily', true));
 
         if ($request->filled('search')) {
             $search = strtolower($request->query('search'));
@@ -166,7 +201,8 @@ class AdminController extends Controller
                 ->orWhereHas('accountRole', function($q) {
                     $q->where('name', 'admin');
                 });
-            });
+            })
+            ->whereHas('jobLevel', fn($q) => $q->where('visible_in_yodaily', true));
 
         if ($request->filled('store')) {
             $leaders->whereHas('locations', fn($q) => $q->where('locations.initial', $request->query('store')));
@@ -192,6 +228,8 @@ class AdminController extends Controller
         $this->authorizePermission('reporting_lines');
         
         $query = ReportingLine::with(['leader.jobLevel', 'subordinate.jobLevel'])
+            ->whereHas('leader.jobLevel', fn($q) => $q->where('visible_in_yodaily', true))
+            ->whereHas('subordinate.jobLevel', fn($q) => $q->where('visible_in_yodaily', true))
             ->orderBy('leader_id')
             ->orderBy('subordinate_id');
             
@@ -259,7 +297,7 @@ class AdminController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'password' => ['nullable', 'string', 'min:6'],
-            'job_level_id' => ['required', 'exists:job_levels,id'],
+            'job_level_id' => ['required', $this->visibleJobLevelRule()],
             'role_id' => ['nullable', 'exists:roles,id'],
             'active' => ['boolean'],
             'initial_store' => ['nullable', 'exists:locations,initial'],
@@ -360,7 +398,7 @@ class AdminController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:6'],
-            'job_level_id' => ['required', 'exists:job_levels,id'],
+            'job_level_id' => ['required', $this->visibleJobLevelRule()],
             'role_id' => ['nullable', 'exists:roles,id'],
             'active' => ['boolean'],
             'initial_store' => ['nullable', 'exists:locations,initial'],
@@ -503,6 +541,21 @@ class AdminController extends Controller
         return response()->json(['message' => 'Work station deleted.']);
     }
 
+    public function updateJobLevel(Request $request, JobLevel $jobLevel)
+    {
+        $this->authorizePermission('users_locations');
+
+        $data = $request->validate([
+            'visible_in_yodaily' => ['required', 'boolean'],
+        ]);
+
+        $jobLevel->update([
+            'visible_in_yodaily' => $data['visible_in_yodaily'],
+        ]);
+
+        return response()->json($this->formatJobLevel($jobLevel->fresh()));
+    }
+
     public function updateUserLocation(Request $request, UserLocation $userLocation)
     {
         $this->authorizePermission('users_locations');
@@ -561,6 +614,7 @@ class AdminController extends Controller
                 AND user_locations.location_id = locations.initial
             WHERE users.initial_store IS NOT NULL
                 AND TRIM(users.initial_store) <> ''
+                AND COALESCE(job_levels.visible_in_yodaily, FALSE) = TRUE
                 AND user_locations.id IS NULL
                 AND CASE
                     WHEN LOWER(TRIM(job_levels.name)) IN ('crew', 'employee', 'sc') THEN 'sc'
@@ -784,6 +838,7 @@ class AdminController extends Controller
             'account_role' => $user->accountRole?->name,
             'job_level_name' => $user->jobLevel?->name,
             'corporate_job_level_name' => $user->jobLevel?->name,
+            'job_level_position_code' => $user->jobLevel?->position_code,
             'role_type' => $user->role_type,
             'manager_type' => $user->manager_type,
             'active' => (bool) $user->active,
@@ -843,6 +898,26 @@ class AdminController extends Controller
             'name' => $data['name'],
             'description' => $data['description'] ?? null,
             'active' => $data['active'] ?? true,
+        ];
+    }
+
+    private function visibleJobLevelRule()
+    {
+        return Rule::exists('job_levels', 'id')->where('visible_in_yodaily', true);
+    }
+
+    private function formatJobLevel(JobLevel $jobLevel): array
+    {
+        return [
+            'id' => $jobLevel->id,
+            'position_code' => $jobLevel->position_code,
+            'name' => $jobLevel->name,
+            'description' => $jobLevel->description,
+            'grade' => $jobLevel->grade,
+            'department' => $jobLevel->department,
+            'visible_in_yodaily' => (bool) $jobLevel->visible_in_yodaily,
+            'external_active' => (bool) $jobLevel->external_active,
+            'synced_at' => $jobLevel->synced_at?->toDateTimeString(),
         ];
     }
 

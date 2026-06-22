@@ -9,7 +9,22 @@ class JobLevel extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'description'];
+    protected $fillable = [
+        'position_code',
+        'name',
+        'description',
+        'grade',
+        'department',
+        'visible_in_yodaily',
+        'external_active',
+        'synced_at',
+    ];
+
+    protected $casts = [
+        'visible_in_yodaily' => 'boolean',
+        'external_active' => 'boolean',
+        'synced_at' => 'datetime',
+    ];
 
     public function users()
     {
