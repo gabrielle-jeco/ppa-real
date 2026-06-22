@@ -53,6 +53,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/overview', [App\Http\Controllers\AdminController::class, 'overview']);
         Route::post('/users', [App\Http\Controllers\AdminController::class, 'storeUser']);
         Route::patch('/users/{username}', [App\Http\Controllers\AdminController::class, 'updateUser']);
+        Route::get('/job-levels', [App\Http\Controllers\AdminController::class, 'getJobLevels']);
+        Route::patch('/job-levels/{jobLevel}', [App\Http\Controllers\AdminController::class, 'updateJobLevel']);
         Route::get('/locations', [App\Http\Controllers\AdminController::class, 'getLocations']);
         Route::post('/locations', [App\Http\Controllers\AdminController::class, 'storeLocation']);
         Route::patch('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'updateLocation']);
