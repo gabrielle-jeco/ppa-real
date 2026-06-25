@@ -2044,6 +2044,26 @@ function PaginationControls({ page, totalPages, onPageChange }: { page: number; 
     );
 }
 
+function getDropdownStyle(ref: React.RefObject<HTMLDivElement | null>, preferredHeight = 288): React.CSSProperties | undefined {
+    if (!ref.current) return undefined;
+
+    const rect = ref.current.getBoundingClientRect();
+    const viewportPadding = 12;
+    const gap = 8;
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+    const spaceAbove = rect.top - viewportPadding;
+    const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+    const availableHeight = Math.max(96, Math.min(preferredHeight, openUp ? spaceAbove - gap : spaceBelow - gap));
+
+    return {
+        position: 'fixed',
+        top: openUp ? Math.max(viewportPadding, rect.top - availableHeight - gap) : rect.bottom + gap,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: availableHeight,
+    };
+}
+
 function CustomSelect({ value, placeholder, options, onChange, searchable = true }: { value: string; placeholder: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void; searchable?: boolean }) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -2061,14 +2081,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
     }, []);
 
     const filteredOptions = searchable ? options.filter(opt => opt.label.toLowerCase().includes(search.toLowerCase())) : options;
-    const dropdownStyle: React.CSSProperties | undefined = open && ref.current
-        ? {
-            position: 'fixed',
-            top: ref.current.getBoundingClientRect().bottom + 8,
-            left: ref.current.getBoundingClientRect().left,
-            width: ref.current.getBoundingClientRect().width,
-        }
-        : undefined;
+    const dropdownStyle = open ? getDropdownStyle(ref, 256) : undefined;
 
     return (
         <div className="relative" ref={ref}>
@@ -2081,7 +2094,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
                 <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div style={dropdownStyle} className="z-[9999] max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
+                <div style={dropdownStyle} className="z-[9999] overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
                     {searchable && (
                         <div className="p-2 sticky top-0 bg-white z-10 border-b border-gray-100">
                             <input 
@@ -2146,14 +2159,7 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
 
     const selectedOptions = options.filter((option) => values.includes(option.value));
     const filteredOptions = options.filter((option) => option.label.toLowerCase().includes(search.toLowerCase()));
-    const dropdownStyle: React.CSSProperties | undefined = open && ref.current
-        ? {
-            position: 'fixed',
-            top: ref.current.getBoundingClientRect().bottom + 8,
-            left: ref.current.getBoundingClientRect().left,
-            width: ref.current.getBoundingClientRect().width,
-        }
-        : undefined;
+    const dropdownStyle = open ? getDropdownStyle(ref, 288) : undefined;
     const summary = selectedOptions.length === 0
         ? placeholder
         : selectedOptions.length <= 2
@@ -2177,7 +2183,7 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
                 <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div style={dropdownStyle} className="z-[9999] max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
+                <div style={dropdownStyle} className="z-[9999] overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
                     <div className="p-2 sticky top-0 bg-white z-10 border-b border-gray-100">
                         <input
                             type="text"
