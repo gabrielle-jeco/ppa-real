@@ -2052,13 +2052,22 @@ function getDropdownStyle(ref: React.RefObject<HTMLDivElement | null>, preferred
     const gap = 8;
     const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
     const spaceAbove = rect.top - viewportPadding;
-    const minUsableDropdownHeight = 96;
-    const openUp = spaceBelow < minUsableDropdownHeight && spaceAbove > spaceBelow;
+    const openUp = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
     const availableHeight = Math.max(96, Math.min(preferredHeight, openUp ? spaceAbove - gap : spaceBelow - gap));
+
+    if (openUp) {
+        return {
+            position: 'fixed',
+            bottom: window.innerHeight - rect.top + gap,
+            left: rect.left,
+            width: rect.width,
+            maxHeight: availableHeight,
+        };
+    }
 
     return {
         position: 'fixed',
-        top: openUp ? Math.max(viewportPadding, rect.top - availableHeight - gap) : rect.bottom + gap,
+        top: rect.bottom + gap,
         left: rect.left,
         width: rect.width,
         maxHeight: availableHeight,
