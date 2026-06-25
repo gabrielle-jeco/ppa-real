@@ -323,12 +323,17 @@ class ScoringService
 
         $beforeCount = $task->evidences->where('type', 'before')->count();
         $afterCount = $task->evidences->where('type', 'after')->count();
+        $photoCount = $beforeCount + $afterCount;
 
-        if ($beforeCount !== 1 || $afterCount < 1 || $afterCount > 3) {
+        if ($photoCount < 1) {
             return 0;
         }
 
-        return round(100 / $afterCount, 2);
+        if ($photoCount <= 2) {
+            return round(($photoCount / 2) * 100, 2);
+        }
+
+        return round((2 / $photoCount) * 100, 2);
     }
 
     private function getAttendanceScoreForDate(User $crew, Carbon $date): float

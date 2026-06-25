@@ -147,7 +147,7 @@ const emptyEvaluationForm = {
     title: 'MONTHLY EVALUATION',
     subtitle: 'SIKAP KEPRIBADIAN',
     question: '',
-    answers: ['', '', '', '', ''],
+    answers: [''],
     sort_order: '',
     active: true,
 };
@@ -209,7 +209,7 @@ export default function AdminDashboard() {
 
     const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
     const [userForm, setUserForm] = useState(emptyUserForm);
-    const [lineForm, setLineForm] = useState({ leader_id: '', subordinate_id: '', status: 'active' as 'active' | 'inactive' });
+    const [lineForm, setLineForm] = useState({ leader_id: '', subordinate_ids: [] as string[], status: 'active' as 'active' | 'inactive' });
     const [guideForm, setGuideForm] = useState({ id: '', name: '', guideText: '', active: true });
     const [evaluationForm, setEvaluationForm] = useState(emptyEvaluationForm);
     const [selectedLocationInitial, setSelectedLocationInitial] = useState<string | null>(null);
@@ -456,9 +456,16 @@ export default function AdminDashboard() {
         setSaving(true);
         setMessage('');
         try {
-            await requestJson('/api/cms/reporting-lines', 'POST', lineForm);
-            setLineForm({ leader_id: '', subordinate_id: '', status: 'active' });
-            setMessage('Reporting line saved.');
+            if (!lineForm.leader_id || lineForm.subordinate_ids.length === 0) {
+                throw new Error('Please choose a leader and at least one subordinate.');
+            }
+            await Promise.all(lineForm.subordinate_ids.map((subordinateId) => requestJson('/api/cms/reporting-lines', 'POST', {
+                leader_id: lineForm.leader_id,
+                subordinate_id: subordinateId,
+                status: lineForm.status,
+            })));
+            setLineForm({ leader_id: '', subordinate_ids: [], status: 'active' });
+            setMessage(`${lineForm.subordinate_ids.length} reporting line(s) saved.`);
             await fetchReportingLines();
             await fetchOverview();
         } catch (error: any) {
@@ -715,7 +722,7 @@ export default function AdminDashboard() {
             title: item.title,
             subtitle: item.subtitle,
             question: item.question,
-            answers: [...item.answers, '', '', '', '', ''].slice(0, 5),
+            answers: item.answers.length ? [...item.answers] : [''],
             sort_order: String(item.sort_order || ''),
             active: item.active,
         });
@@ -744,7 +751,7 @@ export default function AdminDashboard() {
                 title: evaluationForm.title,
                 subtitle: evaluationForm.subtitle,
                 question: evaluationForm.question,
-                answers: evaluationForm.answers,
+                answers: evaluationForm.answers.map((answer) => answer.trim()).filter(Boolean),
                 sort_order: evaluationForm.sort_order ? Number(evaluationForm.sort_order) : 0,
                 active: evaluationForm.active,
             };
@@ -1483,17 +1490,18 @@ export default function AdminDashboard() {
                                 value={lineForm.leader_id}
                                 placeholder="Choose leader"
                                 options={leadersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
-                                onChange={(value) => setLineForm({ ...lineForm, leader_id: value })}
+                                onChange={(value) => setLineForm({ ...lineForm, leader_id: value, subordinate_ids: lineForm.subordinate_ids.filter((id) => id !== value) })}
                                 searchable
                             />
                         </Field>
                         <Field label="Subordinate">
-                            <CustomSelect
-                                value={lineForm.subordinate_id}
-                                placeholder="Choose subordinate"
-                                options={usersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
-                                onChange={(value) => setLineForm({ ...lineForm, subordinate_id: value })}
-                                searchable
+                            <CustomMultiSelect
+                                values={lineForm.subordinate_ids}
+                                placeholder="Choose subordinate(s)"
+                                options={usersData
+                                    .filter((user) => user.username !== lineForm.leader_id)
+                                    .map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
+                                onChange={(values) => setLineForm({ ...lineForm, subordinate_ids: values })}
                             />
                         </Field>
                         <Field label="Status">
@@ -1507,7 +1515,7 @@ export default function AdminDashboard() {
                                 onChange={(value) => setLineForm({ ...lineForm, status: value as 'active' | 'inactive' })}
                             />
                         </Field>
-                        <p className="text-xs text-gray-400 mt-2">Note: To find subordinates, please make sure to use the Users search first if they are not on the first page.</p>
+                        <p className="text-xs text-gray-400 mt-2">Select one or more subordinates, then save once to assign them to the selected leader.</p>
                         <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
                             Save Relation
                         </button>
@@ -1694,23 +1702,41 @@ export default function AdminDashboard() {
                                     <Field label="Sub Judul">
                                         <input value={evaluationForm.subtitle} onChange={(e) => setEvaluationForm({ ...evaluationForm, subtitle: e.target.value })} className="input" required />
                                     </Field>
-                                    <Field label="Question">
+                                    <Field label="Category">
                                         <input value={evaluationForm.question} onChange={(e) => setEvaluationForm({ ...evaluationForm, question: e.target.value })} className="input" required />
                                     </Field>
                                     {evaluationForm.answers.map((answer, index) => (
-                                        <Field key={index} label={`Answer ${index + 1}`}>
-                                            <input
-                                                value={answer}
-                                                onChange={(e) => {
-                                                    const nextAnswers = [...evaluationForm.answers];
-                                                    nextAnswers[index] = e.target.value;
-                                                    setEvaluationForm({ ...evaluationForm, answers: nextAnswers });
-                                                }}
-                                                className="input"
-                                                required
-                                            />
+                                        <Field key={index} label={`Poin ${index + 1}`}>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    value={answer}
+                                                    onChange={(e) => {
+                                                        const nextAnswers = [...evaluationForm.answers];
+                                                        nextAnswers[index] = e.target.value;
+                                                        setEvaluationForm({ ...evaluationForm, answers: nextAnswers });
+                                                    }}
+                                                    className="input"
+                                                    required
+                                                />
+                                                {evaluationForm.answers.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEvaluationForm({ ...evaluationForm, answers: evaluationForm.answers.filter((_, itemIndex) => itemIndex !== index) })}
+                                                        className="px-3 rounded-xl border border-red-100 text-red-500 text-xs font-bold hover:bg-red-50"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                )}
+                                            </div>
                                         </Field>
                                     ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => setEvaluationForm({ ...evaluationForm, answers: [...evaluationForm.answers, ''] })}
+                                        className="px-4 py-2 rounded-xl border border-purple-100 text-primary text-sm font-bold hover:bg-purple-50"
+                                    >
+                                        Add Poin
+                                    </button>
                                     <div className="grid grid-cols-2 gap-3">
                                         <Field label="Sort Order">
                                             <input type="number" value={evaluationForm.sort_order} onChange={(e) => setEvaluationForm({ ...evaluationForm, sort_order: e.target.value })} className="input" />
@@ -1730,10 +1756,10 @@ export default function AdminDashboard() {
                                     <h2 className="text-xl font-bold text-gray-800 mb-2">{evaluationForm.title || 'MONTHLY EVALUATION'}</h2>
                                     <p className="text-sm text-gray-400 mb-6 uppercase tracking-wider">{evaluationForm.subtitle || 'SIKAP KEPRIBADIAN'}</p>
                                     <div>
-                                        <h3 className="font-semibold text-gray-700 mb-1">{evaluationForm.question || 'Question title'}</h3>
+                                        <h3 className="font-semibold text-gray-700 mb-1">{evaluationForm.question || 'Category title'}</h3>
                                         <div className="text-xs text-gray-500 mb-3 leading-relaxed space-y-1">
                                             {evaluationForm.answers.map((answer, index) => (
-                                                <p key={index}>{index + 1}. {answer || `Answer ${index + 1}`}</p>
+                                                <p key={index}>{index + 1}. {answer || `Poin ${index + 1}`}</p>
                                             ))}
                                         </div>
                                         <div className="flex justify-between items-center px-2">
@@ -2035,6 +2061,14 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
     }, []);
 
     const filteredOptions = searchable ? options.filter(opt => opt.label.toLowerCase().includes(search.toLowerCase())) : options;
+    const dropdownStyle: React.CSSProperties | undefined = open && ref.current
+        ? {
+            position: 'fixed',
+            top: ref.current.getBoundingClientRect().bottom + 8,
+            left: ref.current.getBoundingClientRect().left,
+            width: ref.current.getBoundingClientRect().width,
+        }
+        : undefined;
 
     return (
         <div className="relative" ref={ref}>
@@ -2047,7 +2081,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
                 <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className="absolute left-0 right-0 z-50 mt-2 max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
+                <div style={dropdownStyle} className="z-[9999] max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
                     {searchable && (
                         <div className="p-2 sticky top-0 bg-white z-10 border-b border-gray-100">
                             <input 
@@ -2112,6 +2146,14 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
 
     const selectedOptions = options.filter((option) => values.includes(option.value));
     const filteredOptions = options.filter((option) => option.label.toLowerCase().includes(search.toLowerCase()));
+    const dropdownStyle: React.CSSProperties | undefined = open && ref.current
+        ? {
+            position: 'fixed',
+            top: ref.current.getBoundingClientRect().bottom + 8,
+            left: ref.current.getBoundingClientRect().left,
+            width: ref.current.getBoundingClientRect().width,
+        }
+        : undefined;
     const summary = selectedOptions.length === 0
         ? placeholder
         : selectedOptions.length <= 2
@@ -2135,7 +2177,7 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
                 <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className="absolute left-0 right-0 z-50 mt-2 max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
+                <div style={dropdownStyle} className="z-[9999] max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl flex flex-col">
                     <div className="p-2 sticky top-0 bg-white z-10 border-b border-gray-100">
                         <input
                             type="text"

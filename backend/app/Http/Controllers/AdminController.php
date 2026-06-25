@@ -1002,7 +1002,7 @@ class AdminController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'subtitle' => ['required', 'string', 'max:255'],
             'question' => ['required', 'string', 'max:255'],
-            'answers' => ['required', 'array', 'size:5'],
+            'answers' => ['required', 'array', 'min:1'],
             'answers.*' => ['required', 'string', 'max:1000'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'active' => ['boolean'],
@@ -1012,7 +1012,7 @@ class AdminController extends Controller
             'title' => $data['title'],
             'subtitle' => $data['subtitle'],
             'question' => $data['question'],
-            'answers' => array_values($data['answers']),
+            'answers' => array_values(array_filter($data['answers'], fn($answer) => trim((string) $answer) !== '')),
             'sort_order' => $data['sort_order'] ?? 0,
             'active' => $data['active'] ?? true,
         ];
