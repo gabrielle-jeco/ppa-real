@@ -2052,7 +2052,8 @@ function getDropdownStyle(ref: React.RefObject<HTMLDivElement | null>, preferred
     const gap = 8;
     const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
     const spaceAbove = rect.top - viewportPadding;
-    const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+    const minUsableDropdownHeight = 96;
+    const openUp = spaceBelow < minUsableDropdownHeight && spaceAbove > spaceBelow;
     const availableHeight = Math.max(96, Math.min(preferredHeight, openUp ? spaceAbove - gap : spaceBelow - gap));
 
     return {
