@@ -300,7 +300,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                                 ? 'bg-blue-100 border-blue-500 text-blue-600'
                                                 : canApproveTask(task) ? 'border-gray-300 bg-white hover:border-blue-500' : 'border-gray-300 bg-gray-50 cursor-not-allowed'}`}
                                     >
-                                        {isApproved && <span className="font-bold text-xs">✓</span>}
+                                        {isApproved && <Check size={14} strokeWidth={3} />}
                                     </div>
 
                                     <div className="flex-1 min-w-0 pr-2">

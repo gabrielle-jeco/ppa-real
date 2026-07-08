@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Trash2, ChevronDown, Check } from 'lucide-react';
+import { Camera, Trash2, ChevronDown, CheckCircle, XCircle, Ban } from 'lucide-react';
 import AddTaskModal from '../general/AddTaskModal';
 import TaskPreview from '../general/TaskPreview';
 import EvaluationForm from '../general/EvaluationForm';
@@ -329,6 +329,41 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
 
     const currentList = tasks;
     const canAssignOnSelectedDate = canAssignTaskOnDate(selectedDate);
+    const getEvaluationStatusView = () => {
+        if (todayEvaluation?.evaluated) {
+            return {
+                Icon: CheckCircle,
+                iconWrapClass: 'bg-green-100 text-green-600',
+                iconClass: 'text-green-600',
+                title: 'Evaluasi Selesai',
+                message: 'Form evaluasi bulanan untuk bulan ini sudah diisi.',
+            };
+        }
+
+        const selectedPeriod = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        const currentPeriod = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        const isPastPeriod = selectedPeriod < currentPeriod;
+
+        if (isPastPeriod) {
+            return {
+                Icon: XCircle,
+                iconWrapClass: 'bg-red-100 text-red-500',
+                iconClass: 'text-red-500',
+                title: 'Evaluasi Terlewat',
+                message: todayEvaluation?.locked_message || 'Periode evaluasi sudah ditutup dan tidak dapat diisi lagi.',
+            };
+        }
+
+        return {
+            Icon: Ban,
+            iconWrapClass: 'bg-amber-100 text-amber-500',
+            iconClass: 'text-amber-500',
+            title: 'Evaluasi Belum Dibuka',
+            message: todayEvaluation?.locked_message || 'Evaluasi bulanan belum masuk periode pengisian.',
+        };
+    };
+    const evaluationStatusView = getEvaluationStatusView();
+    const EvaluationStatusIcon = evaluationStatusView.Icon;
 
     return (
         <div className="flex flex-col h-full bg-gray-50 p-6 overflow-hidden relative">
@@ -532,7 +567,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                                 className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${task.status === 'approved' ? 'bg-purple-100 border-primary text-primary' : 'border-gray-300'
                                                     } ${canApproveTask(task) ? 'cursor-pointer hover:border-primary' : 'cursor-default opacity-60'}`}
                                             >
-                                                {task.status === 'approved' && <span className="font-bold text-xs">✓</span>}
+                                                {task.status === 'approved' && <CheckCircle size={14} strokeWidth={3} />}
                                             </div>
                                             <div className="flex-1">
                                                 <p className={`text-sm font-medium ${task.status === 'approved' ? 'text-gray-800' : 'text-gray-600'}`}>{task.title}</p>
@@ -562,11 +597,11 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                         /* Evaluation Mode View */
                         (todayEvaluation?.evaluated || todayEvaluation?.is_locked || todayEvaluation?.can_evaluate === false) ? (
                             <div className="flex flex-col items-center justify-center h-full bg-white rounded-2xl p-8 border border-gray-100 text-center">
-                                <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-4xl mb-4">
-                                    ✓
+                                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${evaluationStatusView.iconWrapClass}`}>
+                                    <EvaluationStatusIcon size={46} strokeWidth={2.5} className={evaluationStatusView.iconClass} />
                                 </div>
-                                <h3 className="text-xl font-bold text-gray-800 mb-2">{todayEvaluation?.evaluated ? 'Evaluasi Selesai' : 'Evaluasi Ditutup'}</h3>
-                                <p className="text-gray-500 mb-6">{todayEvaluation?.evaluated ? 'Form evaluasi bulanan untuk bulan ini sudah diisi.' : (todayEvaluation?.locked_message || 'Bulan ini belum dibuka untuk pengisian kuesioner.')}</p>
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">{evaluationStatusView.title}</h3>
+                                <p className="text-gray-500 mb-6">{evaluationStatusView.message}</p>
                                 <div className="bg-purple-50 p-4 rounded-xl w-full max-w-xs mb-6">
                                     <p className="text-xs text-gray-500 uppercase tracking-wide">Total Nilai</p>
                                     <p className="text-4xl font-bold text-primary">{todayEvaluation.data?.total_score ?? '-'}</p>
