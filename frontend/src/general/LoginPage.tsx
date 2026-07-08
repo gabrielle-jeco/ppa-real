@@ -9,7 +9,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const loginErrorMessage = 'Invalid credentials.';
+    const loginErrorMessage = 'Username dan password yang Anda masukkan tidak sesuai';
     const fallbackErrorMessage = 'Login failed. Please try again.';
 
     const readJsonSafely = async (response: Response) => {
