@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Ban, CheckCircle, ChevronDown, XCircle } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 
@@ -219,6 +219,44 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
     const activityMonitorTitle = `Monitor Aktivitas ${selectedDate.toLocaleString('id-ID', { month: 'long' })}${isCurrentSelectedMonth ? ' (MTD)' : ''}`;
     const canShowQuestionnaire = !loading && evaluationData?.can_evaluate && !evaluationData?.evaluated;
     const isStatsMode = !showQuestionnaire;
+    const getEvaluationStatusView = () => {
+        if (!evaluationData) return null;
+
+        if (evaluationData.evaluated) {
+            return {
+                Icon: CheckCircle,
+                iconWrapClass: 'bg-green-100 text-green-600',
+                title: 'Evaluasi Selesai',
+                message: 'Form evaluasi bulanan untuk bulan ini sudah diisi.',
+            };
+        }
+
+        const selectedPeriod = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        const currentPeriod = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        const isPastPeriod = selectedPeriod < currentPeriod;
+
+        if (isPastPeriod) {
+            return {
+                Icon: XCircle,
+                iconWrapClass: 'bg-red-100 text-red-500',
+                title: 'Evaluasi Terlewat',
+                message: evaluationData.locked_message || 'Periode evaluasi sudah ditutup dan tidak dapat diisi lagi.',
+            };
+        }
+
+        if (!evaluationData.can_evaluate) {
+            return {
+                Icon: Ban,
+                iconWrapClass: 'bg-amber-100 text-amber-500',
+                title: 'Evaluasi Belum Dibuka',
+                message: evaluationData.locked_message || 'Evaluasi bulanan belum masuk periode pengisian.',
+            };
+        }
+
+        return null;
+    };
+    const evaluationStatusView = getEvaluationStatusView();
+    const EvaluationStatusIcon = evaluationStatusView?.Icon;
 
     return (
         <MobileLayout
@@ -318,9 +356,15 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                 </button>
                             )}
 
-                            {!canShowQuestionnaire && !evaluationData?.evaluated && evaluationData?.locked_message && (
-                                <div className="bg-blue-50 text-blue-700 text-xs font-semibold leading-relaxed rounded-2xl px-4 py-3 border border-blue-100">
-                                    {evaluationData.locked_message}
+                            {!canShowQuestionnaire && EvaluationStatusIcon && evaluationStatusView && (
+                                <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
+                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${evaluationStatusView.iconWrapClass}`}>
+                                        <EvaluationStatusIcon size={28} strokeWidth={2.5} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-gray-800">{evaluationStatusView.title}</p>
+                                        <p className="text-xs text-gray-500 leading-relaxed mt-1">{evaluationStatusView.message}</p>
+                                    </div>
                                 </div>
                             )}
 

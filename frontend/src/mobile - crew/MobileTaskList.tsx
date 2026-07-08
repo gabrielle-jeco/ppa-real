@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, ChevronDown } from 'lucide-react';
+import { Camera, Check, ChevronDown } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 import { markNotificationSeen, notifyOnce, notifyUpcomingTask } from '../utils/browserNotifications';
 
@@ -140,7 +140,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                                                     ? 'bg-blue-100 border-blue-500 text-blue-600'
                                                     : 'border-gray-300 bg-gray-50'}`}
                                             >
-                                                {isCompleted && <span className="font-bold text-xs">✓</span>}
+                                                {isCompleted && <Check size={14} strokeWidth={3} />}
                                             </div>
 
                                             <div className="flex-1 min-w-0 pr-2">
