@@ -102,7 +102,7 @@ class AuthController extends Controller
     private function invalidCredentials(): ValidationException
     {
         return ValidationException::withMessages([
-            'username' => ['Invalid credentials.'],
+            'username' => ['Username dan password yang Anda masukkan tidak sesuai'],
         ]);
     }
 
