@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use App\Models\Task;
 use App\Models\User;
 use App\Models\WorkStation;
+use App\Services\UserNotificationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -27,12 +28,12 @@ class TaskController extends Controller
 
         if ($user->role_type !== 'manager' && $user->role_type !== 'supervisor') {
             if ($user->username !== $supervisorId) {
-                return response()->json(['message' => 'Unauthorized'], 403);
+                return response()->json(['message' => 'Tidak memiliki akses.'], 403);
             }
 
             if (!$request->filled('role')) {
                 return response()->json([
-                    'message' => 'Please choose a workstation before accessing your tasks.',
+                    'message' => 'Silakan pilih work station sebelum mengakses pekerjaan.',
                     'guide_required' => true,
                 ], 423);
             }
@@ -43,7 +44,7 @@ class TaskController extends Controller
                 && !$this->hasConfirmedGuideForDate($user, $targetDate, $request->query('role'))
             ) {
                 return response()->json([
-                    'message' => 'Please confirm today\'s guide before accessing your tasks.',
+                    'message' => 'Silakan konfirmasi panduan hari ini sebelum mengakses pekerjaan.',
                     'guide_required' => true,
                 ], 423);
             }
@@ -51,7 +52,7 @@ class TaskController extends Controller
             if ($user->username !== $supervisorId) {
                 $isSubordinate = $user->subordinateLines()->where('subordinate_id', $supervisorId)->where('status', 'active')->exists();
                 if (!$isSubordinate) {
-                    return response()->json(['message' => 'Unauthorized. This user is not your subordinate.'], 403);
+                    return response()->json(['message' => 'Tidak memiliki akses. User ini bukan bawahan Anda.'], 403);
                 }
             }
         }
@@ -66,7 +67,7 @@ class TaskController extends Controller
             $workStation = $this->findWorkStationByRole($request->query('role'));
 
             if (!$workStation) {
-                return response()->json(['message' => 'Invalid workstation'], 422);
+                return response()->json(['message' => 'Work station tidak valid.'], 422);
             }
 
             $query->where('work_station_id', $workStation->id);
@@ -95,7 +96,7 @@ class TaskController extends Controller
 
         if ($employer->role_type === 'manager') {
             return response()->json([
-                'message' => 'Manager-to-supervisor assignments are handled through manager review, not task checklist.'
+                'message' => 'Penugasan manager ke supervisor dilakukan melalui review manager, bukan ceklis pekerjaan.'
             ], 422);
         }
 
@@ -105,7 +106,7 @@ class TaskController extends Controller
             || $employer->username === $assignee->username
         ) {
             return response()->json([
-                'message' => 'Unauthorized. Task checklist can only be assigned by a supervisor to a crew member.'
+                'message' => 'Tidak memiliki akses. Ceklis pekerjaan hanya dapat diberikan oleh supervisor kepada crew.'
             ], 403);
         }
 
@@ -115,7 +116,7 @@ class TaskController extends Controller
             ->exists();
 
         if (!$isSubordinate) {
-            return response()->json(['message' => 'Unauthorized. You can only assign tasks to your direct subordinates.'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses. Anda hanya dapat memberi tugas kepada bawahan Anda.'], 403);
         }
 
         if (!$request->filled('work_station_id')) {
@@ -134,6 +135,13 @@ class TaskController extends Controller
             'status' => 'pending',
         ]);
 
+        app(WebPushService::class)->sendToUsers(
+            [$task->employee_id],
+            'Pekerjaan Baru',
+            'Anda mendapat pekerjaan baru: ' . $task->title,
+            ['tag' => 'task-new-' . $task->task_id]
+        );
+
         return response()->json($task, 201);
     }
 
@@ -142,15 +150,15 @@ class TaskController extends Controller
         $task = Task::with('evidences')->findOrFail($id);
 
         if ($task->employer_id !== Auth::user()->username) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
         if ($task->status === 'approved') {
-            return response()->json(['message' => 'Cannot delete an approved task. Please un-approve it first if you must delete it.'], 400);
+            return response()->json(['message' => 'Tugas yang sudah disetujui tidak dapat dihapus. Batalkan persetujuan terlebih dahulu jika perlu menghapus.'], 400);
         }
 
         if ($this->isTaskLocked($task)) {
-            return response()->json(['message' => 'This task is already past its deadline and can no longer be deleted.'], 400);
+            return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan tidak dapat dihapus.'], 400);
         }
 
         foreach ($task->evidences as $evidence) {
@@ -160,7 +168,7 @@ class TaskController extends Controller
         }
 
         $task->delete();
-        return response()->json(['message' => 'Task deleted']);
+        return response()->json(['message' => 'Tugas berhasil dihapus.']);
     }
 
     public function updateStatus(Request $request, $id)
@@ -173,7 +181,7 @@ class TaskController extends Controller
         $task = Task::findOrFail($id);
 
         if ($task->employer_id !== Auth::user()->username) {
-            return response()->json(['message' => 'Unauthorized. Only the task assigner can update its status.'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses. Hanya pemberi tugas yang dapat mengubah status tugas.'], 403);
         }
 
         if ($response = $this->rejectNonTodayActionDate($request, $task)) {
@@ -204,15 +212,15 @@ class TaskController extends Controller
         $task = Task::with('evidences')->findOrFail($id);
 
         if ($task->status === 'approved') {
-            return response()->json(['message' => 'Cannot modify evidence on an approved task. Please reject/un-approve the task first.'], 400);
+            return response()->json(['message' => 'Bukti pekerjaan yang sudah disetujui tidak dapat diubah. Batalkan persetujuan terlebih dahulu.'], 400);
         }
 
         if ($this->isTaskLocked($task)) {
-            return response()->json(['message' => 'This task is already past its deadline and evidence upload is locked.'], 400);
+            return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan unggah bukti sudah dikunci.'], 400);
         }
 
         if ($task->employee_id !== Auth::user()->username && $task->employer_id !== Auth::user()->username) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
         if ($response = $this->rejectNonTodayActionDate($request, $task)) {
@@ -283,6 +291,27 @@ class TaskController extends Controller
 
             DB::commit();
 
+            if ($authUser->username === $task->employee_id) {
+                $pendingApprovalCount = Task::where('employer_id', $task->employer_id)
+                    ->where('status', 'pending')
+                    ->whereHas('evidences')
+                    ->count();
+
+                app(UserNotificationService::class)->createAndPush(
+                    $task->employer_id,
+                    'approval_needed',
+                    'Persetujuan',
+                    'Anda ada ' . $pendingApprovalCount . ' pekerjaan yang membutuhkan persetujuan saat ini.',
+                    'Pekerjaan telah dilakukan oleh bawahan Anda.',
+                    [
+                        'task_id' => $task->id,
+                        'crew_id' => $task->employee_id,
+                        'url' => '/',
+                        'tag' => 'approval-needed-' . $task->employer_id,
+                    ]
+                );
+            }
+
             return response()->json($task->load('evidences'));
         } catch (\Exception $e) {
             DB::rollBack();
@@ -298,25 +327,25 @@ class TaskController extends Controller
         $task = Task::with('evidences')->findOrFail($id);
 
         if ($task->status === 'approved') {
-            return response()->json(['message' => 'Cannot delete evidence from an approved task. Please reject/un-approve the task first.'], 400);
+            return response()->json(['message' => 'Bukti pekerjaan yang sudah disetujui tidak dapat dihapus. Batalkan persetujuan terlebih dahulu.'], 400);
         }
 
         if ($this->isTaskLocked($task)) {
-            return response()->json(['message' => 'This task is already past its deadline and evidence can no longer be changed.'], 400);
+            return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan bukti tidak dapat diubah lagi.'], 400);
         }
 
         if ($task->employee_id !== Auth::user()->username && $task->employer_id !== Auth::user()->username) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
         $evidence = $task->evidences()->find($request->input('evidence_id'));
         if (!$evidence) {
-            return response()->json(['message' => 'Evidence not found for this task'], 404);
+            return response()->json(['message' => 'Bukti tidak ditemukan untuk tugas ini.'], 404);
         }
 
         if ($evidence->type !== 'before') {
             return response()->json([
-                'message' => 'Only before evidence can be deleted or replaced. After evidence is locked for scoring.'
+                'message' => 'Hanya bukti sebelum bekerja yang dapat dihapus atau diganti. Bukti sesudah bekerja dikunci untuk penilaian.'
             ], 400);
         }
 
@@ -326,7 +355,7 @@ class TaskController extends Controller
 
         $evidence->delete();
 
-        return response()->json(['message' => 'Evidence removed', 'task' => $task->load('evidences')]);
+        return response()->json(['message' => 'Bukti berhasil dihapus.', 'task' => $task->load('evidences')]);
     }
 
     public function readGuide(Request $request)
@@ -340,7 +369,7 @@ class TaskController extends Controller
         $workStation = $this->findWorkStationByRole($request->role);
 
         if (!$workStation) {
-            return response()->json(['message' => 'Invalid role'], 400);
+            return response()->json(['message' => 'Peran tidak valid.'], 400);
         }
 
         $now = now();
@@ -354,7 +383,7 @@ class TaskController extends Controller
         );
 
         return response()->json([
-            'message' => 'Guide confirmed',
+            'message' => 'Panduan berhasil dikonfirmasi.',
             'guide_read' => $guideRead,
             'timestamp' => $now
         ]);
@@ -370,7 +399,7 @@ class TaskController extends Controller
         $workStation = $this->findWorkStationByRole($request->role);
 
         if (!$workStation) {
-            return response()->json(['message' => 'Invalid role'], 400);
+            return response()->json(['message' => 'Peran tidak valid.'], 400);
         }
 
         $hasRead = GuideRead::where('user_id', $user->username)

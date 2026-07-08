@@ -11,12 +11,14 @@ interface AddTaskModalProps {
 }
 
 export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false }: AddTaskModalProps) {
+    const formatCurrentTime = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
     const [title, setTitle] = useState('');
     const [date, setDate] = useState(defaultDate || '');
     const [time, setTime] = useState('');
     const [note, setNote] = useState('');
     const [workStationId, setWorkStationId] = useState('');
     const [workStations, setWorkStations] = useState<any[]>([]);
+    const [currentTime, setCurrentTime] = useState(formatCurrentTime);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
     const minTaskTime = date === minTaskDate
@@ -29,6 +31,16 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
             setDate(defaultDate);
         }
     }, [isOpen, defaultDate]);
+
+    React.useEffect(() => {
+        if (!isOpen) return;
+
+        const updateTime = () => setCurrentTime(formatCurrentTime());
+        updateTime();
+        const timer = window.setInterval(updateTime, 30000);
+
+        return () => window.clearInterval(timer);
+    }, [isOpen]);
 
     React.useEffect(() => {
         if (!isOpen || !requireCategory) return;
@@ -54,11 +66,11 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
         const dueAt = `${date} ${time}:00`;
         const selectedTaskDate = new Date(`${date}T00:00:00`);
         if (isBeforeToday(selectedTaskDate) || isAfterTaskWindow(selectedTaskDate)) {
-            alert('Task date is outside the allowed assignment window.');
+            alert('Tanggal pekerjaan di luar periode penugasan yang diizinkan.');
             return;
         }
         if (new Date(dueAt.replace(' ', 'T')) < new Date()) {
-            alert('Task deadline cannot be earlier than the current time.');
+            alert('Tenggat pekerjaan tidak boleh lebih awal dari jam saat ini.');
             return;
         }
         onSubmit({
@@ -87,14 +99,17 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">Task Deadline</h2>
+                <h2 className="text-xl font-bold text-gray-800 mb-3 text-center">Tenggat Pekerjaan</h2>
+                <div className="mb-5 rounded-2xl bg-purple-50 px-4 py-3 text-xs font-bold text-primary flex items-center justify-between">
+                    <span>Jam saat ini</span>
+                    <span>{currentTime}</span>
+                </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Task Title (MVP Addition) */}
                     <div>
                         <input
                             type="text"
-                            placeholder="Task Title (e.g. Cek Kebersihan)"
+                            placeholder="Judul pekerjaan (contoh: Cek Kebersihan)"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-primary outline-none shadow-inner"
@@ -110,7 +125,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                                 className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer capitalize"
                                 required
                             >
-                                <option value="">Choose Category</option>
+                                <option value="">Pilih Kategori</option>
                                 {workStations.map((station) => (
                                     <option key={station.id} value={station.id}>
                                         {station.name}
@@ -155,7 +170,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                     <div>
                         <input
                             type="text"
-                            placeholder="Input Note"
+                            placeholder="Deskripsi pekerjaan"
                             value={note}
                             onChange={(e) => setNote(e.target.value)}
                             className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-primary outline-none shadow-sm"
@@ -169,7 +184,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                             type="submit"
                             className="bg-primary text-white font-bold py-3 px-8 rounded-full hover:bg-purple-700 transition shadow-lg w-full md:w-auto"
                         >
-                            Done
+                            Simpan
                         </button>
                     </div>
                 </form>

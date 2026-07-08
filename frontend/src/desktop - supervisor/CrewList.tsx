@@ -10,6 +10,14 @@ interface CrewListProps {
 export default function CrewList({ data, selectedId, onSelect }: CrewListProps) {
     const { supervisor, location_name, location_avg_progress, crews } = data;
     const maxScore = Math.max(...(crews?.map((crew: any) => crew.score || 0) ?? [0]));
+    const displayRole = (role?: string) => {
+        const normalized = String(role || '').toLowerCase();
+        if (normalized === 'employee' || normalized === 'crew' || normalized === 'sc') return 'Karyawan';
+        if (normalized === 'supervisor') return 'Supervisor';
+        if (normalized === 'manager') return 'Manager';
+        if (normalized === 'regional_manager') return 'Regional Manager';
+        return role || 'Karyawan';
+    };
 
     // Helper for Color Logic
     const getProgressColor = (score: number) => {
@@ -28,10 +36,10 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
         <div className="bg-white h-full border-r border-gray-200 flex flex-col w-full md:w-64 lg:w-64 xl:w-64 2xl:w-96 flex-shrink-0 z-10 transition-all duration-300">
             {/* Header Area */}
             <div className="p-8 pb-4">
-                <h1 className="text-xl font-bold text-gray-900 mb-6">Employee</h1>
+                <h1 className="text-xl font-bold text-gray-900 mb-6">Karyawan</h1>
 
                 <div className="mb-6">
-                    <p className="text-xs text-gray-500 mb-1">Welcome, Supervisor Fashion</p>
+                    <p className="text-xs text-gray-500 mb-1">Selamat datang, Supervisor Fashion</p>
                     <h2 className="text-lg font-bold text-gray-800">{supervisor?.name || 'User'}!</h2>
                 </div>
 
@@ -51,7 +59,7 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                             style={{ width: `${location_avg_progress}%` }}
                         ></div>
                     </div>
-                    <p className="text-xs text-gray-500">Average Task Progress : <span className="font-medium text-gray-800">{location_avg_progress}%</span></p>
+                    <p className="text-xs text-gray-500">Rata-rata Penyelesaian Tugas : <span className="font-medium text-gray-800">{location_avg_progress}%</span></p>
                 </div>
 
                 <div className="border-b border-gray-200 mt-4"></div>
@@ -77,7 +85,7 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                         )}
 
                         <div className="mb-4 pr-6">
-                            <h3 className="text-sm font-bold text-gray-800">{index + 1}. {crew.name} - {crew.role}</h3>
+                            <h3 className="text-sm font-bold text-gray-800">{index + 1}. {crew.name} - {displayRole(crew.role)}</h3>
                         </div>
 
                         {/* Progress Bar & Value */}
@@ -89,7 +97,7 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                                 ></div>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-[10px] text-gray-400">Activity Percentage - {crew.activity_percentage}%</span>
+                                <span className="text-[10px] text-gray-400">Persentase Aktivitas - {crew.activity_percentage}%</span>
                             </div>
                         </div>
                     </div>

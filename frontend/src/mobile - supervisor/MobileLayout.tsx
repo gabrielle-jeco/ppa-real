@@ -8,7 +8,7 @@ interface MobileLayoutProps {
     allowScroll?: boolean;
 }
 
-const MobileLayout: React.FC<MobileLayoutProps> = ({ children, title = "Dashboard", onBack, allowScroll = true }) => {
+const MobileLayout: React.FC<MobileLayoutProps> = ({ children, title = "Dasbor", onBack, allowScroll = true }) => {
     const [isScrolled, setIsScrolled] = useState(false);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 

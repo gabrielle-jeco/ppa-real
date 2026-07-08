@@ -129,7 +129,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                     })));
                 }
             } catch (error) {
-                console.warn('Using fallback evaluation master.', error);
+                console.warn('Menggunakan master evaluasi bawaan.', error);
             }
         };
 
@@ -147,7 +147,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
 
     const handleSubmit = async () => {
         if (Object.keys(scores).length < criteria.length) {
-            alert("Please score all criteria.");
+            alert("Silakan beri nilai untuk semua kriteria.");
             return;
         }
 
@@ -178,10 +178,10 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                 fetchEvaluationStatus(); // Refresh to switch view
             } else {
                 const errorData = await res.json().catch(() => null);
-                alert(errorData?.error || "Failed to submit evaluation");
+                alert(errorData?.error || "Gagal menyimpan evaluasi");
             }
         } catch (error) {
-            console.error("Error submitting", error);
+            console.error("Gagal menyimpan evaluasi", error);
         } finally {
             setSubmitLoading(false);
         }
@@ -216,7 +216,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
     const isCurrentSelectedMonth =
         selectedDate.getFullYear() === new Date().getFullYear() &&
         selectedDate.getMonth() === new Date().getMonth();
-    const activityMonitorTitle = `${selectedDate.toLocaleString('default', { month: 'long' })} Activity Monitor${isCurrentSelectedMonth ? ' (MTD)' : ''}`;
+    const activityMonitorTitle = `Monitor Aktivitas ${selectedDate.toLocaleString('id-ID', { month: 'long' })}${isCurrentSelectedMonth ? ' (MTD)' : ''}`;
     const canShowQuestionnaire = !loading && evaluationData?.can_evaluate && !evaluationData?.evaluated;
     const isStatsMode = !showQuestionnaire;
 
@@ -230,7 +230,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                 {/* 1. Header (Month/Year) */}
                 <div className="bg-white rounded-3xl p-5 shadow-sm mb-6">
                     <h2 className="text-center text-sm font-bold text-gray-600 mb-4">
-                        {loading ? 'Checking...' : (isStatsMode ? 'Point & Attendance History' : 'Monthly Evaluation')}
+                        {loading ? 'Memeriksa...' : (isStatsMode ? 'Riwayat Poin & Kehadiran' : 'Evaluasi Bulanan')}
                     </h2>
 
                     {/* Pill Dropdowns */}
@@ -243,7 +243,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                             >
                                 {getAvailableMonths(selectedDate.getFullYear()).map(i => (
                                     <option key={i} value={i}>
-                                        {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
+                                        {new Date(0, i).toLocaleString('id-ID', { month: 'long' })}
                                     </option>
                                 ))}
                             </select>
@@ -276,7 +276,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                 <div className="w-full bg-white rounded-full h-4 mb-2 overflow-hidden">
                                     <div className="bg-green-500 h-full rounded-full transition-all duration-1000" style={{ width: `${displayActivePercentage}%` }}></div>
                                 </div>
-                                <p className="text-xs text-gray-500">Active Percentage - {displayActivePercentage}% ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
+                                <p className="text-xs text-gray-500">Persentase Aktivitas - {displayActivePercentage}% ({selectedDate.toLocaleString('id-ID', { month: 'long' })})</p>
                             </div>
 
                             {/* Activity Monitor */}
@@ -299,14 +299,14 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                         </div>
                                     </>
                                 ) : (
-                                    <p className="text-xs text-gray-400 italic">No activity logged yet for this month.</p>
+                                    <p className="text-xs text-gray-400 italic">Belum ada aktivitas yang tercatat bulan ini.</p>
                                 )}
                             </div>
 
                             {/* Monthly Score / Personality Score */}
                             <div className="bg-gray-100 rounded-3xl p-5">
-                                <p className="text-xs font-medium text-gray-600 mb-2 uppercase">POINT SIKAP KEPRIBADIAN ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
-                                <p className="text-sm font-bold text-gray-700">Total Point : {evaluationData?.evaluated ? personalityScore : '-'}</p>
+                                <p className="text-xs font-medium text-gray-600 mb-2 uppercase">POIN SIKAP KEPRIBADIAN ({selectedDate.toLocaleString('id-ID', { month: 'long' })})</p>
+                                <p className="text-sm font-bold text-gray-700">Total Poin : {evaluationData?.evaluated ? personalityScore : '-'}</p>
                             </div>
 
                             {canShowQuestionnaire && (
@@ -314,7 +314,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                     onClick={() => setShowQuestionnaire(true)}
                                     className="w-full bg-blue-600 text-white font-bold py-4 rounded-full shadow-lg hover:bg-blue-700 transition"
                                 >
-                                    Fill Evaluation
+                                    Isi Evaluasi
                                 </button>
                             )}
 
@@ -327,11 +327,11 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                             {/* Calendar View */}
                             <div className="bg-white rounded-3xl p-6 shadow-sm">
                                 <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-sm font-bold text-gray-800">{selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+                                    <h3 className="text-sm font-bold text-gray-800">{selectedDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}</h3>
                                 </div>
 
                                 <div className="grid grid-cols-7 text-center text-[10px] text-gray-400 font-bold uppercase mb-3">
-                                    <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                                    <span>Min</span><span>Sen</span><span>Sel</span><span>Rab</span><span>Kam</span><span>Jum</span><span>Sab</span>
                                 </div>
 
                                 <div className="grid grid-cols-7 gap-y-3">
@@ -357,8 +357,8 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
 
                             {/* Yearly Overall Point */}
                             <div className="bg-gray-100 rounded-3xl p-6 pb-12">
-                                <p className="text-xs font-medium text-gray-500 uppercase mb-4">YEARLY OVERALL POINT</p>
-                                <p className="text-sm font-medium text-gray-500 mb-1">Total Point :</p>
+                                <p className="text-xs font-medium text-gray-500 uppercase mb-4">AKUMULASI NILAI TAHUNAN</p>
+                                <p className="text-sm font-medium text-gray-500 mb-1">Total Poin :</p>
                                 <p className="text-6xl font-medium text-black tracking-tight">{yearlyScore}</p>
                             </div>
 
@@ -402,7 +402,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                 disabled={submitLoading}
                                 className="w-full bg-blue-600 text-white font-bold py-4 rounded-full shadow-lg hover:bg-blue-700 transition disabled:opacity-50 mt-4 mb-8"
                             >
-                                {submitLoading ? 'Submitting...' : 'Submit'}
+                                {submitLoading ? 'Menyimpan...' : 'Simpan'}
                             </button>
 
                             <button
@@ -410,7 +410,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                 disabled={submitLoading}
                                 className="w-full bg-gray-100 text-gray-700 font-bold py-4 rounded-full shadow-sm hover:bg-gray-200 transition disabled:opacity-50 mb-8"
                             >
-                                Back to Stats
+                                Kembali ke Statistik
                             </button>
                         </div>
                     )

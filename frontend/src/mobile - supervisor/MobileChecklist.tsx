@@ -123,7 +123,7 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
     return (
         <>
             <MobileLayout
-                title="Checklist Saya"
+                title="Ceklis Saya"
                 onBack={() => onNavigate('DASHBOARD')}
                 allowScroll={false}
             >

@@ -1,4 +1,5 @@
 const hasNotificationSupport = () => typeof window !== 'undefined' && 'Notification' in window;
+const webPushPublicKey = import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY;
 
 export async function requestNotificationPermission() {
     if (!hasNotificationSupport()) return 'unsupported';
@@ -25,6 +26,51 @@ export function markNotificationSeen(key: string) {
     localStorage.setItem(`yodaily_notification_${key}`, new Date().toISOString());
 }
 
+function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+
+    return outputArray;
+}
+
+export async function registerPushSubscription() {
+    if (!hasNotificationSupport() || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (!webPushPublicKey) return;
+
+    const permission = await requestNotificationPermission();
+    if (permission !== 'granted') return;
+
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        let subscription = await registration.pushManager.getSubscription();
+
+        if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(webPushPublicKey),
+            });
+        }
+
+        await fetch('/api/push-subscriptions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify(subscription.toJSON()),
+        });
+    } catch (error) {
+        console.warn('Gagal mendaftarkan push notification.', error);
+    }
+}
+
 export function notifyUpcomingTask(task: any, prefix = 'crew') {
     if (!task?.task_id || task.status === 'approved') return;
 
@@ -34,9 +80,9 @@ export function notifyUpcomingTask(task: any, prefix = 'crew') {
 
     notifyOnce(
         `${prefix}_task_due_${task.task_id}`,
-        'Tenggat tugas hampir habis',
+        'Tenggat pekerjaan hampir habis',
         {
-            body: `${task.title || 'Tugas'} harus diselesaikan sebelum ${dueAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+            body: `${task.title || 'Pekerjaan'} harus diselesaikan sebelum ${dueAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}.`,
             tag: `task-due-${task.task_id}`,
         }
     );
@@ -53,9 +99,9 @@ export function notifyApprovalGrace(task: any) {
 
     notifyOnce(
         `approval_grace_${task.task_id}`,
-        'Tugas menunggu approval',
+        'Persetujuan pekerjaan',
         {
-            body: `${task.title || 'Tugas'} sudah melewati tenggat. Approval masih bisa dilakukan sampai ${new Date(approvalEndsAt).toLocaleString()}.`,
+            body: `${task.title || 'Pekerjaan'} sudah melewati tenggat. Persetujuan masih bisa dilakukan sampai ${new Date(approvalEndsAt).toLocaleString('id-ID')}.`,
             tag: `approval-grace-${task.task_id}`,
         }
     );

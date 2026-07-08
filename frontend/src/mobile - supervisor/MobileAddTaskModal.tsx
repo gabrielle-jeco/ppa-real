@@ -11,6 +11,7 @@ interface MobileAddTaskModalProps {
 }
 
 export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false }: MobileAddTaskModalProps) {
+    const formatCurrentTime = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
     const [title, setTitle] = useState('');
     const [date, setDate] = useState(defaultDate || '');
     const [time, setTime] = useState('');
@@ -18,6 +19,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
     const [workStationId, setWorkStationId] = useState('');
     const [workStations, setWorkStations] = useState<any[]>([]);
     const [animateIn, setAnimateIn] = useState(false);
+    const [currentTime, setCurrentTime] = useState(formatCurrentTime);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
     const minTaskTime = date === minTaskDate
@@ -32,6 +34,16 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
             setAnimateIn(false);
         }
     }, [isOpen, defaultDate]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const updateTime = () => setCurrentTime(formatCurrentTime());
+        updateTime();
+        const timer = window.setInterval(updateTime, 30000);
+
+        return () => window.clearInterval(timer);
+    }, [isOpen]);
 
     useEffect(() => {
         if (!isOpen || !requireCategory) return;
@@ -56,11 +68,11 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
         const dueAt = `${date} ${time}:00`;
         const selectedTaskDate = new Date(`${date}T00:00:00`);
         if (isBeforeToday(selectedTaskDate) || isAfterTaskWindow(selectedTaskDate)) {
-            alert('Task date is outside the allowed assignment window.');
+            alert('Tanggal pekerjaan di luar periode penugasan yang diizinkan.');
             return;
         }
         if (new Date(dueAt.replace(' ', 'T')) < new Date()) {
-            alert('Task deadline cannot be earlier than the current time.');
+            alert('Tenggat pekerjaan tidak boleh lebih awal dari jam saat ini.');
             return;
         }
         onSubmit({
@@ -97,7 +109,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                 <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 sm:hidden"></div>
 
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-gray-800">New Task</h2>
+                    <h2 className="text-xl font-bold text-gray-800">Pekerjaan Baru</h2>
                     <button
                         onClick={handleClose}
                         className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition"
@@ -105,11 +117,14 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                         <X size={20} />
                     </button>
                 </div>
+                <div className="mb-5 rounded-2xl bg-blue-50 px-4 py-3 text-xs font-bold text-blue-600 flex items-center justify-between">
+                    <span>Jam saat ini</span>
+                    <span>{currentTime}</span>
+                </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Task Title */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Title</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Judul</label>
                         <input
                             type="text"
                             placeholder="e.g. Cek Kebersihan"
@@ -122,14 +137,14 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
 
                     {requireCategory && (
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Category</label>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Kategori</label>
                             <select
                                 value={workStationId}
                                 onChange={(e) => setWorkStationId(e.target.value)}
                                 className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-5 py-4 text-gray-800 font-medium transition-all capitalize"
                                 required
                             >
-                                <option value="">Choose workstation</option>
+                                <option value="">Pilih work station</option>
                                 {workStations.map((station) => (
                                     <option key={station.id} value={station.id}>
                                         {station.name}
@@ -142,7 +157,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                     <div className="grid grid-cols-2 gap-4">
                         {/* Date Picker */}
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Date</label>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tanggal</label>
                             <div className="relative">
                                 <input
                                     type="date"
@@ -158,7 +173,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
 
                         {/* Time Picker */}
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Time</label>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Jam</label>
                             <div className="relative">
                                 <input
                                     type="time"
@@ -174,9 +189,9 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
 
                     {/* Note Input */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Note (Optional)</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Catatan (Opsional)</label>
                         <textarea
-                            placeholder="Add details..."
+                            placeholder="Tambahkan detail pekerjaan..."
                             value={note}
                             onChange={(e) => setNote(e.target.value)}
                             rows={3}
@@ -192,7 +207,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                             className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 active:scale-95 transition-transform flex items-center justify-center gap-2"
                         >
                             <Check size={20} />
-                            Create Task
+                            Buat Pekerjaan
                         </button>
                     </div>
                 </form>

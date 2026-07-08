@@ -23,7 +23,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                     setStats(data);
                 }
             } catch (error) {
-                console.error("Failed to fetch supervisor stats", error);
+                console.error("Gagal mengambil statistik supervisor", error);
             }
         };
         fetchStats();
@@ -39,7 +39,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                     setAvgCrewProgress(data.location_avg_progress || 0);
                 }
             } catch (error) {
-                console.error("Failed to fetch crew progress", error);
+                console.error("Gagal mengambil progres crew", error);
             }
         };
         fetchCrewProgress();
@@ -62,7 +62,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
     };
 
     return (
-        <MobileLayout title="Dashboard" allowScroll={true}>
+        <MobileLayout title="Dasbor" allowScroll={true}>
             {/* 1. Identity Card (Crew Style) */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 relative overflow-hidden mb-6">
                 <div className="flex justify-between items-start mb-4">
@@ -71,7 +71,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                             {user?.name?.charAt(0) || 'S'}
                         </div>
                         <div>
-                            <p className="text-xs text-gray-400">Welcome,</p>
+                            <p className="text-xs text-gray-400">Selamat datang,</p>
                             <h2 className="text-lg font-bold text-gray-800 leading-tight">
                                 {user?.name || 'Supervisor'}
                             </h2>
@@ -88,9 +88,9 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                 <div className="bg-gray-100 rounded-xl p-3 flex items-center gap-3 text-gray-500">
                     <MapPin size={18} />
                     <span className="text-sm font-semibold uppercase tracking-wide">
-                        {user?.locations?.[0]?.name || 'Unknown Location'}
+                        {user?.locations?.[0]?.name || 'Lokasi Tidak Diketahui'}
                     </span>
-                    <div className="ml-auto bg-gray-200 px-2 py-0.5 rounded text-[10px] font-bold">LOCKED</div>
+                    <div className="ml-auto bg-gray-200 px-2 py-0.5 rounded text-[10px] font-bold">TERKUNCI</div>
                 </div>
             </div>
 
@@ -103,7 +103,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                     ></div>
                 </div>
                 <p className="text-center text-xs text-gray-500 font-medium">
-                    Average Task Progress : {PROGRESS_PERCENTAGE}%
+                    Rata-rata Penyelesaian Tugas : {PROGRESS_PERCENTAGE}%
                 </p>
             </div>
 
@@ -111,22 +111,22 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
             <div className="grid grid-cols-2 gap-4">
                 <MenuCard
                     icon={<CheckSquare size={32} className="text-blue-600" />}
-                    label="Checklist"
+                    label="Ceklis"
                     onClick={() => { }}
                 />
                 <MenuCard
                     icon={<FileText size={32} className="text-blue-600" />}
-                    label="Follow Up"
+                    label="Tindak Lanjut"
                     onClick={() => { }}
                 />
                 <MenuCard
                     icon={<BarChart2 size={32} className="text-blue-600" />}
-                    label="Report"
+                    label="Laporan"
                     onClick={() => onNavigate('REPORT')}
                 />
                 <MenuCard
                     icon={<Users size={32} className="text-blue-600" />}
-                    label="Employee"
+                    label="Karyawan"
                     onClick={() => onNavigate('EMPLOYEE_LIST')}
                 />
             </div>
@@ -137,7 +137,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                 className="w-full bg-red-50 p-4 rounded-2xl shadow-sm border border-red-100 flex items-center justify-center gap-2 hover:bg-red-100 transition mt-6 group mb-24"
             >
                 <LogOut size={20} className="text-red-500 group-hover:scale-110 transition-transform" />
-                <span className="font-bold text-red-600">Log Out</span>
+                <span className="font-bold text-red-600">Keluar</span>
             </button>
         </MobileLayout>
     );

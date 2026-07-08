@@ -120,7 +120,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
 
     return (
         <CrewLayout
-            title="History"
+            title="Riwayat"
             showBack={true}
             onBack={onBack}
             allowScroll={false} // Use internal scroll for list
@@ -139,7 +139,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                 >
                                     {getAvailableMonths(selectedDate.getFullYear()).map(i => (
                                         <option key={i} value={i}>
-                                            {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
+                                            {new Date(0, i).toLocaleString('id-ID', { month: 'long' })}
                                         </option>
                                     ))}
                                 </select>
@@ -162,7 +162,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                     </div>
 
                     <div className="grid grid-cols-7 text-center mb-2 border-b border-gray-100 pb-2">
-                        {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(day => (
+                        {['MIN', 'SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB'].map(day => (
                             <span key={day} className="text-[10px] font-bold text-gray-400">{day}</span>
                         ))}
                     </div>
@@ -180,7 +180,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
 
                     <div className="flex justify-between items-center mb-4 sticky top-0 bg-white py-1 z-10 w-full shrink-0">
                         <h3 className="font-bold text-gray-800 text-sm">
-                            {selectedDate.toLocaleDateString('en-US', { day: 'numeric', month: 'long' })}
+                            {selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}
                         </h3>
                         <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg capitalize">
                             {selectedRole}
@@ -191,7 +191,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                 onClick={() => setShowRoleDropdown(!showRoleDropdown)}
                                 className="flex items-center gap-2 text-blue-600 text-xs font-bold bg-blue-50 px-3 py-1.5 rounded-lg active:scale-95 transition"
                             >
-                                {viewMode === 'ACTIVITY' ? 'Activity Log' : 'Task History'}
+                                {viewMode === 'ACTIVITY' ? 'Log Aktivitas' : 'Riwayat Pekerjaan'}
                                 <ChevronDown size={14} className={`transition ${showRoleDropdown ? 'rotate-180' : ''}`} />
                             </button>
 
@@ -201,14 +201,14 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                         onClick={() => { setViewMode('ACTIVITY'); setShowRoleDropdown(false); }}
                                         className={`w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 flex items-center justify-between ${viewMode === 'ACTIVITY' ? 'text-blue-600 bg-blue-50' : 'text-gray-600'}`}
                                     >
-                                        Activity Log
+                                        Log Aktivitas
                                         {viewMode === 'ACTIVITY' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
                                     </button>
                                     <button
                                         onClick={() => { setViewMode('TASKS'); setShowRoleDropdown(false); }}
                                         className={`w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 flex items-center justify-between ${viewMode === 'TASKS' ? 'text-blue-600 bg-blue-50' : 'text-gray-600'}`}
                                     >
-                                        Task History
+                                        Riwayat Pekerjaan
                                         {viewMode === 'TASKS' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
                                     </button>
                                 </div>
@@ -223,18 +223,18 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                     <div key={idx} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between border border-transparent hover:border-gray-200 transition">
                                         <div className="flex flex-col gap-0.5">
                                             <span className="text-gray-800 font-bold text-sm capitalize">{log.role}</span>
-                                            <span className="text-gray-400 text-[10px] italic capitalize">{log.action ? log.action.replace('_', ' ') : 'Role Change'}</span>
+                                            <span className="text-gray-400 text-[10px] italic capitalize">{log.action ? log.action.replace('_', ' ') : 'Ganti Peran'}</span>
                                         </div>
                                         <span className="text-gray-500 text-xs font-semibold bg-white px-2 py-1 rounded-lg shadow-sm border border-gray-100">{log.time}</span>
                                     </div>
                                 ))
                             ) : (
                                 <div className="text-center py-8 text-gray-400 text-xs">
-                                    No activity recorded for this date.
+                                    Belum ada aktivitas pada tanggal ini.
                                 </div>
                             )
                         ) : loading ? (
-                            <div className="flex justify-center py-10 text-gray-400">Loading tasks...</div>
+                            <div className="flex justify-center py-10 text-gray-400">Memuat pekerjaan...</div>
                         ) : (
                             tasks.length > 0 ? (
                                 tasks.map((task) => (
@@ -262,7 +262,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                 ))
                             ) : (
                                 <div className="text-center py-8 text-gray-400 text-xs">
-                                    No tasks recorded for this date.
+                                    Belum ada pekerjaan pada tanggal ini.
                                 </div>
                             )
                         )}

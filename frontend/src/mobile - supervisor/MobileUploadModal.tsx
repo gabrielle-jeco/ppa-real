@@ -27,14 +27,14 @@ const MobileUploadModal: React.FC<MobileUploadModalProps> = ({ isOpen, onClose, 
                         className="aspect-square bg-gray-200 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform"
                     >
                         <ImageIcon size={32} className="text-gray-600" />
-                        <span className="font-bold text-gray-700 text-sm">Upload</span>
+                        <span className="font-bold text-gray-700 text-sm">Unggah</span>
                     </button>
                     <button
                         onClick={onTakePhoto}
                         className="aspect-square bg-gray-200 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform"
                     >
                         <Camera size={32} className="text-gray-600" />
-                        <span className="font-bold text-gray-700 text-sm">Take Photo</span>
+                        <span className="font-bold text-gray-700 text-sm">Ambil Foto</span>
                     </button>
                 </div>
 
@@ -44,13 +44,13 @@ const MobileUploadModal: React.FC<MobileUploadModalProps> = ({ isOpen, onClose, 
                         onClick={onHistory}
                         className="flex-1 bg-blue-600 text-white font-bold py-3.5 rounded-full shadow-lg active:scale-95 transition-transform text-sm"
                     >
-                        History
+                        Riwayat
                     </button>
                     <button
                         onClick={onClose}
                         className="flex-1 bg-blue-600 text-white font-bold py-3.5 rounded-full shadow-lg active:scale-95 transition-transform text-sm"
                     >
-                        Done
+                        Selesai
                     </button>
                 </div>
             </div>

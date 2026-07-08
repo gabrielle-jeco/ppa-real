@@ -84,7 +84,7 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
                     setStats(data);
                 }
             } catch (error) {
-                console.error("Failed to fetch supervisor report stats", error);
+                console.error("Gagal mengambil statistik laporan supervisor", error);
             } finally {
                 setLoading(false);
             }
@@ -106,7 +106,7 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
 
     return (
         <MobileLayout
-            title="Performance Report"
+            title="Laporan Performa"
             onBack={onBack}
         >
             <div className="flex flex-col gap-4 pb-6">
@@ -121,7 +121,7 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
                             >
                                 {getAvailableMonths(selectedDate.getFullYear()).map(i => (
                                     <option key={i} value={i}>
-                                        {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
+                                        {new Date(0, i).toLocaleString('id-ID', { month: 'long' })}
                                     </option>
                                 ))}
                             </select>
@@ -144,9 +144,9 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
                 </div>
 
                 <div className="bg-white rounded-3xl p-5 shadow-sm">
-                    <h3 className="text-sm font-bold text-gray-800 mb-4">Attendance History</h3>
+                    <h3 className="text-sm font-bold text-gray-800 mb-4">Riwayat Kehadiran</h3>
                     <div className="grid grid-cols-7 text-center mb-2 border-b border-gray-100 pb-2">
-                        {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(day => (
+                        {['MIN', 'SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB'].map(day => (
                             <span key={day} className="text-[10px] font-bold text-gray-400">{day}</span>
                         ))}
                     </div>
@@ -157,7 +157,7 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
 
                 <div className="bg-white p-5 rounded-3xl shadow-sm">
                     <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-xs font-bold text-gray-600">My AVG Point</h3>
+                        <h3 className="text-xs font-bold text-gray-600">Rata-rata Poin Saya</h3>
                         <span className="text-sm font-bold text-gray-800">{stats?.my_avg_point || 0}%</span>
                     </div>
                     <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden">
@@ -167,15 +167,15 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
-                        <h3 className="text-xs font-bold text-gray-600 mb-3">Task for SC</h3>
+                        <h3 className="text-xs font-bold text-gray-600 mb-3">Pekerjaan untuk SC</h3>
                         <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden mb-1">
                             <div className="h-full bg-red-500 rounded-full transition-all duration-1000" style={{ width: `${stats?.task_for_sc?.completed || 0}%` }}></div>
                         </div>
-                        <p className="text-[10px] text-gray-400">{stats?.task_for_sc?.completed || 0}% Completed</p>
+                        <p className="text-[10px] text-gray-400">{stats?.task_for_sc?.completed || 0}% Selesai</p>
                     </div>
 
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
-                        <h3 className="text-xs font-bold text-gray-600 mb-3">{stats?.task_from_manager?.label || 'Manager Review'}</h3>
+                        <h3 className="text-xs font-bold text-gray-600 mb-3">{stats?.task_from_manager?.label || 'Penilaian Manager'}</h3>
                         <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden mb-1">
                             <div className="h-full bg-red-500 rounded-full transition-all duration-1000" style={{ width: `${stats?.task_from_manager?.completed || 0}%` }}></div>
                         </div>
@@ -185,14 +185,14 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
-                        <h3 className="text-xs font-bold text-gray-600 mb-3">Task Given (Monthly)</h3>
+                        <h3 className="text-xs font-bold text-gray-600 mb-3">Pekerjaan yang Diberikan (Bulanan)</h3>
                         <div className="bg-gray-200 rounded-xl py-3 px-4 text-center">
-                            <span className="font-bold text-gray-700 text-sm">{stats?.monthly_task_given || '0/0 People'}</span>
+                            <span className="font-bold text-gray-700 text-sm">{(stats?.monthly_task_given || '0/0 Orang').replace('People', 'Orang')}</span>
                         </div>
                     </div>
 
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
-                        <h3 className="text-xs font-bold text-gray-600 mb-3">AVG Service Crew Point</h3>
+                        <h3 className="text-xs font-bold text-gray-600 mb-3">Rata-rata Nilai Service Crew</h3>
                         <div className="bg-gray-200 rounded-xl py-3 px-4 text-center">
                             <span className="font-bold text-gray-700 text-sm">{stats?.avg_service_crew_point || 0}%</span>
                         </div>

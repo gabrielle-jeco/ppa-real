@@ -5,15 +5,16 @@ import ManagerDashboard from './desktop - manager/ManagerDashboard';
 import AdminLayout from './desktop - admin/AdminLayout';
 import AdminDashboard from './desktop - admin/AdminDashboard';
 import SupervisorLayout from './desktop - supervisor/SupervisorLayout';
+import SupervisorSummaryDashboard from './desktop - supervisor/SupervisorSummaryDashboard';
 import SupervisorDashboard from './desktop - supervisor/SupervisorDashboard';
 import SupervisorMobileApp from './mobile - supervisor/SupervisorMobileApp';
 import SupervisorPerformance from './desktop - supervisor/SupervisorPerformance';
 import CrewMobileApp from './mobile - crew/CrewMobileApp';
-import { requestNotificationPermission } from './utils/browserNotifications';
+import { registerPushSubscription, requestNotificationPermission } from './utils/browserNotifications';
 
 function App() {
   const [user, setUser] = useState<any>(null);
-  const [activeSupervisorPage, setActiveSupervisorPage] = useState<'employees' | 'performance'>('employees');
+  const [activeSupervisorPage, setActiveSupervisorPage] = useState<'dashboard' | 'monitoring' | 'performance'>('dashboard');
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [isVerifying, setIsVerifying] = useState(true);
 
@@ -50,6 +51,7 @@ function App() {
           // Overwrite local storage to block tampering
           localStorage.setItem('user_data', JSON.stringify(verifiedUser));
           setUser(verifiedUser);
+          registerPushSubscription();
         } else {
           // Token is invalid, expired, or user data was tampered and backend rejected
           handleLogout();
@@ -103,6 +105,7 @@ function App() {
   const handleLoginSuccess = (userData: any) => {
     setUser(userData);
     requestNotificationPermission();
+    registerPushSubscription();
   };
 
   const handleLogout = () => {
@@ -110,7 +113,7 @@ function App() {
     localStorage.removeItem('user_data');
     localStorage.removeItem('session_expires_at');
     setUser(null);
-    setActiveSupervisorPage('employees'); // Reset
+    setActiveSupervisorPage('dashboard');
   };
 
   if (isVerifying && !user) {
@@ -150,7 +153,9 @@ function App() {
         onPageChange={setActiveSupervisorPage}
         onLogout={handleLogout}
       >
-        {activeSupervisorPage === 'employees' ? (
+        {activeSupervisorPage === 'dashboard' ? (
+          <SupervisorSummaryDashboard />
+        ) : activeSupervisorPage === 'monitoring' ? (
           <SupervisorDashboard />
         ) : (
           <SupervisorPerformance />

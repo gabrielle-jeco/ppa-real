@@ -35,7 +35,7 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                 setCrews(data.crews || []);
             }
         } catch (error) {
-            console.error("Failed to fetch crews", error);
+            console.error("Gagal mengambil daftar karyawan", error);
         } finally {
             setLoading(false);
         }
@@ -62,7 +62,7 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
 
     return (
         <MobileLayout
-            title="Employee"
+            title="Karyawan"
             onBack={() => onNavigate('DASHBOARD')}
         >
             {/* Search Bar */}
@@ -70,7 +70,7 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                 <div className="bg-white rounded-full shadow-sm border border-gray-100 flex items-center px-4 py-3">
                     <input
                         type="text"
-                        placeholder="Search"
+                        placeholder="Cari"
                         className="flex-1 bg-transparent outline-none text-gray-700 placeholder-gray-400 text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -82,17 +82,17 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
             {/* List Content */}
             <div className="space-y-4">
                 {loading && (
-                    <div className="text-center text-gray-400 py-10">Loading Crews...</div>
+                    <div className="text-center text-gray-400 py-10">Memuat karyawan...</div>
                 )}
 
                 {!loading && filteredCrews.length === 0 && (
-                    <div className="text-center text-gray-400 py-10">No crews found.</div>
+                    <div className="text-center text-gray-400 py-10">Karyawan tidak ditemukan.</div>
                 )}
 
                 {filteredCrews.map((crew, index) => {
                     const score = crew.score || 0;
                     const isTopPerformer = score === maxScore && score > 0;
-                    const displayRole = crew.role === 'employee' ? 'Crew' : crew.role;
+                    const displayRole = crew.role === 'employee' ? 'Karyawan' : crew.role;
 
                     return (
                         <div
@@ -115,7 +115,7 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                             </div>
 
                             <p className="text-[10px] text-gray-500 font-medium">
-                                Activity Percentage - {score}%
+                                Persentase Aktivitas - {score}%
                             </p>
                         </div>
                     );

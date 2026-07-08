@@ -4,6 +4,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
+ARG VITE_WEB_PUSH_PUBLIC_KEY=""
+ENV VITE_WEB_PUSH_PUBLIC_KEY=$VITE_WEB_PUSH_PUBLIC_KEY
 RUN npm run build
 
 # Stage 2: Serve with Nginx

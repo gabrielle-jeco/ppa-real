@@ -117,7 +117,7 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
         try {
             await onDelete(evidenceId);
         } catch (error) {
-            console.error("Delete failed", error);
+            console.error("Gagal menghapus", error);
         }
     };
 
@@ -137,7 +137,7 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
                     <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl z-10 animate-fade-in-up">
 
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-gray-800 text-lg">Checklist Supervisor</h3>
+                            <h3 className="font-bold text-gray-800 text-lg">Ceklis Supervisor</h3>
                             <button onClick={handleClose} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
                                 <X size={20} />
                             </button>
