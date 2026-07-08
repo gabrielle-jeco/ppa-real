@@ -92,7 +92,7 @@ export default function ManagerReviewForm({ supervisor, targetDate, evaluationSt
                     <p className="text-sm text-gray-500">
                         {existing
                             ? 'This supervisor review has been submitted and is now shown as read-only.'
-                            : 'This month is no longer open for supervisor review. Missing review score is counted as 0.'}
+                            : (evaluationStatus?.locked_message || 'Review supervisor baru dibuka pada 7 hari terakhir bulan berjalan.')}
                     </p>
                 </div>
 

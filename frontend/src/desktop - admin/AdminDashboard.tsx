@@ -357,6 +357,36 @@ export default function AdminDashboard() {
         }
     };
 
+    const selectReportingLeader = async (leaderId: string) => {
+        setSelectedLeaderId(leaderId);
+
+        if (!leaderId) {
+            setLineForm((current) => ({ ...current, leader_id: '', subordinate_ids: [] }));
+            setReportingLinesData([]);
+            return;
+        }
+
+        try {
+            const query = new URLSearchParams({ leader_id: leaderId });
+            if (storeFilter) query.append('store', storeFilter);
+            const lines = await requestJson(`/api/cms/reporting-lines?${query.toString()}`, 'GET');
+            const activeSubordinates = (lines || [])
+                .filter((line: ReportingLine) => line.status === 'active')
+                .map((line: ReportingLine) => line.subordinate_id)
+                .filter((subordinateId: string) => subordinateId !== leaderId);
+
+            setReportingLinesData(lines || []);
+            setLineForm((current) => ({
+                ...current,
+                leader_id: leaderId,
+                subordinate_ids: activeSubordinates,
+            }));
+        } catch (error: any) {
+            setMessage(error.message || 'Failed to load existing subordinates.');
+            setLineForm((current) => ({ ...current, leader_id: leaderId, subordinate_ids: [] }));
+        }
+    };
+
     const requestJson = async (url: string, method: string, body?: any) => {
         const token = localStorage.getItem('auth_token');
         const response = await fetch(url, {
@@ -1490,7 +1520,7 @@ export default function AdminDashboard() {
                                 value={lineForm.leader_id}
                                 placeholder="Choose leader"
                                 options={leadersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
-                                onChange={(value) => setLineForm({ ...lineForm, leader_id: value, subordinate_ids: lineForm.subordinate_ids.filter((id) => id !== value) })}
+                                onChange={selectReportingLeader}
                                 searchable
                             />
                         </Field>

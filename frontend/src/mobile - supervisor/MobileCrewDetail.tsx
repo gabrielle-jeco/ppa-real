@@ -4,6 +4,7 @@ import MobileLayout from './MobileLayout';
 import MobileAddTaskModal from './MobileAddTaskModal';
 import MobileTaskPreview from './MobileTaskPreview';
 import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
+import { notifyApprovalGrace } from '../utils/browserNotifications';
 
 interface MobileCrewDetailProps {
     crew: any;
@@ -25,6 +26,10 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             fetchTasks();
         }
     }, [crew?.id, selectedDate]);
+
+    useEffect(() => {
+        tasks.forEach(notifyApprovalGrace);
+    }, [tasks]);
 
     // FETCH TASKS (CREW)
     const fetchTasks = async () => {
@@ -88,7 +93,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
     // TOGGLE STATUS (Checkbox)
     const handleToggleStatus = async (task: any) => {
-        if (new Date(task.due_at) < new Date()) {
+        if (!canApproveTask(task)) {
             return;
         }
 
@@ -164,6 +169,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             date.getMonth() === today.getMonth() &&
             date.getFullYear() === today.getFullYear();
     };
+    const canApproveTask = (task: any) => new Date(task.due_at).getTime() + 24 * 60 * 60 * 1000 >= Date.now();
 
     return (
         <MobileLayout
@@ -207,20 +213,20 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             {/* CARD 1: Profile & History (Static) */}
             <div className="bg-white rounded-3xl p-5 shadow-sm mb-4 flex justify-between items-center shrink-0">
                 <p className="text-gray-600 font-medium text-sm">
-                    Role as <span className="underline decoration-gray-400">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : 'Crew'}</span> Today
+                    Peran sebagai <span className="underline decoration-gray-400">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : 'Crew'}</span> hari ini
                 </p>
                 <div className="flex gap-2">
                     <button
                         onClick={() => onNavigate('EVALUATION', crew)}
                         className="bg-blue-600 text-white text-xs font-bold py-2 px-4 rounded-full shadow-md active:scale-95 transition-transform"
                     >
-                        Evaluation
+                        Evaluasi
                     </button>
                     <button
                         onClick={() => onNavigate('HISTORY', crew)}
                         className="bg-blue-600 text-white text-xs font-bold py-2 px-6 rounded-full shadow-md active:scale-95 transition-transform"
                     >
-                        History
+                        Riwayat
                     </button>
                 </div>
             </div>
@@ -228,7 +234,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             {/* CARD 2: Task Filter & Progress */}
             <div className="bg-white rounded-3xl p-5 shadow-sm mb-4 shrink-0 border border-gray-100">
                 {/* Dropdown / Filter Header */}
-                <h4 className="font-bold text-gray-800 text-sm mb-3">Task</h4>
+                <h4 className="font-bold text-gray-800 text-sm mb-3">Tugas</h4>
                 <div className="relative mb-3 h-12">
                     <button
                         onClick={() => setIsTaskModalOpen(true)}
@@ -238,7 +244,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                             : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
                             }`}
                     >
-                        <span className="text-sm">{isToday(selectedDate) ? 'Choose Task' : 'History View'}</span>
+                        <span className="text-sm">{isToday(selectedDate) ? 'Tambah Tugas' : 'Lihat Riwayat'}</span>
                         {isToday(selectedDate) && (
                             <span className="bg-gray-100 group-hover:bg-blue-100 text-gray-500 group-hover:text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-xl leading-none pb-0.5 transition-colors">+</span>
                         )}
@@ -249,7 +255,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 <div>
                     <div className="flex justify-between items-center mb-2">
                         <p className="text-sm font-bold text-gray-600">
-                            Task Completed <span className="text-gray-900">{completedCount}/{totalCount}</span>
+                            Tugas Selesai <span className="text-gray-900">{completedCount}/{totalCount}</span>
                         </p>
                         <span className="text-sm font-bold text-blue-600">{Math.round(progress)}%</span>
                     </div>
@@ -274,7 +280,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 <div className="overflow-y-auto flex-1 px-3 pb-20 space-y-3">
                     {tasks.length === 0 && (
                         <div className="text-center py-10 text-gray-400 text-sm">
-                            No tasks for this date.
+                            Tidak ada tugas pada tanggal ini.
                         </div>
                     )}
 
@@ -288,11 +294,11 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                 <div className="flex items-start gap-3 flex-1">
                                     {/* Status Checkbox */}
                                     <div
-                                        onClick={() => !isPastDue && handleToggleStatus(task)}
+                                        onClick={() => canApproveTask(task) && handleToggleStatus(task)}
                                         className={`w-5 h-5 rounded-md border-2 mt-1 flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer
                                         ${isApproved
                                                 ? 'bg-blue-100 border-blue-500 text-blue-600'
-                                                : isPastDue ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : 'border-gray-300 bg-white hover:border-blue-500'}`}
+                                                : canApproveTask(task) ? 'border-gray-300 bg-white hover:border-blue-500' : 'border-gray-300 bg-gray-50 cursor-not-allowed'}`}
                                     >
                                         {isApproved && <span className="font-bold text-xs">✓</span>}
                                     </div>
@@ -302,10 +308,10 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                             {task.title}
                                         </p>
                                         {task.work_station?.name && (
-                                            <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Category: {task.work_station.name}</p>
+                                            <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station.name}</p>
                                         )}
-                                        <p className="text-[10px] text-gray-400 mb-0.5">Due {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                        {task.note && <div className="text-[10px] text-gray-500 italic truncate">{task.note}</div>}
+                                        <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                        {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                     </div>
                                 </div>
 

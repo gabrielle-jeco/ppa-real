@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, ChevronDown } from 'lucide-react';
 import CrewLayout from './CrewLayout';
+import { markNotificationSeen, notifyOnce, notifyUpcomingTask } from '../utils/browserNotifications';
 
 interface MobileTaskListProps {
     user: any;
@@ -41,7 +42,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                     const data = await response.json();
                     setTasks([]);
                     setGuideRequired(true);
-                    setGuideMessage(data.message || 'Please confirm today\'s guide before accessing your tasks.');
+                    setGuideMessage(data.message || 'Silakan konfirmasi panduan hari ini sebelum mengakses tugas.');
                 }
             } catch (error) {
                 console.error("Failed to fetch tasks", error);
@@ -59,9 +60,34 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
     const totalCount = tasks.length;
     const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
+    useEffect(() => {
+        if (tasks.length === 0 || !user?.user_id) return;
+
+        const dateStr = selectedDate.toLocaleDateString('en-CA');
+        const seenKey = `crew_seen_tasks_${user.user_id}_${selectedRole}_${dateStr}`;
+        const previousSeen = JSON.parse(localStorage.getItem(seenKey) || 'null') as number[] | null;
+        const currentIds = tasks.map(task => Number(task.task_id)).filter(Boolean);
+
+        if (!previousSeen) {
+            localStorage.setItem(seenKey, JSON.stringify(currentIds));
+            currentIds.forEach(taskId => markNotificationSeen(`crew_new_task_${taskId}`));
+        } else {
+            tasks
+                .filter(task => !previousSeen.includes(Number(task.task_id)))
+                .forEach(task => notifyOnce(`crew_new_task_${task.task_id}`, 'Tugas baru', {
+                    body: task.title || 'Ada tugas baru yang perlu dikerjakan.',
+                    tag: `crew-new-task-${task.task_id}`,
+                }));
+
+            localStorage.setItem(seenKey, JSON.stringify(Array.from(new Set([...previousSeen, ...currentIds]))));
+        }
+
+        tasks.forEach(task => notifyUpcomingTask(task, 'crew'));
+    }, [tasks, selectedDate, selectedRole, user?.user_id]);
+
     return (
         <CrewLayout
-            title="Daily Task"
+            title="Tugas Harian"
             showBack={true}
             onBack={onBack}
             allowScroll={false}
@@ -71,7 +97,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                 <div className="bg-white rounded-3xl p-6 shadow-sm mb-4 shrink-0 border border-gray-100">
                     <div className="flex justify-between items-center mb-2">
                         <p className="text-sm font-bold text-gray-600">
-                            Task Completed <span className="text-gray-900">{completedCount}/{totalCount}</span>
+                            Tugas Selesai <span className="text-gray-900">{completedCount}/{totalCount}</span>
                         </p>
                         <span className="text-sm font-bold text-blue-600">{Math.round(progress)}%</span>
                     </div>
@@ -92,15 +118,15 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
 
                     <div className="overflow-y-auto flex-1 px-3 pb-20 space-y-3">
                         {loading ? (
-                            <div className="flex justify-center py-10 text-gray-400">Loading tasks...</div>
+                            <div className="flex justify-center py-10 text-gray-400">Memuat tugas...</div>
                         ) : guideRequired ? (
                             <div className="flex flex-col items-center justify-center py-10 text-center text-gray-400 px-4">
-                                <p className="font-medium text-gray-500 mb-2">Task access is locked.</p>
+                                <p className="font-medium text-gray-500 mb-2">Akses tugas terkunci.</p>
                                 <p>{guideMessage}</p>
                             </div>
                         ) : tasks.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-10 text-gray-400">
-                                <p>No tasks for this date.</p>
+                                <p>Tidak ada tugas pada tanggal ini.</p>
                             </div>
                         ) : (
                             tasks.map((task) => {
@@ -121,8 +147,8 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                                                 <p className={`text-sm font-medium leading-tight mb-1 ${isCompleted ? 'text-gray-500' : 'text-gray-700'}`}>
                                                     {task.title}
                                                 </p>
-                                                <p className="text-[10px] text-gray-400 mb-0.5">Due {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                                {task.note && <div className="text-[10px] text-gray-500 italic truncate">{task.note}</div>}
+                                                <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                             </div>
                                         </div>
 

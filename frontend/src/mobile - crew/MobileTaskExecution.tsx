@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, X, Trash2, CheckCircle, Image as ImageIcon, Calendar, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Camera, X, Image as ImageIcon } from 'lucide-react';
 import MobileEvidenceListModal from './MobileEvidenceListModal';
 import MobileCrewTaskPreview from './MobileCrewTaskPreview';
 import MobileActionModal from '../general/MobileActionModal';
@@ -53,9 +53,6 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
     // Camera State
     const [showCamera, setShowCamera] = useState(false);
 
-    // Hidden Input Refs
-    const galleryInputRef = React.useRef<HTMLInputElement>(null);
-
     useEffect(() => {
         setAnimateIn(true);
     }, []);
@@ -68,12 +65,8 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
         setShowActionModal(true);
     };
 
-    const triggerFileSelect = (source: 'gallery' | 'camera') => {
-        if (source === 'camera') {
-            setShowCamera(true);
-        } else if (source === 'gallery' && galleryInputRef.current) {
-            galleryInputRef.current.click();
-        }
+    const openCamera = () => {
+        setShowCamera(true);
         setShowActionModal(false);
     };
 
@@ -92,7 +85,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
             await onUpload(formData);
         } catch (error) {
             console.error(error);
-            alert("Upload failed");
+            alert("Gagal mengunggah foto.");
         } finally {
             setIsUploading(false);
         }
@@ -118,32 +111,6 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
         setShowEvidenceList(true);
     };
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (isReadOnly || !activeUploadType) return; // Prevent upload in read-only mode or if no type
-
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-
-            // Immediate Upload with Compression
-            setIsUploading(true);
-            try {
-                const compressedFile = await compressImage(file, 1200, 1200, 0.7);
-                const formData = new FormData();
-                if (viewDate) formData.append('action_date', viewDate);
-                formData.append(`${activeUploadType}[]`, compressedFile);
-
-                await onUpload(formData);
-            } catch (error) {
-                console.error(error);
-                alert("Upload failed");
-            } finally {
-                setIsUploading(false);
-                // Reset input
-                e.target.value = '';
-            }
-        }
-    };
-
     const handleDeleteEvidence = async (evidenceId: number) => {
         if (isReadOnly || !onDelete) return; // Prevent delete in read-only mode
 
@@ -157,16 +124,6 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
     // STACKED RENDER
     return (
         <>
-            {/* Hidden Inputs for Shared Use */}
-            <input
-                ref={galleryInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileChange}
-                disabled={isReadOnly}
-            />
-
             {showCamera && (
                 <MobileCameraCapture
                     onCapture={handleCameraCapture}
@@ -184,7 +141,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                     <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl z-10 animate-fade-in-up">
 
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-gray-800 text-lg">Upload Evidence</h3>
+                            <h3 className="font-bold text-gray-800 text-lg">Unggah Bukti</h3>
                             <button onClick={handleClose} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
                                 <X size={20} />
                             </button>
@@ -207,7 +164,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                                                     <Camera size={20} />
                                                     +{beforeEvidences.length}
                                                 </div>
-                                                <span className="text-white font-bold text-xs mt-2 drop-shadow-md">Before</span>
+                                                <span className="text-white font-bold text-xs mt-2 drop-shadow-md">Sebelum</span>
                                             </div>
                                         </div>
                                     ) : (
@@ -215,9 +172,9 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                                             <div className="bg-white p-3 rounded-full shadow-sm text-gray-400 group-hover:text-blue-500 transition-colors">
                                                 <Camera size={24} />
                                             </div>
-                                            <span className="font-bold text-gray-500 text-sm group-hover:text-blue-600">Before</span>
+                                            <span className="font-bold text-gray-500 text-sm group-hover:text-blue-600">Sebelum</span>
                                             {!canUploadBefore && (
-                                                <span className="text-[10px] text-gray-400 text-center px-3">Max 1 photo</span>
+                                                <span className="text-[10px] text-gray-400 text-center px-3">Maks. 1 foto</span>
                                             )}
                                         </>
                                     )}
@@ -239,7 +196,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                                                     <ImageIcon size={20} />
                                                     +{afterEvidences.length}
                                                 </div>
-                                                <span className="text-white font-bold text-xs mt-2 drop-shadow-md">After</span>
+                                                <span className="text-white font-bold text-xs mt-2 drop-shadow-md">Sesudah</span>
                                             </div>
                                         </div>
                                     ) : (
@@ -247,9 +204,9 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                                             <div className="bg-white p-3 rounded-full shadow-sm text-gray-400 group-hover:text-purple-500 transition-colors">
                                                 <ImageIcon size={24} />
                                             </div>
-                                            <span className="font-bold text-gray-500 text-sm group-hover:text-purple-600">After</span>
+                                            <span className="font-bold text-gray-500 text-sm group-hover:text-purple-600">Sesudah</span>
                                             {!canUploadAfter && (
-                                                <span className="text-[10px] text-gray-400 text-center px-3">Max 3 photos</span>
+                                                <span className="text-[10px] text-gray-400 text-center px-3">Maks. 3 foto</span>
                                             )}
                                         </>
                                     )}
@@ -263,13 +220,13 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                                 onClick={handleHistoryClick}
                                 className="flex-1 bg-gray-100 text-gray-700 font-bold py-3.5 rounded-full shadow-sm active:scale-95 transition-transform text-sm hover:bg-gray-200"
                             >
-                                History
+                                Riwayat
                             </button>
                             <button
                                 onClick={handleClose}
                                 className="flex-1 bg-blue-600 text-white font-bold py-3.5 rounded-full shadow-lg active:scale-95 transition-transform text-sm hover:bg-blue-700"
                             >
-                                Done
+                                Selesai
                             </button>
                         </div>
                     </div>
@@ -280,8 +237,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
             <MobileActionModal
                 isOpen={showActionModal}
                 onClose={() => setShowActionModal(false)}
-                onUpload={() => triggerFileSelect('gallery')}
-                onTakePhoto={() => triggerFileSelect('camera')}
+                onTakePhoto={openCamera}
                 onHistory={handleHistoryClick}
             />
 

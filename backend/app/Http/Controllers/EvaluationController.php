@@ -39,7 +39,13 @@ class EvaluationController extends Controller
 
             if (!$period->isSameMonth($currentPeriod) || !$period->isSameYear($currentPeriod)) {
                 return response()->json([
-                    'error' => 'Evaluation can only be submitted for the current month.'
+                    'error' => 'Evaluasi hanya bisa diisi untuk bulan berjalan.'
+                ], 422);
+            }
+
+            if (!$this->isEvaluationWindowOpen()) {
+                return response()->json([
+                    'error' => 'Evaluasi bulanan baru bisa diisi pada 7 hari terakhir bulan berjalan.'
                 ], 422);
             }
 
@@ -110,10 +116,23 @@ class EvaluationController extends Controller
             $evaluation->setAttribute('date', $evaluation->evaluation_period);
         }
 
+        $isCurrentPeriod = $requestedPeriod->equalTo($currentPeriod);
+        $isWindowOpen = $this->isEvaluationWindowOpen();
+        $canEvaluate = $isCurrentPeriod && $isWindowOpen;
+        $lockedMessage = null;
+
+        if (!$isCurrentPeriod) {
+            $lockedMessage = 'Evaluasi hanya bisa diisi untuk bulan berjalan.';
+        } elseif (!$isWindowOpen) {
+            $lockedMessage = 'Evaluasi bulanan baru dibuka pada 7 hari terakhir bulan ini.';
+        }
+
         return response()->json([
             'evaluated' => !!$evaluation,
-            'can_evaluate' => $requestedPeriod->equalTo($currentPeriod),
-            'is_locked' => !$requestedPeriod->equalTo($currentPeriod),
+            'can_evaluate' => $canEvaluate,
+            'is_locked' => !$canEvaluate,
+            'locked_message' => $lockedMessage,
+            'evaluation_window_starts_at' => $this->evaluationWindowStart()->toDateString(),
             'evaluation_type' => $evaluationType,
             'data' => $evaluation
         ]);
@@ -138,5 +157,15 @@ class EvaluationController extends Controller
         }
 
         return 'personality';
+    }
+
+    private function isEvaluationWindowOpen(): bool
+    {
+        return now()->startOfDay()->greaterThanOrEqualTo($this->evaluationWindowStart());
+    }
+
+    private function evaluationWindowStart(): Carbon
+    {
+        return now()->copy()->endOfMonth()->subDays(6)->startOfDay();
     }
 }

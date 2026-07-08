@@ -35,10 +35,10 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
             {/* Header */}
             <div className="flex justify-between items-center mb-4">
                 <div>
-                    <h2 className="font-bold text-gray-800 text-lg">Task Proof</h2>
+                    <h2 className="font-bold text-gray-800 text-lg">Bukti Tugas</h2>
                     <p className="text-sm text-gray-400">{task.title}</p>
                     <p className="text-xs text-gray-400 mt-1 min-h-[20px]">
-                        Uploaded: {currentEvidence?.created_at ? new Date(currentEvidence.created_at).toLocaleString() : '-'}
+                        Diunggah: {currentEvidence?.created_at ? new Date(currentEvidence.created_at).toLocaleString() : '-'}
                     </p>
                 </div>
                 <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition">
@@ -48,8 +48,8 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
 
             {/* Tabs */}
             <div className="flex gap-2 mb-4">
-                <button onClick={() => setActiveTab('before')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'before' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Before Work</button>
-                <button onClick={() => setActiveTab('after')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'after' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>After Work</button>
+                <button onClick={() => setActiveTab('before')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'before' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Sebelum Bekerja</button>
+                <button onClick={() => setActiveTab('after')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'after' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Sesudah Bekerja</button>
             </div>
 
             {/* Main Preview (Gray Box) */}
@@ -84,7 +84,7 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
                 ) : (
                     <div className="flex flex-col items-center justify-center text-gray-400 text-sm">
                         <span className="text-4xl mb-2">📷</span>
-                        No images uploaded.
+                        Belum ada foto.
                     </div>
                 )}
             </div>
