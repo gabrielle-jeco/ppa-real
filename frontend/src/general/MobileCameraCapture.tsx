@@ -54,7 +54,7 @@ const MobileCameraCapture: React.FC<MobileCameraCaptureProps> = ({ onCapture, on
                 }
             } catch (err) {
                 console.error("Camera Error:", err);
-                setError("Could not access camera. Please ensure you have granted permission and are on HTTPS.");
+                setError("Kamera tidak bisa diakses. Pastikan izin kamera sudah diberikan dan aplikasi dibuka melalui HTTPS.");
             }
         };
 
@@ -107,7 +107,7 @@ const MobileCameraCapture: React.FC<MobileCameraCaptureProps> = ({ onCapture, on
                 videoRef.current.srcObject = newStream;
             }
         } catch (err) {
-            setError("Failed to restart camera.");
+            setError("Gagal membuka ulang kamera.");
         }
     };
 
@@ -129,7 +129,7 @@ const MobileCameraCapture: React.FC<MobileCameraCaptureProps> = ({ onCapture, on
                 <button onClick={onClose} className="p-2 bg-black/20 rounded-full text-white backdrop-blur-md">
                     <X size={24} />
                 </button>
-                <div className="text-white font-bold text-shadow">Take Photo</div>
+                <div className="text-white font-bold text-shadow">Ambil Foto</div>
                 <div className="w-10"></div> {/* Spacer */}
             </div>
 
@@ -138,7 +138,7 @@ const MobileCameraCapture: React.FC<MobileCameraCaptureProps> = ({ onCapture, on
                 {error ? (
                     <div className="text-white text-center p-8">
                         <p className="mb-4 text-red-400">{error}</p>
-                        <button onClick={onClose} className="bg-white/20 px-4 py-2 rounded-lg">Close</button>
+                        <button onClick={onClose} className="bg-white/20 px-4 py-2 rounded-lg">Tutup</button>
                     </div>
                 ) : capturedImage ? (
                     <img src={capturedImage} alt="Captured" className="w-full h-full object-contain" />
@@ -162,14 +162,14 @@ const MobileCameraCapture: React.FC<MobileCameraCaptureProps> = ({ onCapture, on
                             className="flex-1 bg-gray-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2"
                         >
                             <RotateCcw size={20} />
-                            Retake
+                            Ulangi
                         </button>
                         <button
                             onClick={handleConfirm}
                             className="flex-1 bg-blue-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2"
                         >
                             <Camera size={20} />
-                            Use Photo
+                            Pakai Foto
                         </button>
                     </>
                 ) : (

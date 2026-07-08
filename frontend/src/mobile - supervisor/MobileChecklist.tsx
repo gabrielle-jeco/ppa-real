@@ -123,7 +123,7 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
     return (
         <>
             <MobileLayout
-                title="My Checklist"
+                title="Checklist Saya"
                 onBack={() => onNavigate('DASHBOARD')}
                 allowScroll={false}
             >
@@ -164,7 +164,7 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                     </div>
 
                     <div className="mb-4">
-                        <h4 className="font-bold text-gray-800 text-sm mb-3">Daily Assignments</h4>
+                        <h4 className="font-bold text-gray-800 text-sm mb-3">Penugasan Harian</h4>
                         {/* Day Names */}
                         <div className="grid grid-cols-7 text-center mb-2 border-b border-gray-100 pb-2">
                             {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(day => (
@@ -182,7 +182,7 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                     <div>
                         <div className="flex justify-between items-center mb-1">
                             <p className="text-xs text-gray-500">
-                                Completed {completedCount}/{totalCount}
+                                Selesai {completedCount}/{totalCount}
                             </p>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-3">
@@ -204,7 +204,7 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                     <div className="overflow-y-auto flex-1 px-3 pb-20 space-y-4">
                         {myTasks.length === 0 && (
                             <div className="text-center py-10 text-gray-400 text-sm">
-                                No assignments for today.
+                                Tidak ada penugasan hari ini.
                             </div>
                         )}
 
@@ -227,8 +227,8 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
 
                                         <div className="flex-1 min-w-0 pr-2">
                                             <p className="text-sm font-medium text-gray-700 leading-tight mb-1">{task.title}</p>
-                                            <p className="text-[10px] text-gray-400 mb-0.5">Due {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                            {task.note && <div className="text-[10px] text-gray-500 italic truncate">{task.note}</div>}
+                                            <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                            {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                         </div>
                                     </div>
 

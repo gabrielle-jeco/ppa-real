@@ -352,7 +352,7 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                                     <p className="text-sm font-semibold text-gray-700">{task.title}</p>
                                                     <p className="text-[10px] text-gray-400 mt-1">Due: {new Date(task.due_at).toLocaleString()}</p>
                                                     {task.work_station?.name && <p className="text-[10px] text-gray-500 mt-0.5">Category: {task.work_station.name}</p>}
-                                                    {task.note && <p className="text-[10px] text-gray-500 italic mt-0.5">"{task.note}"</p>}
+                                                    {task.note && <p className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words mt-0.5">{task.note}</p>}
                                                     <p className="text-[10px] text-gray-400 mt-2">Evidence: before {beforeCount}, after {afterCount}</p>
                                                 </div>
                                                 <button

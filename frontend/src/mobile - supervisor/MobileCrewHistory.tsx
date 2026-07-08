@@ -4,6 +4,7 @@ import MobileLayout from './MobileLayout';
 import MobileTaskPreview from './MobileTaskPreview';
 import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
+import { notifyApprovalGrace } from '../utils/browserNotifications';
 
 interface MobileCrewHistoryProps {
     crew: any;
@@ -65,6 +66,10 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
         fetchData();
     }, [selectedDate, viewMode, crew?.id]);
 
+    useEffect(() => {
+        tasks.forEach(notifyApprovalGrace);
+    }, [tasks]);
+
     const isToday = (date: Date) => {
         const todayDate = new Date();
         return date.getDate() === todayDate.getDate() &&
@@ -99,7 +104,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     };
 
     const handleDeleteTask = async (taskId: number) => {
-        if (!window.confirm("Delete this task?")) return;
+        if (!window.confirm("Hapus tugas ini?")) return;
         try {
             const token = localStorage.getItem('auth_token');
             await fetch(`/api/tasks/${taskId}`, {
@@ -154,6 +159,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     };
 
     const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
+    const canApproveTask = (task: any) => new Date(task.due_at).getTime() + 24 * 60 * 60 * 1000 >= Date.now();
 
     // Calendar Logic
     const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -243,7 +249,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
 
             <div className="flex flex-col h-full">
                 {/* Subtitle */}
-                <p className="text-center text-gray-500 text-xs font-medium mb-3 opacity-80 mt-[-10px]">History</p>
+                <p className="text-center text-gray-500 text-xs font-medium mb-3 opacity-80 mt-[-10px]">Riwayat</p>
 
                 {/* Calendar Card */}
                 <div className="bg-white rounded-3xl shado-sm p-5 mb-4 flex-shrink-0 relative">
@@ -316,7 +322,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                 onClick={() => setShowRoleDropdown(!showRoleDropdown)}
                                 className="flex items-center gap-2 text-blue-600 text-xs font-bold bg-blue-50 px-3 py-1.5 rounded-lg active:scale-95 transition"
                             >
-                                {viewMode === 'ACTIVITY' ? 'Activity Log' : 'Task History'}
+                                {viewMode === 'ACTIVITY' ? 'Log Aktivitas' : 'Riwayat Tugas'}
                                 <ChevronDown size={14} className={`transition ${showRoleDropdown ? 'rotate-180' : ''}`} />
                             </button>
 
@@ -327,14 +333,14 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                         onClick={() => { setViewMode('ACTIVITY'); setShowRoleDropdown(false); }}
                                         className={`w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 flex items-center justify-between ${viewMode === 'ACTIVITY' ? 'text-blue-600 bg-blue-50' : 'text-gray-600'}`}
                                     >
-                                        Activity Log
+                                        Log Aktivitas
                                         {viewMode === 'ACTIVITY' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
                                     </button>
                                     <button
                                         onClick={() => { setViewMode('TASKS'); setShowRoleDropdown(false); }}
                                         className={`w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 flex items-center justify-between ${viewMode === 'TASKS' ? 'text-blue-600 bg-blue-50' : 'text-gray-600'}`}
                                     >
-                                        Task History
+                                        Riwayat Tugas
                                         {viewMode === 'TASKS' && <div className="w-2 h-2 rounded-full bg-blue-600"></div>}
                                     </button>
                                 </div>
@@ -359,7 +365,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                 ))
                             ) : (
                                 <div className="text-center py-8 text-gray-400 text-xs">
-                                    No activity recorded for this date.
+                                    Belum ada aktivitas pada tanggal ini.
                                 </div>
                             )
                         ) : (
@@ -367,21 +373,21 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                             tasks.length > 0 ? (
                                 tasks.map((task) => {
                                     const isApproved = task.status === 'approved';
-                                    const isPastDue = !isToday(selectedDate) || isTaskPastDue(task);
+                                    const isPastDue = isTaskPastDue(task);
 
                                     return (
                                         <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between group border border-transparent hover:border-gray-200 transition">
                                             <div className="flex items-start gap-3 flex-1 min-w-0">
                                                 <div
-                                                    onClick={() => !isPastDue && handleToggleStatus(task)}
-                                                    className={`w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer ${isApproved ? 'bg-blue-100 border-blue-500 text-blue-600' : isPastDue ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : 'border-gray-300 bg-white hover:border-blue-500'}`}
+                                                    onClick={() => canApproveTask(task) && handleToggleStatus(task)}
+                                                    className={`w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer ${isApproved ? 'bg-blue-100 border-blue-500 text-blue-600' : canApproveTask(task) ? 'border-gray-300 bg-white hover:border-blue-500' : 'border-gray-300 bg-gray-50 cursor-not-allowed'}`}
                                                 >
                                                     {isApproved && <span className="font-bold text-xs">✓</span>}
                                                 </div>
                                                 <div className="flex-1 min-w-0 pr-2">
                                                     <p className={`font-bold text-sm line-clamp-1 mb-0.5 ${isApproved ? 'text-gray-500' : 'text-gray-800'}`}>{task.title}</p>
-                                                    <p className="text-[10px] text-gray-400">{new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                                    {task.note && <div className="text-[10px] text-gray-500 italic truncate">{task.note}</div>}
+                                                    <p className="text-[10px] text-gray-400">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                    {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                                 </div>
                                             </div>
                                             <div className="flex flex-col gap-2 items-end">
@@ -406,7 +412,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                 })
                             ) : (
                                 <div className="text-center py-8 text-gray-400 text-xs">
-                                    No tasks recorded for this date.
+                                    Belum ada tugas pada tanggal ini.
                                 </div>
                             )
                         )}

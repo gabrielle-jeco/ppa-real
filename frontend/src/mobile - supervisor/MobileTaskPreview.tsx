@@ -82,11 +82,11 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
 
                         {showHistoryLabel ? (
                             <span className="bg-blue-600/90 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg">
-                                HISTORY
+                                RIWAYAT
                             </span>
                         ) : (
                             <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-white shadow-md backdrop-blur-md ${readOnly ? 'bg-gray-500/80' : 'bg-blue-500/80'}`}>
-                                {readOnly ? 'READ ONLY' : 'REVIEW'}
+                                {readOnly ? 'BACA SAJA' : 'REVIEW'}
                             </span>
                         )}
                     </div>
@@ -131,7 +131,7 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <User size={12} />
-                                    Crew Upload
+                                    Unggahan Crew
                                 </span>
                             </div>
                             {/* Tab Switcher Button (Small) */}
@@ -141,7 +141,7 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
                                     onTabChange(activeTab === 'before' ? 'after' : 'before');
                                 }}
                                 className="bg-white/20 text-xs px-2 py-1 rounded-full hover:bg-white/30 transition shadow-sm border border-white/20">
-                                Go to {activeTab === 'before' ? 'After' : 'Before'}
+                                Ke {activeTab === 'before' ? 'Sesudah' : 'Sebelum'}
                             </button>
                         </div>
                     </div>
@@ -150,16 +150,16 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
                 {/* Footer / Actions */}
                 <div className="p-5 bg-white flex flex-col gap-3">
                     <p className="text-xs text-center text-gray-500 font-medium mb-1 tracking-wider uppercase">
-                        {activeTab === 'before' ? 'Before Work' : 'After Work'} Evidence {currentEvidences.length > 1 ? `(${safeIndex + 1}/${currentEvidences.length})` : ''}
+                        Bukti {activeTab === 'before' ? 'Sebelum Bekerja' : 'Sesudah Bekerja'} {currentEvidences.length > 1 ? `(${safeIndex + 1}/${currentEvidences.length})` : ''}
                     </p>
 
                     {currentEvidence ? (
                         <div className="py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium mt-2">
-                            Evidence View Only
+                            Bukti hanya dapat dilihat
                         </div>
                     ) : (
                         <div className="py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium mt-2">
-                            No image uploaded for this section.
+                            Belum ada foto untuk bagian ini.
                         </div>
                     )}
                 </div>

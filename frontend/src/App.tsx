@@ -9,6 +9,7 @@ import SupervisorDashboard from './desktop - supervisor/SupervisorDashboard';
 import SupervisorMobileApp from './mobile - supervisor/SupervisorMobileApp';
 import SupervisorPerformance from './desktop - supervisor/SupervisorPerformance';
 import CrewMobileApp from './mobile - crew/CrewMobileApp';
+import { requestNotificationPermission } from './utils/browserNotifications';
 
 function App() {
   const [user, setUser] = useState<any>(null);
@@ -101,6 +102,7 @@ function App() {
   // Simplified Auth Flow for Phase 2 Verification
   const handleLoginSuccess = (userData: any) => {
     setUser(userData);
+    requestNotificationPermission();
   };
 
   const handleLogout = () => {

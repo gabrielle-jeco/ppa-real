@@ -438,9 +438,11 @@ class AdminController extends Controller
         $this->validateReportingLineHierarchy($data['leader_id'], $data['subordinate_id']);
 
         $line = ReportingLine::updateOrCreate(
-            ['subordinate_id' => $data['subordinate_id']],
             [
                 'leader_id' => $data['leader_id'],
+                'subordinate_id' => $data['subordinate_id'],
+            ],
+            [
                 'status' => $data['status'],
             ]
         );

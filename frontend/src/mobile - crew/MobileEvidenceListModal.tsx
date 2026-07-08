@@ -93,7 +93,7 @@ export default function MobileEvidenceListModal({
             >
                 {/* Header */}
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-gray-800">Evidence List</h2>
+                    <h2 className="text-xl font-bold text-gray-800">Daftar Bukti</h2>
                     <button
                         onClick={handleClose}
                         className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition"
@@ -107,24 +107,24 @@ export default function MobileEvidenceListModal({
                     {!hasImages ? (
                         <div className="flex flex-col items-center justify-center h-40 text-gray-400 border-2 border-dashed border-gray-100 rounded-2xl">
                             <ImageIcon size={32} className="mb-2 opacity-50" />
-                            <p className="text-sm">No evidence uploaded yet.</p>
+                            <p className="text-sm">Belum ada bukti yang diunggah.</p>
                         </div>
                     ) : (
                         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                             {/* Crew Task Images */}
                             {beforeEvidences.length > 0 && (
                                 <div>
-                                    <h3 className="text-gray-800 font-bold text-sm mb-2 ml-1">Before</h3>
+                                    <h3 className="text-gray-800 font-bold text-sm mb-2 ml-1">Sebelum</h3>
                                     {beforeEvidences.map((e: any, idx: number) =>
-                                        renderItem(e, 'before', `Before Work ${beforeEvidences.length > 1 ? `#${idx + 1}` : ''}`, idx)
+                                        renderItem(e, 'before', `Sebelum Bekerja ${beforeEvidences.length > 1 ? `#${idx + 1}` : ''}`, idx)
                                     )}
                                 </div>
                             )}
                             {afterEvidences.length > 0 && (
                                 <div>
-                                    <h3 className="text-gray-800 font-bold text-sm mb-2 ml-1">After</h3>
+                                    <h3 className="text-gray-800 font-bold text-sm mb-2 ml-1">Sesudah</h3>
                                     {afterEvidences.map((e: any, idx: number) =>
-                                        renderItem(e, 'after', `After Work ${afterEvidences.length > 1 ? `#${idx + 1}` : ''}`, idx)
+                                        renderItem(e, 'after', `Sesudah Bekerja ${afterEvidences.length > 1 ? `#${idx + 1}` : ''}`, idx)
                                     )}
                                 </div>
                             )}
@@ -138,7 +138,7 @@ export default function MobileEvidenceListModal({
                         onClick={handleClose}
                         className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-full shadow-lg active:scale-95 transition-transform"
                     >
-                        Back
+                        Kembali
                     </button>
                 </div>
             </div>

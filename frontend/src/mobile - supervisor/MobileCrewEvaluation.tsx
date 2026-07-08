@@ -318,6 +318,12 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                                 </button>
                             )}
 
+                            {!canShowQuestionnaire && !evaluationData?.evaluated && evaluationData?.locked_message && (
+                                <div className="bg-blue-50 text-blue-700 text-xs font-semibold leading-relaxed rounded-2xl px-4 py-3 border border-blue-100">
+                                    {evaluationData.locked_message}
+                                </div>
+                            )}
+
                             {/* Calendar View */}
                             <div className="bg-white rounded-3xl p-6 shadow-sm">
                                 <div className="flex justify-between items-center mb-4">

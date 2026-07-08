@@ -6,6 +6,7 @@ import EvaluationForm from '../general/EvaluationForm';
 import SubmissionHistory from './SubmissionHistory';
 import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 import { canAssignTaskOnDate, clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
+import { notifyApprovalGrace } from '../utils/browserNotifications';
 
 interface CrewDetailProps {
     crew: any;
@@ -41,6 +42,10 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
         fetchEvaluationStatus();
         fetchActivityLogs();
     }, [selectedDate]);
+
+    useEffect(() => {
+        tasks.forEach(notifyApprovalGrace);
+    }, [tasks]);
 
     // Fetch eval stats when crew or month changes
     useEffect(() => {
@@ -176,7 +181,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
     };
 
     const handleToggleStatus = async (task: any) => {
-        if (new Date(task.due_at) < new Date()) {
+        if (!canApproveTask(task)) {
             return;
         }
 
@@ -252,6 +257,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
     };
 
     const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
+    const canApproveTask = (task: any) => new Date(task.due_at).getTime() + 24 * 60 * 60 * 1000 >= Date.now();
 
     const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const isCurrentSelectedMonth =
@@ -285,8 +291,8 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                         <h2 className="text-xl font-bold text-primary mb-1">{crew.name}</h2>
                         <p className="text-xs text-gray-500 mb-4">
-                            Role as <span className="underline decoration-primary">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : crew.role || 'Crew'}</span> <br />
-                            Today
+                            Peran sebagai <span className="underline decoration-primary">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : crew.role || 'Crew'}</span> <br />
+                            Hari ini
                         </p>
                         <button
                             onClick={() => handleSetViewMode('EVALUATION')}
@@ -295,13 +301,13 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                 : 'bg-primary text-white border-2 border-transparent hover:bg-purple-700'
                                 }`}
                         >
-                            Evaluation
+                            Evaluasi
                         </button>
                     </div>
 
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex-1 flex flex-col">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-gray-800">Activity & Task</h3>
+                            <h3 className="font-bold text-gray-800">Aktivitas & Tugas</h3>
                             <button
                                 onClick={() => handleSetViewMode('TASKS')}
                                 className={`text-[10px] font-bold py-1 px-3 rounded-full transition border ${viewMode === 'TASKS'
@@ -314,7 +320,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                         </div>
 
                         <div className="mb-0">
-                            <h4 className="font-bold text-gray-800 text-sm mb-3">Task</h4>
+                            <h4 className="font-bold text-gray-800 text-sm mb-3">Tugas</h4>
                             <div className="relative mb-3 h-12">
                                 <button
                                     onClick={() => setIsTaskModalOpen(true)}
@@ -324,7 +330,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                         : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
                                         }`}
                                 >
-                                    <span>{canAssignOnSelectedDate ? 'Choose Task' : 'History View'}</span>
+                                    <span>{canAssignOnSelectedDate ? 'Tambah Tugas' : 'Lihat Riwayat'}</span>
                                     {canAssignOnSelectedDate && (
                                         <span className="bg-gray-100 group-hover:bg-purple-100 text-gray-500 group-hover:text-primary rounded-full w-5 h-5 flex items-center justify-center text-lg leading-none pb-0.5">+</span>
                                     )}
@@ -338,7 +344,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                     ></div>
                                 </div>
                             </div>
-                            <p className="text-[10px] text-gray-400">Task Completed: {currentList.filter(t => t.status === 'approved').length}/{currentList.length}</p>
+                            <p className="text-[10px] text-gray-400">Tugas Selesai: {currentList.filter(t => t.status === 'approved').length}/{currentList.length}</p>
                         </div>
 
                         {/* Calendar */}
@@ -454,29 +460,29 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                         <>
                             {/* Header */}
                             <div className="mb-4">
-                                <h2 className="text-lg font-bold text-gray-800">Task List</h2>
-                                <p className="text-sm text-gray-400">Today</p>
+                                <h2 className="text-lg font-bold text-gray-800">Daftar Tugas</h2>
+                                <p className="text-sm text-gray-400">Hari ini</p>
                             </div>
 
                             <div className="flex-1 overflow-y-auto pr-2 space-y-3 min-h-0">
-                                {currentList.length === 0 && <div className="text-center text-gray-400 py-10">No tasks found.</div>}
+                                {currentList.length === 0 && <div className="text-center text-gray-400 py-10">Tidak ada tugas.</div>}
                                 {currentList.map((task) => (
                                     <div key={task.task_id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition group">
                                         <div className="flex items-start gap-3">
                                             <div
-                                                onClick={() => isToday(selectedDate) && !isTaskPastDue(task) && handleToggleStatus(task)}
+                                                onClick={() => canApproveTask(task) && handleToggleStatus(task)}
                                                 className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${task.status === 'approved' ? 'bg-purple-100 border-primary text-primary' : 'border-gray-300'
-                                                    } ${(isToday(selectedDate) && !isTaskPastDue(task)) ? 'cursor-pointer hover:border-primary' : 'cursor-default opacity-60'}`}
+                                                    } ${canApproveTask(task) ? 'cursor-pointer hover:border-primary' : 'cursor-default opacity-60'}`}
                                             >
                                                 {task.status === 'approved' && <span className="font-bold text-xs">✓</span>}
                                             </div>
                                             <div className="flex-1">
                                                 <p className={`text-sm font-medium ${task.status === 'approved' ? 'text-gray-800' : 'text-gray-600'}`}>{task.title}</p>
                                                 {task.work_station?.name && (
-                                                    <p className="text-[10px] text-primary font-semibold capitalize mt-1">Category: {task.work_station.name}</p>
+                                                    <p className="text-[10px] text-primary font-semibold capitalize mt-1">Kategori: {task.work_station.name}</p>
                                                 )}
-                                                <p className="text-[10px] text-gray-400 mt-1">Due: {new Date(task.due_at).toLocaleString()}</p>
-                                                {task.note && <p className="text-[10px] text-gray-500 italic mt-0.5">"{task.note}"</p>}
+                                                <p className="text-[10px] text-gray-400 mt-1">Tenggat: {new Date(task.due_at).toLocaleString()}</p>
+                                                {task.note && <p className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words mt-0.5">{task.note}</p>}
                                             </div>
                                             <div className="flex flex-col gap-2 items-center">
                                                 <button onClick={() => handleViewPhoto(task)} className="bg-primary text-white text-[10px] font-bold py-1.5 px-4 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center gap-1">
@@ -501,10 +507,10 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                 <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-4xl mb-4">
                                     ✓
                                 </div>
-                                <h3 className="text-xl font-bold text-gray-800 mb-2">{todayEvaluation?.evaluated ? 'Evaluation Complete' : 'Evaluation Closed'}</h3>
-                                <p className="text-gray-500 mb-6">{todayEvaluation?.evaluated ? 'You have filled the Monthly Evaluation form for this month.' : 'This month is no longer open for questionnaire input.'}</p>
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">{todayEvaluation?.evaluated ? 'Evaluasi Selesai' : 'Evaluasi Ditutup'}</h3>
+                                <p className="text-gray-500 mb-6">{todayEvaluation?.evaluated ? 'Form evaluasi bulanan untuk bulan ini sudah diisi.' : (todayEvaluation?.locked_message || 'Bulan ini belum dibuka untuk pengisian kuesioner.')}</p>
                                 <div className="bg-purple-50 p-4 rounded-xl w-full max-w-xs mb-6">
-                                    <p className="text-xs text-gray-500 uppercase tracking-wide">Total Score</p>
+                                    <p className="text-xs text-gray-500 uppercase tracking-wide">Total Nilai</p>
                                     <p className="text-4xl font-bold text-primary">{todayEvaluation.data?.total_score ?? '-'}</p>
                                 </div>
                             </div>
@@ -548,7 +554,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                                 </div>
                                             </>
                                         ) : (
-                                            <p className="text-xs text-gray-400 italic">No activity data this month.</p>
+                                            <p className="text-xs text-gray-400 italic">Belum ada data aktivitas bulan ini.</p>
                                         )}
                                     </div>
 
@@ -558,7 +564,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                         </h3>
                                         <div className="flex items-center gap-2">
                                             <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                                                TOTAL POINT:
+                                                TOTAL NILAI:
                                             </p>
 
                                             {todayEvaluation?.evaluated ? (
@@ -571,7 +577,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                                 <div className="flex items-center h-10 gap-2">
                                                     <span className="font-bold text-3xl text-gray-300 leading-none pb-1">-</span>
                                                     <span className="text-[10px] text-red-500 italic bg-red-50 px-2 py-1 rounded-md">
-                                                        * Not yet submitted
+                                                        * Belum diisi
                                                     </span>
                                                 </div>
                                             )}
@@ -580,7 +586,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
 
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
                                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">YEARLY OVERALL POINT</h3>
-                                        <p className="text-sm font-medium text-gray-400 mb-1">Total Point :</p>
+                                        <p className="text-sm font-medium text-gray-400 mb-1">Total Nilai :</p>
                                         <div className="text-6xl font-light text-black tracking-tighter">
                                             {evalStats?.yearly_score ?? '-'}
                                         </div>
@@ -590,7 +596,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                         ) : (
                             <div className="flex flex-col h-full min-h-0">
                                 <div className="mb-4 shrink-0">
-                                    <h2 className="font-bold text-gray-800 text-lg">Activity</h2>
+                                    <h2 className="font-bold text-gray-800 text-lg">Aktivitas</h2>
                                     <p className="text-sm text-gray-400">
                                         {selectedDate.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
                                     </p>
@@ -605,7 +611,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                         ))
                                     ) : (
                                         <div className="text-center text-gray-400 py-10 bg-gray-50 rounded-2xl">
-                                            No activity logs for this date.
+                                            Belum ada log aktivitas pada tanggal ini.
                                         </div>
                                     )}
                                 </div>

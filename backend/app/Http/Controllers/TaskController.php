@@ -16,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 
 class TaskController extends Controller
 {
+    private const APPROVAL_GRACE_HOURS = 24;
+
     public function index(Request $request, $supervisorId)
     {
         $user = Auth::user();
@@ -178,8 +180,8 @@ class TaskController extends Controller
             return $response;
         }
 
-        if ($this->isTaskLocked($task)) {
-            return response()->json(['message' => 'This task is already past its deadline and can no longer be checked or updated.'], 400);
+        if ($this->isApprovalLocked($task)) {
+            return response()->json(['message' => 'Batas waktu approval tugas sudah berakhir.'], 400);
         }
 
         $task->status = $request->status;
@@ -224,7 +226,7 @@ class TaskController extends Controller
             && !$this->hasConfirmedGuideForTask($authUser, $task)
         ) {
             return response()->json([
-                'message' => 'Please confirm today\'s guide before uploading task evidence.'
+                'message' => 'Silakan konfirmasi panduan hari ini sebelum mengunggah bukti tugas.'
             ], 423);
         }
 
@@ -239,7 +241,7 @@ class TaskController extends Controller
 
         if ($request->hasFile('before') && $existingBeforeCount >= 1) {
             return response()->json([
-                'message' => 'Before evidence is limited to 1 photo. Delete the old before photo first if you want to replace it.'
+                'message' => 'Bukti sebelum bekerja dibatasi maksimal 1 foto.'
             ], 422);
         }
 
@@ -247,7 +249,7 @@ class TaskController extends Controller
             $newAfterCount = count($request->file('after'));
             if (($existingAfterCount + $newAfterCount) > 3) {
                 return response()->json([
-                    'message' => 'After evidence is limited to a maximum of 3 photos per task.'
+                    'message' => 'Bukti sesudah bekerja dibatasi maksimal 3 foto per tugas.'
                 ], 422);
             }
         }
@@ -443,5 +445,14 @@ class TaskController extends Controller
         return $task->due_at instanceof Carbon
             ? $task->due_at->isPast()
             : Carbon::parse($task->due_at)->isPast();
+    }
+
+    private function isApprovalLocked(Task $task): bool
+    {
+        $dueAt = $task->due_at instanceof Carbon
+            ? $task->due_at
+            : Carbon::parse($task->due_at);
+
+        return $dueAt->copy()->addHours(self::APPROVAL_GRACE_HOURS)->isPast();
     }
 }

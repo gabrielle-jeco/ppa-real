@@ -329,6 +329,10 @@ class ScoringService
             return 0;
         }
 
+        if ($beforeCount === 0 || $afterCount === 0) {
+            return 50;
+        }
+
         if ($photoCount <= 2) {
             return round(($photoCount / 2) * 100, 2);
         }
