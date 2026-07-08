@@ -27,7 +27,7 @@ const FALLBACK_CRITERIA: Criterion[] = [
 
 export default function EvaluationForm({ supervisor, targetDate, onSuccess }: EvaluationFormProps) {
     const [criteria, setCriteria] = useState<Criterion[]>(FALLBACK_CRITERIA);
-    const [evaluationTitle, setEvaluationTitle] = useState('MONTHLY EVALUATION');
+    const [evaluationTitle, setEvaluationTitle] = useState('EVALUASI BULANAN');
     const [evaluationSubtitle, setEvaluationSubtitle] = useState('Sikap Kepribadian');
     const [scores, setScores] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(false);
@@ -46,7 +46,7 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
 
                 const payload = await response.json();
                 if (Array.isArray(payload.criteria) && payload.criteria.length > 0) {
-                    setEvaluationTitle(payload.title || 'MONTHLY EVALUATION');
+                    setEvaluationTitle(payload.title || 'EVALUASI BULANAN');
                     setEvaluationSubtitle(payload.subtitle || 'Sikap Kepribadian');
                     setCriteria(payload.criteria.map((item: any) => ({
                         id: item.key || `evaluation_${item.id}`,
@@ -69,7 +69,7 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
     const handleSubmit = async () => {
         // Validate
         if (Object.keys(scores).length < criteria.length) {
-            alert("Please score all criteria.");
+            alert("Mohon isi nilai semua kategori.");
             return;
         }
 
@@ -100,7 +100,7 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
             } else {
                 const errorData = await res.json().catch(() => null);
                 console.error("Evaluation failed", errorData);
-                alert(errorData?.error || "Failed to submit evaluation");
+                alert(errorData?.error || "Gagal menyimpan evaluasi");
             }
         } catch (error) {
             console.error("Error submitting evaluation", error);
@@ -148,7 +148,7 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
                     disabled={loading}
                     className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-md hover:bg-purple-700 transition disabled:opacity-50"
                 >
-                    {loading ? 'Submitting...' : 'Submit Evaluation'}
+                    {loading ? 'Menyimpan...' : 'Simpan Evaluasi'}
                 </button>
             </div>
         </div>

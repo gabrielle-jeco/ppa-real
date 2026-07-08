@@ -53,7 +53,7 @@ class AuthController extends Controller
             if ($user->manager_type === 'SM') {
                 if (!$user->location_id) {
                     Auth::logout();
-                    return response()->json(['message' => 'System Error: SM has no assigned location.'], 403);
+                    return response()->json(['message' => 'Kesalahan sistem: SM belum memiliki lokasi.'], 403);
                 }
 
                 if ($request->has('location_id') && $request->location_id != $user->location_id) {

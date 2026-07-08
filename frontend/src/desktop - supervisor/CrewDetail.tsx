@@ -67,7 +67,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                 setTasks(data);
             }
         } catch (error) {
-            console.error("Fetch tasks failed", error);
+            console.error("Gagal mengambil tugas", error);
         }
     };
 
@@ -85,7 +85,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                 setTodayEvaluation(data);
             }
         } catch (error) {
-            console.error("Check evaluation failed", error);
+            console.error("Gagal memeriksa evaluasi", error);
         }
     };
 
@@ -102,7 +102,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                 setActivityLogs(data);
             }
         } catch (error) {
-            console.error("Fetch activity logs failed", error);
+            console.error("Gagal mengambil log aktivitas", error);
         }
     };
 
@@ -120,7 +120,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                 setEvalStats(data);
             }
         } catch (error) {
-            console.error("Fetch eval stats failed", error);
+            console.error("Gagal mengambil statistik evaluasi", error);
         }
     };
 
@@ -152,7 +152,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    supervisor_id: crew.id, // Target User ID
+                supervisor_id: crew.id,
                     ...taskData
                 })
             });
@@ -161,12 +161,12 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                 onTaskChange?.();
             }
         } catch (error) {
-            console.error("Add task failed", error);
+            console.error("Gagal menambahkan tugas", error);
         }
     };
 
     const handleDeleteTask = async (taskId: number) => {
-        if (!window.confirm("Delete this task?")) return;
+        if (!window.confirm("Hapus tugas ini?")) return;
         try {
             const token = localStorage.getItem('auth_token');
             await fetch(`/api/tasks/${taskId}`, {
@@ -176,7 +176,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
             setTasks(tasks.filter(t => t.task_id !== taskId));
             onTaskChange?.();
         } catch (error) {
-            console.error("Delete failed", error);
+            console.error("Gagal menghapus tugas", error);
         }
     };
 
@@ -204,7 +204,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
             });
             onTaskChange?.();
         } catch (error) {
-            console.error("Status update failed", error);
+            console.error("Gagal memperbarui status", error);
             fetchTasks();
         }
     };
@@ -235,10 +235,10 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                     evidences: updateEvidences(previewTask.evidences || [])
                 });
             } else {
-                alert('Failed to delete image.');
+                alert('Gagal menghapus foto.');
             }
         } catch (error) {
-            console.error("Failed to delete proof", error);
+            console.error("Gagal menghapus bukti", error);
         }
     };
 
@@ -259,11 +259,69 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
     const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
     const canApproveTask = (task: any) => new Date(task.due_at).getTime() + 24 * 60 * 60 * 1000 >= Date.now();
 
-    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const isCurrentSelectedMonth =
         selectedDate.getFullYear() === new Date().getFullYear() &&
         selectedDate.getMonth() === new Date().getMonth();
-    const activityMonitorTitle = `${selectedDate.toLocaleDateString('en-US', { month: 'long' })} Activity Monitor${isCurrentSelectedMonth ? ' (MTD)' : ''}`;
+    const activityMonitorTitle = `${selectedDate.toLocaleDateString('id-ID', { month: 'long' })} Monitoring Aktivitas${isCurrentSelectedMonth ? ' (Bulanan)' : ''}`;
+
+    const getAttendancePeriodLabel = () => {
+        const startDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        const endDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+        return `${startDate.toLocaleDateString('id-ID')} S/D ${endDate.toLocaleDateString('id-ID')}`;
+    };
+
+    const attendanceSummary = (() => {
+        const calendar = evalStats?.attendance_calendar || [];
+        const summary = {
+            total: calendar.length,
+            noAttendance: 0,
+            notYet: 0,
+            present: 0,
+            sick: 0,
+            permit: 0,
+            late: 0,
+            leave: 0,
+            off: 0,
+        };
+
+        calendar.forEach((day: any) => {
+            const code = String(day?.status_code || '').trim().toUpperCase();
+            const dayDate = day?.date ? new Date(`${day.date}T00:00:00`) : null;
+            const isFutureDay = dayDate ? dayDate > new Date() : day?.source === 'future';
+
+            if (day?.source === 'future' || isFutureDay) {
+                summary.notYet += 1;
+                return;
+            }
+
+            if (!code || day?.source === 'fallback') {
+                summary.noAttendance += 1;
+                return;
+            }
+
+            if (['H', 'HADIR', 'CORRECTION'].includes(code)) summary.present += 1;
+            else if (['T', 'TELAT', 'LATE'].includes(code)) summary.late += 1;
+            else if (['S', 'SAKIT', 'SD'].includes(code)) summary.sick += 1;
+            else if (['I', 'IZIN', 'PS'].includes(code)) summary.permit += 1;
+            else if (['C', 'CUTI'].includes(code)) summary.leave += 1;
+            else if (['OFF', 'L', 'LIBUR'].includes(code)) summary.off += 1;
+            else summary.noAttendance += 1;
+        });
+
+        return summary;
+    })();
+
+    const attendanceColumns = [
+        { label: 'TOTAL HARI', value: attendanceSummary.total },
+        { label: 'TIDAK ADA ABSEN', value: attendanceSummary.noAttendance },
+        { label: 'BELUM ABSEN', value: attendanceSummary.notYet },
+        { label: 'HADIR', value: attendanceSummary.present },
+        { label: 'SAKIT', value: attendanceSummary.sick },
+        { label: 'IZIN', value: attendanceSummary.permit },
+        { label: 'TELAT', value: attendanceSummary.late },
+        { label: 'CUTI', value: attendanceSummary.leave },
+        { label: 'OFF', value: attendanceSummary.off },
+    ];
 
     // Activity Monitor colors for bar chart
     const monitorColors = ['bg-green-400', 'bg-purple-500', 'bg-blue-400', 'bg-yellow-400', 'bg-red-400', 'bg-pink-400'];
@@ -315,7 +373,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                     : 'bg-primary text-white border-transparent hover:bg-purple-700'
                                     }`}
                             >
-                                View
+                                Lihat
                             </button>
                         </div>
 
@@ -369,7 +427,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                                 .filter(m => getAvailableTaskMonths(selectedDate.getFullYear()).includes(m))
                                                 .map(i => (
                                                     <option key={i} value={i} className="text-sm">
-                                                        {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
+                                                        {new Date(0, i).toLocaleString('id-ID', { month: 'long' })}
                                                     </option>
                                                 ))}
                                         </select>
@@ -397,7 +455,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
 
 
                             <div className="grid grid-cols-7 text-center text-[10px] text-gray-400 font-medium uppercase tracking-wider gap-y-4 mb-2 relative z-10">
-                                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                                <span>MIN</span><span>SEN</span><span>SEL</span><span>RAB</span><span>KAM</span><span>JUM</span><span>SAB</span>
                             </div>
                             <div className="grid grid-cols-7 text-center text-xs font-medium text-gray-700 gap-y-3 relative z-10">
                                 {getCalendarDays().map((day, idx) => {
@@ -460,7 +518,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                         <>
                             {/* Header */}
                             <div className="mb-4">
-                                <h2 className="text-lg font-bold text-gray-800">Daftar Tugas</h2>
+                                    <h2 className="text-lg font-bold text-gray-800">Daftar Pekerjaan</h2>
                                 <p className="text-sm text-gray-400">Hari ini</p>
                             </div>
 
@@ -481,7 +539,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                                 {task.work_station?.name && (
                                                     <p className="text-[10px] text-primary font-semibold capitalize mt-1">Kategori: {task.work_station.name}</p>
                                                 )}
-                                                <p className="text-[10px] text-gray-400 mt-1">Tenggat: {new Date(task.due_at).toLocaleString()}</p>
+                                                <p className="text-[10px] text-gray-400 mt-1">Tenggat: {new Date(task.due_at).toLocaleString('id-ID')}</p>
                                                 {task.note && <p className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words mt-0.5">{task.note}</p>}
                                             </div>
                                             <div className="flex flex-col gap-2 items-center">
@@ -530,7 +588,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                             <div className="h-full flex flex-col">
                                 <div className="mb-4">
                                     <h2 className="text-lg font-bold text-gray-800 mb-2">
-                                        {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                        {selectedDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
                                     </h2>
 
                                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
@@ -558,9 +616,43 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                         )}
                                     </div>
 
+                                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
+                                        <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center mb-4">
+                                            PERIODE ABSEN {getAttendancePeriodLabel()}
+                                        </h3>
+                                        <div className="overflow-x-auto">
+                                            <table className="mx-auto border-collapse text-center">
+                                                <thead>
+                                                    <tr>
+                                                        {attendanceColumns.map((column) => (
+                                                            <th
+                                                                key={column.label}
+                                                                className="bg-indigo-500 text-white border border-gray-600 px-2 py-2 text-[8px] font-bold leading-tight uppercase"
+                                                            >
+                                                                {column.label}
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr>
+                                                        {attendanceColumns.map((column) => (
+                                                            <td
+                                                                key={column.label}
+                                                                className="bg-white text-gray-900 border border-gray-600 px-2 py-2 text-sm font-bold"
+                                                            >
+                                                                {column.value}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
                                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4 min-h-[100px] flex flex-col">
                                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                                            POINT SIKAP KEPRIBADIAN Result ({selectedDate.toLocaleDateString('en-US', { month: 'long' })})
+                                            HASIL PENILAIAN SIKAP KEPRIBADIAN ({selectedDate.toLocaleDateString('id-ID', { month: 'long' })})
                                         </h3>
                                         <div className="flex items-center gap-2">
                                             <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">
@@ -585,7 +677,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                     </div>
 
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
-                                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">YEARLY OVERALL POINT</h3>
+                                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">AKUMULASI NILAI TAHUNAN</h3>
                                         <p className="text-sm font-medium text-gray-400 mb-1">Total Nilai :</p>
                                         <div className="text-6xl font-light text-black tracking-tighter">
                                             {evalStats?.yearly_score ?? '-'}
@@ -598,7 +690,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                 <div className="mb-4 shrink-0">
                                     <h2 className="font-bold text-gray-800 text-lg">Aktivitas</h2>
                                     <p className="text-sm text-gray-400">
-                                        {selectedDate.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                        {selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                                     </p>
                                 </div>
                                 <div className="space-y-4 flex-1 overflow-y-auto pr-2 min-h-0">

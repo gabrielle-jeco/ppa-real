@@ -45,4 +45,11 @@ return [
         'allow_local_superadmin_fallback' => env('YOJADWAL_ALLOW_LOCAL_SUPERADMIN_FALLBACK', true),
     ],
 
+    'webpush' => [
+        'enabled' => env('WEB_PUSH_ENABLED', false),
+        'subject' => env('WEB_PUSH_SUBJECT', env('APP_URL', 'https://yodaily.local')),
+        'public_key' => env('WEB_PUSH_PUBLIC_KEY'),
+        'private_key' => env('WEB_PUSH_PRIVATE_KEY'),
+    ],
+
 ];

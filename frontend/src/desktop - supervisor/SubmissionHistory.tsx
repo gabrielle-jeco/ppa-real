@@ -22,7 +22,7 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h2 className="font-bold text-gray-800 text-lg">Submission History</h2>
+                    <h2 className="font-bold text-gray-800 text-lg">Riwayat Bukti</h2>
                     <p className="text-sm text-gray-400">{task.title}</p>
                 </div>
                 <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition">
@@ -35,7 +35,7 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
                 {/* Before Section */}
                 <div>
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-gray-400"></span> Before
+                        <span className="w-2 h-2 rounded-full bg-gray-400"></span> Sebelum
                     </h3>
 
                     <div className="space-y-3">
@@ -43,16 +43,16 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
                             beforeEvidences.map((evidence: any, index: number) => (
                                 <div key={evidence.id || index} className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
                                     <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
-                                        <img src={getFullUrl(evidence.file_path)!} alt="Before" className="w-full h-full object-cover" />
+                                        <img src={getFullUrl(evidence.file_path)!} alt="Sebelum" className="w-full h-full object-cover" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium text-gray-700 truncate">Before Evidence {beforeEvidences.length > 1 ? `#${index + 1}` : ''}</p>
+                                        <p className="text-xs font-medium text-gray-700 truncate">Bukti Sebelum {beforeEvidences.length > 1 ? `#${index + 1}` : ''}</p>
                                         <p className="text-[10px] text-gray-400">{new Date(evidence.created_at || task.updated_at).toLocaleString()}</p>
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="text-xs text-gray-400 italic">No submission yet.</div>
+                            <div className="text-xs text-gray-400 italic">Belum ada bukti.</div>
                         )}
                     </div>
                 </div>
@@ -60,7 +60,7 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
                 {/* After Section */}
                 <div>
                     <h3 className="text-xs font-bold text-primary uppercase tracking-wide mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-primary"></span> After
+                        <span className="w-2 h-2 rounded-full bg-primary"></span> Sesudah
                     </h3>
 
                     <div className="space-y-3">
@@ -68,16 +68,16 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
                             afterEvidences.map((evidence: any, index: number) => (
                                 <div key={evidence.id || index} className="bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 hover:shadow-md transition">
                                     <div className="w-12 h-12 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
-                                        <img src={getFullUrl(evidence.file_path)!} alt="After" className="w-full h-full object-cover" />
+                                        <img src={getFullUrl(evidence.file_path)!} alt="Sesudah" className="w-full h-full object-cover" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium text-gray-700 truncate">After Evidence {afterEvidences.length > 1 ? `#${index + 1}` : ''}</p>
+                                        <p className="text-xs font-medium text-gray-700 truncate">Bukti Sesudah {afterEvidences.length > 1 ? `#${index + 1}` : ''}</p>
                                         <p className="text-[10px] text-gray-400">{new Date(evidence.created_at || task.updated_at).toLocaleString()}</p>
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="text-xs text-gray-400 italic">No submission yet.</div>
+                            <div className="text-xs text-gray-400 italic">Belum ada bukti.</div>
                         )}
                     </div>
                 </div>

@@ -29,7 +29,7 @@ export default function SupervisorPerformance() {
                 setStats(await res.json());
             }
         } catch (error) {
-            console.error('Failed to fetch stats', error);
+            console.error('Gagal mengambil statistik', error);
         } finally {
             setLoading(false);
         }
@@ -87,20 +87,20 @@ export default function SupervisorPerformance() {
     };
 
     if (loading) {
-        return <div className="p-10 text-gray-400">Loading...</div>;
+        return <div className="p-10 text-gray-400">Memuat...</div>;
     }
 
     return (
         <div className="flex-1 h-full overflow-y-auto p-8 bg-gray-50 flex flex-col">
             <div className="flex justify-between items-center mb-8 flex-shrink-0">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800">My Workspace</h1>
-                    <p className="text-sm text-gray-400 mt-1">Performance and KPI monitoring</p>
+                    <h1 className="text-2xl font-bold text-gray-800">Dasbor Saya</h1>
+                    <p className="text-sm text-gray-400 mt-1">Monitoring performa dan KPI</p>
                 </div>
 
                 <div className="bg-primary text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
                     <BarChart2 size={16} />
-                    <span className="text-sm font-bold">Performance</span>
+                    <span className="text-sm font-bold">Performa</span>
                 </div>
             </div>
 
@@ -119,7 +119,7 @@ export default function SupervisorPerformance() {
                             >
                                 {getAvailableMonths(selectedDate.getFullYear()).map((month) => (
                                     <option key={month} value={month}>
-                                        {new Date(0, month).toLocaleString('en-US', { month: 'long' })}
+                                        {new Date(0, month).toLocaleString('id-ID', { month: 'long' })}
                                     </option>
                                 ))}
                             </select>
@@ -149,9 +149,9 @@ export default function SupervisorPerformance() {
 
                     <div className="flex flex-col lg:flex-row gap-6 mb-8">
                         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex-1 lg:max-w-[400px]">
-                            <h3 className="text-sm font-semibold text-gray-600 mb-4">Attendance History</h3>
+                            <h3 className="text-sm font-semibold text-gray-600 mb-4">Riwayat Kehadiran</h3>
                             <div className="grid grid-cols-7 text-center mb-2 border-b border-gray-100 pb-2">
-                                {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map((day) => (
+                                {['MIN', 'SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB'].map((day) => (
                                     <span key={day} className="text-[10px] font-bold text-gray-400">{day}</span>
                                 ))}
                             </div>
@@ -163,7 +163,7 @@ export default function SupervisorPerformance() {
                         <div className="flex-1 flex flex-col gap-6">
                             <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex-shrink-0">
                                 <div className="flex justify-between items-center mb-2">
-                                    <h3 className="text-sm font-semibold text-gray-600">My AVG Point</h3>
+                                    <h3 className="text-sm font-semibold text-gray-600">Rata-rata Poin Saya</h3>
                                     <span className="text-sm font-bold text-gray-800">{stats.my_avg_point}%</span>
                                 </div>
                                 <div className="w-full bg-purple-100 rounded-full h-4 overflow-hidden">
@@ -173,15 +173,15 @@ export default function SupervisorPerformance() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 h-full">
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_for_sc.label || 'Task for SC'}</h3>
+                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_for_sc.label || 'Pekerjaan untuk SC'}</h3>
                                     <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
                                         <div className="bg-red-500 h-3 rounded-full transition-all duration-500" style={{ width: `${(stats.task_for_sc.completed / stats.task_for_sc.total) * 100}%` }}></div>
                                     </div>
-                                    <p className="text-xs text-gray-400">{stats.task_for_sc.completed}% Completed</p>
+                                    <p className="text-xs text-gray-400">{stats.task_for_sc.completed}% Selesai</p>
                                 </div>
 
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_from_manager.label || 'Manager Review'}</h3>
+                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">{stats.task_from_manager.label || 'Penilaian Manager'}</h3>
                                     <div className="w-full bg-purple-100 rounded-full h-3 overflow-hidden mb-2">
                                         <div className="bg-red-500 h-3 rounded-full transition-all duration-500" style={{ width: `${(stats.task_from_manager.completed / stats.task_from_manager.total) * 100}%` }}></div>
                                     </div>
@@ -189,14 +189,14 @@ export default function SupervisorPerformance() {
                                 </div>
 
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">Task Given (Monthly)</h3>
+                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">Pekerjaan yang Diberikan (Bulanan)</h3>
                                     <div className="bg-gray-200 rounded-xl p-4 text-center">
                                         <span className="font-bold text-gray-700">{stats.monthly_task_given}</span>
                                     </div>
                                 </div>
 
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">AVG Service Crew Point</h3>
+                                    <h3 className="text-sm font-semibold text-gray-600 mb-4">Rata-rata Nilai Service Crew</h3>
                                     <div className="bg-gray-200 rounded-xl p-4 text-center">
                                         <span className="font-bold text-gray-700">{stats.avg_service_crew_point}%</span>
                                     </div>

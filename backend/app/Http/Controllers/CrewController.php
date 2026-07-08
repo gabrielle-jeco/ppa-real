@@ -28,21 +28,21 @@ class CrewController extends Controller
 
         $user = User::where('username', $targetUserId)->first();
         if (!$user) {
-            return response()->json(['message' => 'User not found'], 404);
+            return response()->json(['message' => 'User tidak ditemukan.'], 404);
         }
 
         if ($authUser->username !== $user->username) {
             if ($authUser->role_type !== 'supervisor' && $authUser->role_type !== 'manager') {
-                return response()->json(['message' => 'Unauthorized'], 403);
+                return response()->json(['message' => 'Tidak memiliki akses.'], 403);
             }
 
             $isSubordinate = $authUser->subordinateLines()->where('subordinate_id', $user->username)->where('status', 'active')->exists();
             if (!$isSubordinate) {
-                return response()->json(['message' => 'Unauthorized. This user is not your subordinate.'], 403);
+                return response()->json(['message' => 'Tidak memiliki akses. User ini bukan bawahan Anda.'], 403);
             }
         } else {
             if ($user->role_type !== 'employee' && $user->role_type !== 'crew') {
-                return response()->json(['message' => 'Unauthorized'], 403);
+                return response()->json(['message' => 'Tidak memiliki akses.'], 403);
             }
         }
 

@@ -1,10 +1,10 @@
 import React from 'react';
-import { LayoutDashboard, UserCheck, LogOut, Store } from 'lucide-react';
+import { Home, LayoutDashboard, UserCheck, LogOut, Store } from 'lucide-react';
 
 interface SupervisorLayoutProps {
     children: React.ReactNode;
-    activePage: 'employees' | 'performance';
-    onPageChange: (page: 'employees' | 'performance') => void;
+    activePage: 'dashboard' | 'monitoring' | 'performance';
+    onPageChange: (page: 'dashboard' | 'monitoring' | 'performance') => void;
     onLogout: () => void;
 }
 
@@ -21,12 +21,20 @@ export default function SupervisorLayout({ children, activePage, onPageChange, o
 
                 {/* Navigation */}
                 <nav className="flex-1 w-full px-4 space-y-4">
-                    {/* Dashboard / Employees */}
                     <div className="flex justify-center">
                         <div
-                            onClick={() => onPageChange('employees')}
-                            className={`p-3 rounded-xl cursor-pointer transition hover:scale-105 ${activePage === 'employees' ? 'bg-primary text-white shadow-lg shadow-purple-200' : 'text-gray-400 hover:bg-gray-100'}`}
-                            title="Employees"
+                            onClick={() => onPageChange('dashboard')}
+                            className={`p-3 rounded-xl cursor-pointer transition hover:scale-105 ${activePage === 'dashboard' ? 'bg-primary text-white shadow-lg shadow-purple-200' : 'text-gray-400 hover:bg-gray-100'}`}
+                            title="Dasbor"
+                        >
+                            <Home size={24} />
+                        </div>
+                    </div>
+                    <div className="flex justify-center">
+                        <div
+                            onClick={() => onPageChange('monitoring')}
+                            className={`p-3 rounded-xl cursor-pointer transition hover:scale-105 ${activePage === 'monitoring' ? 'bg-primary text-white shadow-lg shadow-purple-200' : 'text-gray-400 hover:bg-gray-100'}`}
+                            title="Monitoring"
                         >
                             <LayoutDashboard size={24} />
                         </div>
@@ -35,7 +43,7 @@ export default function SupervisorLayout({ children, activePage, onPageChange, o
                         <div
                             onClick={() => onPageChange('performance')}
                             className={`p-3 rounded-xl cursor-pointer transition hover:scale-105 ${activePage === 'performance' ? 'bg-primary text-white shadow-lg shadow-purple-200' : 'text-gray-400 hover:bg-gray-100'}`}
-                            title="My Performance"
+                            title="Performa Saya"
                         >
                             <UserCheck size={24} />
                         </div>
@@ -47,7 +55,7 @@ export default function SupervisorLayout({ children, activePage, onPageChange, o
                     <button
                         onClick={onLogout}
                         className="w-full flex justify-center p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                        title="Logout"
+                        title="Keluar"
                     >
                         <LogOut size={24} />
                     </button>

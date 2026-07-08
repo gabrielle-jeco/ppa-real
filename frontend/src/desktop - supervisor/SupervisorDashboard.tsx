@@ -33,7 +33,7 @@ export default function SupervisorDashboard() {
                 }
             }
         } catch (error) {
-            console.error("Failed to fetch supervisor dashboard data", error);
+            console.error("Gagal mengambil data dashboard supervisor", error);
         } finally {
             setLoading(false);
         }
@@ -43,8 +43,8 @@ export default function SupervisorDashboard() {
         setSelectedCrewId(id);
     };
 
-    if (loading) return <div className="h-full flex items-center justify-center text-gray-400">Loading Dashboard...</div>;
-    if (!dashboardData) return <div className="h-full flex items-center justify-center text-gray-400">Failed to load data.</div>;
+    if (loading) return <div className="h-full flex items-center justify-center text-gray-400">Memuat dashboard...</div>;
+    if (!dashboardData) return <div className="h-full flex items-center justify-center text-gray-400">Gagal memuat data.</div>;
 
     const selectedCrew = dashboardData.crews.find((c: any) => c.id === selectedCrewId);
 
@@ -61,7 +61,7 @@ export default function SupervisorDashboard() {
                 {selectedCrew ? (
                     <CrewDetail crew={selectedCrew} onTaskChange={fetchDashboardData} />
                 ) : (
-                    <div className="h-full flex items-center justify-center text-gray-400">Select a crew to view details</div>
+                    <div className="h-full flex items-center justify-center text-gray-400">Pilih karyawan untuk melihat detail.</div>
                 )}
             </div>
         </div>

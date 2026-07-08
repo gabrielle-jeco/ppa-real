@@ -9,7 +9,7 @@ interface CrewLayoutProps {
     allowScroll?: boolean;
 }
 
-const CrewLayout: React.FC<CrewLayoutProps> = ({ children, title = "Dashboard", showBack = false, onBack, allowScroll = true }) => {
+const CrewLayout: React.FC<CrewLayoutProps> = ({ children, title = "Dasbor", showBack = false, onBack, allowScroll = true }) => {
     const [isScrolled, setIsScrolled] = useState(false);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 

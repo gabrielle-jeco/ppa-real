@@ -44,7 +44,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 setTasks(data);
             }
         } catch (error) {
-            console.error("Fetch tasks failed", error);
+            console.error("Gagal mengambil tugas", error);
         }
     };
 
@@ -65,7 +65,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             });
             if (res.ok) fetchTasks();
         } catch (error) {
-            console.error("Add task failed", error);
+            console.error("Gagal menambahkan tugas", error);
         }
     };
 
@@ -86,7 +86,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 body: JSON.stringify({ status: newStatus })
             });
         } catch (error) {
-            console.error("Status update failed", error);
+            console.error("Gagal memperbarui status", error);
             fetchTasks();
         }
     };
@@ -103,7 +103,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
     // DELETE TASK
     const handleDeleteTask = async (taskId: number) => {
-        if (!window.confirm("Delete this task?")) return;
+        if (!window.confirm("Hapus tugas ini?")) return;
         try {
             const token = localStorage.getItem('auth_token');
             await fetch(`/api/tasks/${taskId}`, {
@@ -112,7 +112,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             });
             setTasks(tasks.filter(t => t.task_id !== taskId));
         } catch (error) {
-            console.error("Delete failed", error);
+            console.error("Gagal menghapus tugas", error);
         }
     };
 
@@ -122,7 +122,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
         const taskId = previewTask.task_id;
         try {
             const token = localStorage.getItem('auth_token');
-            if (!token) throw new Error("No token found");
+            if (!token) throw new Error("Token tidak ditemukan");
 
             const res = await fetch(`/api/tasks/${taskId}/evidence`, {
                 method: 'DELETE',
@@ -144,11 +144,11 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                     evidences: (previewTask.evidences || []).filter((e: any) => e.id !== evidenceId)
                 });
             } else {
-                alert('Failed to delete image.');
+                alert('Gagal menghapus foto.');
             }
         } catch (error) {
-            console.error('Error deleting image:', error);
-            alert('An error occurred.');
+            console.error('Gagal menghapus foto:', error);
+            alert('Terjadi kesalahan.');
         }
     };
     const [activeEvidenceTab, setActiveEvidenceTab] = useState<'before' | 'after'>('before');

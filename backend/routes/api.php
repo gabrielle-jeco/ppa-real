@@ -19,6 +19,10 @@ Route::post('/login', [App\Http\Controllers\AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [App\Http\Controllers\AuthController::class, 'me']);
     Route::post('/logout', [App\Http\Controllers\AuthController::class, 'logout']);
+    Route::post('/push-subscriptions', [App\Http\Controllers\PushSubscriptionController::class, 'store']);
+    Route::get('/notifications', [App\Http\Controllers\UserNotificationController::class, 'index']);
+    Route::patch('/notifications/read-all', [App\Http\Controllers\UserNotificationController::class, 'markAllRead']);
+    Route::patch('/notifications/{notification}/read', [App\Http\Controllers\UserNotificationController::class, 'markRead']);
 
     // Manager Routes
     Route::get('/manager/supervisors', [App\Http\Controllers\ManagerController::class, 'getSupervisors']);
@@ -92,6 +96,7 @@ Route::middleware('auth:sanctum')->group(function () {
 // Supervisor Routes
 Route::middleware(['auth:sanctum'])->prefix('supervisor')->group(function () {
     Route::get('/crews', [App\Http\Controllers\SupervisorController::class, 'index']);
+    Route::get('/dashboard-summary', [App\Http\Controllers\SupervisorController::class, 'dashboardSummary']);
     Route::get('/stats', [App\Http\Controllers\SupervisorController::class, 'myStats']);
     Route::get('/crew/{id}/eval-stats', [App\Http\Controllers\SupervisorController::class, 'getCrewEvalStats']);
 });

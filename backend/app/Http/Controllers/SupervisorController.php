@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\Attendance;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\ScoringService;
@@ -18,7 +19,7 @@ class SupervisorController extends Controller
         $user = Auth::user();
 
         if ($user->role_type !== 'supervisor') {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
         $subordinates = $user->subordinateLines()->with('subordinate.locations')->get();
@@ -77,7 +78,7 @@ class SupervisorController extends Controller
                 'username' => $user->username,
                 'name' => $user->name,
                 'role' => 'Supervisor',
-                'location' => $user->locations->first() ? $user->locations->first()->name : 'Unknown',
+                'location' => $user->locations->first() ? $user->locations->first()->name : 'Lokasi tidak diketahui',
             ],
             'location_name' => $user->locations->first() ? $user->locations->first()->name : 'All Locations',
             'location_avg_progress' => round($crews->where('has_tasks', true)->avg('task_progress') ?? 0, 1),
@@ -104,21 +105,162 @@ class SupervisorController extends Controller
         return response()->json($detailedStats);
     }
 
+    public function dashboardSummary(Request $request, ScoringService $scoringService)
+    {
+        $user = Auth::user();
+
+        if ($user->role_type !== 'supervisor') {
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
+        }
+
+        try {
+            $targetDate = $request->filled('date') ? Carbon::parse($request->query('date')) : Carbon::today();
+        } catch (\Exception $e) {
+            $targetDate = Carbon::today();
+        }
+
+        $startOfDay = $targetDate->copy()->startOfDay();
+        $endOfDay = $targetDate->copy()->endOfDay();
+        $startOfMonth = $targetDate->copy()->startOfMonth();
+        $endOfMonth = $targetDate->copy()->endOfMonth();
+
+        $subordinates = $user->subordinateLines()
+            ->where('status', 'active')
+            ->with('subordinate.locations')
+            ->get()
+            ->pluck('subordinate')
+            ->filter(fn ($crew) => $crew && $crew->active)
+            ->values();
+
+        $crewIds = $subordinates->pluck('username')->values();
+        $crewCount = $subordinates->count();
+
+        $tasks = Task::with(['assignedTo', 'evidences'])
+            ->where('employer_id', $user->username)
+            ->whereIn('employee_id', $crewIds)
+            ->activeOnDate($targetDate)
+            ->get();
+
+        $completedStatuses = ['approved', 'completed'];
+        $completedTaskCount = $tasks->whereIn('status', $completedStatuses)->count();
+        $totalTaskCount = $tasks->count();
+
+        $assignedCrewCount = $tasks->pluck('employee_id')->unique()->count();
+        $unassignedCrewCount = max(0, $crewCount - $assignedCrewCount);
+
+        $crewScores = $subordinates->map(function ($crew) use ($scoringService, $targetDate, $tasks, $completedStatuses) {
+            $crewTasks = $tasks->where('employee_id', $crew->username);
+            $completed = $crewTasks->whereIn('status', $completedStatuses)->count();
+            $score = $scoringService->getCrewMonthlyDetailedStats($crew, $targetDate)['active_percentage'] ?? 0;
+
+            return [
+                'id' => $crew->username,
+                'name' => $crew->full_name,
+                'completed_tasks' => $completed,
+                'score' => $score,
+            ];
+        });
+
+        $teamAverageScore = (int) round($crewScores->avg('score') ?? 0);
+
+        $pendingApprovals = $tasks
+            ->filter(fn ($task) => !in_array($task->status, $completedStatuses, true) && $task->evidences->isNotEmpty())
+            ->values()
+            ->map(fn ($task) => [
+                'id' => $task->id,
+                'crew_name' => $task->assignedTo?->full_name ?? $task->employee_id,
+                'title' => $task->title,
+                'due_at' => optional($task->due_at)->toDateTimeString(),
+            ]);
+
+        $attendanceRows = Attendance::whereIn('user_id', $crewIds)
+            ->whereBetween('date', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+            ->get()
+            ->groupBy('user_id');
+
+        $attendanceMonitor = $subordinates->map(function ($crew) use ($attendanceRows) {
+            $summary = [
+                'no_absen' => 0,
+                'telat' => 0,
+                'izin' => 0,
+                'sakit' => 0,
+            ];
+
+            foreach ($attendanceRows->get($crew->username, collect()) as $attendance) {
+                $code = strtoupper((string) $attendance->status_code);
+                if (in_array($code, ['T', 'TELAT', 'LATE'], true)) $summary['telat']++;
+                elseif (in_array($code, ['I', 'IZIN', 'PS'], true)) $summary['izin']++;
+                elseif (in_array($code, ['S', 'SAKIT', 'SD'], true)) $summary['sakit']++;
+                elseif ($code === '') $summary['no_absen']++;
+            }
+
+            return [
+                'id' => $crew->username,
+                'name' => $crew->full_name,
+                'no_absen' => $summary['no_absen'],
+                'telat' => $summary['telat'],
+                'izin' => $summary['izin'],
+                'sakit' => $summary['sakit'],
+            ];
+        })
+            ->sortByDesc(fn ($row) => $row['no_absen'] + $row['telat'] + $row['izin'] + $row['sakit'])
+            ->values()
+            ->take(5);
+
+        return response()->json([
+            'date' => $targetDate->toDateString(),
+            'location' => [
+                'name' => $user->locations->first()?->name ?? 'Lokasi tidak diketahui',
+                'initial' => $user->locations->first()?->initial,
+            ],
+            'supervisor' => [
+                'name' => $user->name,
+            ],
+            'cards' => [
+                'team_task_progress' => [
+                    'completed' => $completedTaskCount,
+                    'total' => $totalTaskCount,
+                ],
+                'unassigned_crews' => [
+                    'count' => $unassignedCrewCount,
+                    'total' => $crewCount,
+                ],
+                'team_average_score' => $teamAverageScore,
+                'today_total_tasks' => $totalTaskCount,
+            ],
+            'top_performers' => $crewScores
+                ->sortByDesc('completed_tasks')
+                ->values()
+                ->take(5),
+            'pending_approvals' => $pendingApprovals->take(8),
+            'attendance_monitor' => $attendanceMonitor,
+            'notifications' => [
+                [
+                    'id' => 'pending-approvals',
+                    'title' => 'Persetujuan',
+                    'message' => "Anda memiliki {$pendingApprovals->count()} pekerjaan yang harus disetujui.",
+                    'description' => 'Pekerjaan telah dilakukan oleh bawahan Anda.',
+                    'unread' => $pendingApprovals->count() > 0,
+                ],
+            ],
+        ]);
+    }
+
     public function getCrewEvalStats($id, Request $request, ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
         $user = Auth::user();
         if ($user->role_type !== 'supervisor' && $user->role_type !== 'manager') {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
         $crewUser = User::where('username', $id)->first();
         if (!$crewUser) {
-            return response()->json(['message' => 'Crew not found'], 404);
+            return response()->json(['message' => 'Crew tidak ditemukan.'], 404);
         }
 
         $isSubordinate = $user->subordinateLines()->where('subordinate_id', $id)->where('status', 'active')->exists();
         if (!$isSubordinate) {
-            return response()->json(['message' => 'Unauthorized. You can only view stats for your direct subordinates.'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses. Anda hanya dapat melihat statistik bawahan Anda.'], 403);
         }
 
         $month = $request->query('month', Carbon::now()->month);

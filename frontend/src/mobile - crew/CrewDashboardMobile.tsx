@@ -35,7 +35,7 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                     }
                 }
             } catch (error) {
-                console.error("Failed to fetch work stations", error);
+                console.error("Gagal mengambil work station", error);
             }
         };
 
@@ -54,7 +54,7 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                     setStats(data);
                 }
             } catch (error) {
-                console.error("Failed to fetch crew stats", error);
+                console.error("Gagal mengambil statistik crew", error);
             }
         };
         fetchStats();
@@ -74,7 +74,7 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                     setIsGuideRead(false);
                 }
             } catch (error) {
-                console.error("Failed to check guide status", error);
+                console.error("Gagal memeriksa status panduan", error);
                 setIsGuideRead(false);
             }
         };
@@ -95,7 +95,7 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
     };
 
     return (
-        <CrewLayout title="Dashboard" showBack={false}>
+        <CrewLayout title="Dasbor" showBack={false}>
             <div className="space-y-6 pb-24">
                 {/* 1. Identity Card */}
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 relative overflow-hidden">
@@ -105,9 +105,9 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                                 {user?.name?.charAt(0) || 'U'}
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400">Welcome,</p>
+                                <p className="text-xs text-gray-400">Selamat datang,</p>
                                 <h2 className="text-lg font-bold text-gray-800 leading-tight">
-                                    {user?.name || 'Crew Member'}!
+                                    {user?.name || 'Service Crew'}!
                                 </h2>
                             </div>
                         </div>
@@ -122,9 +122,9 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                     <div className="bg-gray-100 rounded-xl p-3 flex items-center gap-3 text-gray-500">
                         <MapPin size={18} />
                         <span className="text-sm font-semibold uppercase tracking-wide">
-                            {user?.locations?.[0]?.name || 'Unknown Location'}
+                            {user?.locations?.[0]?.name || 'Lokasi Tidak Diketahui'}
                         </span>
-                        <div className="ml-auto bg-gray-200 px-2 py-0.5 rounded text-[10px] font-bold">LOCKED</div>
+                        <div className="ml-auto bg-gray-200 px-2 py-0.5 rounded text-[10px] font-bold">TERKUNCI</div>
                     </div>
                 </div>
 
@@ -132,7 +132,7 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                 <div className="bg-blue-600 rounded-3xl pt-4 px-3 pb-3 text-white shadow-lg shadow-blue-200 relative overflow-hidden">
                     <div className="relative z-10">
                         <div className="flex justify-between items-center mb-4 px-1">
-                            <p className="text-xs font-bold text-blue-200 tracking-wide uppercase">Today, {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                            <p className="text-xs font-bold text-blue-200 tracking-wide uppercase">Hari ini, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                         </div>
 
                         {/* Main White Card Container */}
@@ -141,12 +141,12 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                             {/* Section 1: Role */}
                             <div className="mb-6 relative">
                                 <div className="flex justify-between items-end mb-2">
-                                    <label className="text-xs font-semibold text-gray-500">Your Role as</label>
+                                    <label className="text-xs font-semibold text-gray-500">Peran Anda</label>
                                     <button
                                         onClick={() => onNavigate('guide')}
                                         className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md shadow-blue-200 active:scale-95 transition-transform hover:bg-blue-700"
                                     >
-                                        View Guide !
+                                        Baca Panduan
                                     </button>
                                 </div>
                                 <div className="relative">
@@ -172,14 +172,14 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                             <div>
                                 <div className="flex justify-between items-end mb-2">
                                     <div>
-                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Task Completed</p>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Pekerjaan Selesai</p>
                                         <p className="text-3xl font-extrabold text-blue-900 leading-none">{taskProgress.completed}/{taskProgress.total}</p>
                                     </div>
                                     <button
                                         onClick={() => onNavigate(isGuideRead ? 'task-list' : 'guide')}
                                         className={`text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md active:scale-95 transition-transform ${isGuideRead ? 'bg-blue-600 shadow-blue-200 hover:bg-blue-700' : 'bg-gray-400 shadow-gray-200 hover:bg-gray-500'}`}
                                     >
-                                        {isGuideRead ? 'View Task !' : 'Read Guide First'}
+                                        {isGuideRead ? 'Cek Pekerjaan' : 'Baca Panduan Dulu'}
                                     </button>
                                 </div>
 
@@ -209,8 +209,8 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                                 <Users size={20} />
                             </div>
                             <div className="text-left">
-                                <h3 className="font-bold text-gray-800">Report</h3>
-                                <p className="text-xs text-gray-400">View analytics</p>
+                                <h3 className="font-bold text-gray-800">Laporan</h3>
+                                <p className="text-xs text-gray-400">Lihat analitik</p>
                             </div>
                         </div>
                         <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">
@@ -227,8 +227,8 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                                 <Star size={20} />
                             </div>
                             <div className="text-left">
-                                <h3 className="font-bold text-gray-800">Evaluation</h3>
-                                <p className="text-xs text-gray-400">Check your scores</p>
+                                <h3 className="font-bold text-gray-800">Evaluasi</h3>
+                                <p className="text-xs text-gray-400">Cek nilai Anda</p>
                             </div>
                         </div>
                         <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">
@@ -245,8 +245,8 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                                 <Calendar size={20} />
                             </div>
                             <div className="text-left">
-                                <h3 className="font-bold text-gray-800">History</h3>
-                                <p className="text-xs text-gray-400">Past activities</p>
+                                <h3 className="font-bold text-gray-800">Riwayat</h3>
+                                <p className="text-xs text-gray-400">Aktivitas sebelumnya</p>
                             </div>
                         </div>
                         <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">
@@ -260,7 +260,7 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                         className="bg-red-50 p-4 rounded-2xl shadow-sm border border-red-100 flex items-center justify-center gap-2 hover:bg-red-100 transition mt-4 group"
                     >
                         <LogOut size={20} className="text-red-500 group-hover:scale-110 transition-transform" />
-                        <span className="font-bold text-red-600">Log Out</span>
+                        <span className="font-bold text-red-600">Keluar</span>
                     </button>
                 </div>
             </div>

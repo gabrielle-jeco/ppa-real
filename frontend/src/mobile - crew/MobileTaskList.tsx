@@ -42,7 +42,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                     const data = await response.json();
                     setTasks([]);
                     setGuideRequired(true);
-                    setGuideMessage(data.message || 'Silakan konfirmasi panduan hari ini sebelum mengakses tugas.');
+                    setGuideMessage(data.message || 'Silakan konfirmasi panduan hari ini sebelum mengakses pekerjaan.');
                 }
             } catch (error) {
                 console.error("Failed to fetch tasks", error);
@@ -74,8 +74,8 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
         } else {
             tasks
                 .filter(task => !previousSeen.includes(Number(task.task_id)))
-                .forEach(task => notifyOnce(`crew_new_task_${task.task_id}`, 'Tugas baru', {
-                    body: task.title || 'Ada tugas baru yang perlu dikerjakan.',
+                .forEach(task => notifyOnce(`crew_new_task_${task.task_id}`, 'Pekerjaan Baru', {
+                    body: task.title || 'Ada pekerjaan baru yang perlu dikerjakan.',
                     tag: `crew-new-task-${task.task_id}`,
                 }));
 
@@ -87,7 +87,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
 
     return (
         <CrewLayout
-            title="Tugas Harian"
+            title="Pekerjaan Harian"
             showBack={true}
             onBack={onBack}
             allowScroll={false}
@@ -97,7 +97,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                 <div className="bg-white rounded-3xl p-6 shadow-sm mb-4 shrink-0 border border-gray-100">
                     <div className="flex justify-between items-center mb-2">
                         <p className="text-sm font-bold text-gray-600">
-                            Tugas Selesai <span className="text-gray-900">{completedCount}/{totalCount}</span>
+                            Pekerjaan Selesai <span className="text-gray-900">{completedCount}/{totalCount}</span>
                         </p>
                         <span className="text-sm font-bold text-blue-600">{Math.round(progress)}%</span>
                     </div>
@@ -121,12 +121,12 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                             <div className="flex justify-center py-10 text-gray-400">Memuat tugas...</div>
                         ) : guideRequired ? (
                             <div className="flex flex-col items-center justify-center py-10 text-center text-gray-400 px-4">
-                                <p className="font-medium text-gray-500 mb-2">Akses tugas terkunci.</p>
+                                <p className="font-medium text-gray-500 mb-2">Akses pekerjaan terkunci.</p>
                                 <p>{guideMessage}</p>
                             </div>
                         ) : tasks.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-10 text-gray-400">
-                                <p>Tidak ada tugas pada tanggal ini.</p>
+                                <p>Tidak ada pekerjaan pada tanggal ini.</p>
                             </div>
                         ) : (
                             tasks.map((task) => {

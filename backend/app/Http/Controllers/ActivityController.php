@@ -25,7 +25,7 @@ class ActivityController extends Controller
             ->first();
 
         if (!$workStation) {
-            return response()->json(['message' => 'Invalid workstation name'], 400);
+            return response()->json(['message' => 'Nama work station tidak valid.'], 400);
         }
 
         if ($request->is_initial_login && !$request->force_log) {
@@ -37,7 +37,7 @@ class ActivityController extends Controller
 
             if ($existingLog) {
                 return response()->json([
-                    'message' => 'Initial workstation already logged today',
+                    'message' => 'Work station awal sudah tercatat hari ini.',
                     'work_station' => $workStation,
                     'is_duplicate' => true
                 ], 200);
@@ -70,17 +70,17 @@ class ActivityController extends Controller
 
         $user = User::where('username', $targetUserId)->first();
         if (!$user) {
-            return response()->json(['message' => 'User not found'], 404);
+            return response()->json(['message' => 'User tidak ditemukan.'], 404);
         }
 
         if ($authUser->username !== $user->username) {
             if ($authUser->role_type !== 'supervisor' && $authUser->role_type !== 'manager') {
-                return response()->json(['message' => 'Unauthorized'], 403);
+                return response()->json(['message' => 'Tidak memiliki akses.'], 403);
             }
 
             $isSubordinate = $authUser->subordinateLines()->where('subordinate_id', $user->username)->where('status', 'active')->exists();
             if (!$isSubordinate) {
-                return response()->json(['message' => 'Unauthorized. This user is not your subordinate.'], 403);
+                return response()->json(['message' => 'Tidak memiliki akses. User ini bukan bawahan Anda.'], 403);
             }
         }
 
@@ -95,7 +95,7 @@ class ActivityController extends Controller
                 return [
                     'id' => $log->id,
                     'type' => 'role_change',
-                    'role' => $log->workStation ? $log->workStation->name : 'Unknown',
+                    'role' => $log->workStation ? $log->workStation->name : 'Tidak diketahui',
                     'time' => $log->created_at->format('H:i'),
                     'action' => $log->action
                 ];

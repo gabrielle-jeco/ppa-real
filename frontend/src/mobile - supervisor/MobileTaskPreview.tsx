@@ -64,7 +64,7 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
                     ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50">
                             <span className="text-4xl mb-4">📷</span>
-                            <p className="text-sm font-medium">No Image</p>
+                            <p className="text-sm font-medium">Belum Ada Foto</p>
                         </div>
                     )}
 
@@ -86,7 +86,7 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
                             </span>
                         ) : (
                             <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-white shadow-md backdrop-blur-md ${readOnly ? 'bg-gray-500/80' : 'bg-blue-500/80'}`}>
-                                {readOnly ? 'BACA SAJA' : 'REVIEW'}
+                                {readOnly ? 'BACA SAJA' : 'TINJAU'}
                             </span>
                         )}
                     </div>
@@ -127,7 +127,7 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
                             <div className="flex items-center gap-3 text-white/80 text-xs">
                                 <span className="flex items-center gap-1">
                                     <Calendar size={12} />
-                                    {new Date(currentEvidence?.created_at || task.due_at || Date.now()).toLocaleString()}
+                                    {new Date(currentEvidence?.created_at || task.due_at || Date.now()).toLocaleString('id-ID')}
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <User size={12} />

@@ -57,7 +57,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 if (taskRes.ok) setTasks(await taskRes.json());
                 if (activityRes.ok) setActivityLogs(await activityRes.json());
             } catch (error) {
-                console.error("Failed to fetch history data", error);
+                console.error("Gagal mengambil data riwayat", error);
             } finally {
                 setLoading(false);
             }
@@ -93,7 +93,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 body: JSON.stringify({ status: newStatus })
             });
         } catch (error) {
-            console.error("Status update failed", error);
+            console.error("Gagal memperbarui status", error);
             // Optionally could re-fetch tasks here on failure
         }
     };
@@ -113,7 +113,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
             });
             setTasks(tasks.filter(t => t.task_id !== taskId));
         } catch (error) {
-            console.error("Delete failed", error);
+            console.error("Gagal menghapus tugas", error);
         }
     };
 
@@ -122,7 +122,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
         const taskId = previewTask.task_id;
         try {
             const token = localStorage.getItem('auth_token');
-            if (!token) throw new Error("No token found");
+            if (!token) throw new Error("Token tidak ditemukan");
 
             const res = await fetch(`/api/tasks/${taskId}/evidence`, {
                 method: 'DELETE',
@@ -143,11 +143,11 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                     evidences: (previewTask.evidences || []).filter((e: any) => e.id !== evidenceId)
                 });
             } else {
-                alert('Failed to delete image.');
+                alert('Gagal menghapus foto.');
             }
         } catch (error) {
-            console.error('Error deleting image:', error);
-            alert('An error occurred.');
+            console.error('Gagal menghapus foto:', error);
+            alert('Terjadi kesalahan.');
         }
     };
     const [activeEvidenceTab, setActiveEvidenceTab] = useState<'before' | 'after'>('before');
@@ -266,7 +266,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                 >
                                     {getAvailableMonths(selectedDate.getFullYear()).map(i => (
                                         <option key={i} value={i}>
-                                            {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
+                                            {new Date(0, i).toLocaleString('id-ID', { month: 'long' })}
                                         </option>
                                     ))}
                                 </select>
@@ -291,7 +291,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
 
                     {/* Day Names */}
                     <div className="grid grid-cols-7 text-center mb-2 border-b border-gray-100 pb-2">
-                        {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(day => (
+                        {['MIN', 'SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB'].map(day => (
                             <span key={day} className="text-[10px] font-bold text-gray-400">{day}</span>
                         ))}
                     </div>
@@ -313,7 +313,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                     {/* List Header & Dropdown */}
                     <div className="flex justify-between items-center mb-4 sticky top-0 bg-white py-1 z-10 w-full shrink-0">
                         <h3 className="font-bold text-gray-800 text-sm">
-                            {selectedDate.toLocaleDateString('en-US', { day: 'numeric', month: 'long' })}
+                            {selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}
                         </h3>
 
                         {/* Role Dropdown */}
@@ -358,7 +358,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                     <div key={idx} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between border border-transparent hover:border-gray-200 transition">
                                         <div className="flex flex-col gap-0.5">
                                             <span className="text-gray-800 font-bold text-sm capitalize">{log.role}</span>
-                                            <span className="text-gray-400 text-[10px] italic capitalize">{log.action ? log.action.replace('_', ' ') : 'Role Change'}</span>
+                                            <span className="text-gray-400 text-[10px] italic capitalize">{log.action ? log.action.replace('_', ' ') : 'Perubahan Peran'}</span>
                                         </div>
                                         <span className="text-gray-500 text-xs font-semibold bg-white px-2 py-1 rounded-lg shadow-sm border border-gray-100">{log.time}</span>
                                     </div>

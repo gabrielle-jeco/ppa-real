@@ -39,7 +39,7 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
                     }
                 }
             } catch (error) {
-                console.error("Failed to fetch guide info", error);
+                console.error("Gagal mengambil informasi panduan", error);
             } finally {
                 setIsLoading(false);
             }
@@ -58,11 +58,11 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
         .join('\n');
 
     const content = station?.guide_content ? {
-        title: `Crew - ${station.name} Guide`,
-        text: guideText || 'No specific guide assigned for this workstation currently.'
+        title: `Panduan Crew - ${station.name}`,
+        text: guideText || 'Belum ada panduan khusus untuk work station ini.'
     } : {
-        title: `Crew - ${role.charAt(0).toUpperCase() + role.slice(1)} Guide`,
-        text: 'No specific guide assigned for this workstation currently.'
+        title: `Panduan Crew - ${role.charAt(0).toUpperCase() + role.slice(1)}`,
+        text: 'Belum ada panduan khusus untuk work station ini.'
     };
 
     const handleConfirm = async () => {
@@ -80,11 +80,11 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
             if (response.ok) {
                 onBack(); // Return to dashboard
             } else {
-                alert('Failed to confirm guide.');
+                alert('Gagal mengonfirmasi panduan.');
             }
         } catch (error) {
             console.error('Error confirming guide:', error);
-            alert('An error occurred.');
+            alert('Terjadi kesalahan.');
         } finally {
             setIsSubmitting(false);
         }
@@ -92,7 +92,7 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
 
     return (
         <CrewLayout
-            title="Task Guide"
+            title="Panduan"
             showBack={true}
             onBack={onBack}
         >
@@ -130,7 +130,7 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
                                 className="hidden"
                             />
                             <span className="text-sm font-semibold text-gray-700">
-                                {isAlreadyConfirmed ? 'You have already read and confirmed this guide today.' : 'I have read and understood'}
+                                {isAlreadyConfirmed ? 'Anda sudah membaca dan mengonfirmasi panduan hari ini.' : 'Saya telah membaca, memahami, dan akan melaksanakannya'}
                             </span>
                         </label>
 
@@ -146,9 +146,9 @@ export default function MobileTaskGuide({ onBack, role }: MobileTaskGuideProps) 
                             {isSubmitting ? (
                                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                             ) : isAlreadyConfirmed ? (
-                                "Already Confirmed"
+                                "Sudah Dikonfirmasi"
                             ) : (
-                                "Confirm & Start Work"
+                                "Setuju dan Mulai Bekerja"
                             )}
                         </button>
                     </>

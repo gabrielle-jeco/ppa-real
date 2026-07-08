@@ -217,16 +217,16 @@ class ScoringService
             'task_for_sc' => [
                 'completed' => (int) round($scAverageScore),
                 'total' => 100,
-                'label' => 'Task for SC',
+                'label' => 'Pekerjaan untuk SC',
             ],
             'task_from_manager' => [
                 'completed' => (int) round($managerReviewScore),
                 'total' => 100,
-                'label' => 'Manager Review',
+                'label' => 'Penilaian Manager',
             ],
-            'monthly_task_given' => "{$totalTaskGiven} / {$scCount} People",
+            'monthly_task_given' => "{$totalTaskGiven} / {$scCount} Orang",
             'avg_service_crew_point' => (int) round($avgServiceCrewPoint),
-            'daily_task_given' => "{$dailyTaskGiven} / {$scCount} People",
+            'daily_task_given' => "{$dailyTaskGiven} / {$scCount} Orang",
             'avg_sc_point_today' => (int) round($dailyAvgServiceCrewPoint),
             'attendance_calendar' => $this->getAttendanceCalendarForMonth($supervisor, $month),
         ];

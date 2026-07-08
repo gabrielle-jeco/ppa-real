@@ -29,7 +29,7 @@ const MobileCrewActionModal: React.FC<MobileCrewActionModalProps> = ({ isOpen, o
                         <div className="bg-blue-100 p-3 rounded-full text-blue-600">
                             <ImageIcon size={28} />
                         </div>
-                        <span className="font-bold text-gray-700 text-sm">Upload</span>
+                        <span className="font-bold text-gray-700 text-sm">Unggah</span>
                     </button>
                     <button
                         onClick={onTakePhoto}
@@ -38,7 +38,7 @@ const MobileCrewActionModal: React.FC<MobileCrewActionModalProps> = ({ isOpen, o
                         <div className="bg-purple-100 p-3 rounded-full text-purple-600">
                             <Camera size={28} />
                         </div>
-                        <span className="font-bold text-gray-700 text-sm">Take Photo</span>
+                        <span className="font-bold text-gray-700 text-sm">Ambil Foto</span>
                     </button>
                 </div>
 
@@ -48,13 +48,13 @@ const MobileCrewActionModal: React.FC<MobileCrewActionModalProps> = ({ isOpen, o
                         onClick={onHistory}
                         className="flex-1 bg-gray-100 text-gray-700 font-bold py-3.5 rounded-full shadow-sm active:scale-95 transition-transform text-sm hover:bg-gray-200"
                     >
-                        History
+                        Riwayat
                     </button>
                     <button
                         onClick={onClose}
                         className="flex-1 bg-blue-600 text-white font-bold py-3.5 rounded-full shadow-lg active:scale-95 transition-transform text-sm hover:bg-blue-700"
                     >
-                        Done
+                        Selesai
                     </button>
                 </div>
             </div>

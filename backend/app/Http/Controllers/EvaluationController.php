@@ -27,11 +27,11 @@ class EvaluationController extends Controller
             $evaluatee = User::where('username', $request->user_id)->firstOrFail();
 
             if (!in_array($evaluator->role_type, ['manager', 'supervisor'], true)) {
-                return response()->json(['error' => 'Unauthorized. Only superiors can evaluate.'], 403);
+                return response()->json(['error' => 'Tidak memiliki akses. Hanya atasan yang dapat melakukan evaluasi.'], 403);
             }
 
             if (!$this->canEvaluate($evaluator, $evaluatee)) {
-                return response()->json(['error' => 'Unauthorized. You can only evaluate your direct subordinates.'], 403);
+                return response()->json(['error' => 'Tidak memiliki akses. Anda hanya dapat mengevaluasi bawahan Anda.'], 403);
             }
 
             $period = Carbon::parse($request->date)->startOfMonth();
@@ -78,7 +78,7 @@ class EvaluationController extends Controller
             ]);
 
             return response()->json([
-                'error' => 'Unable to submit evaluation. Please try again.'
+                'error' => 'Evaluasi belum dapat disimpan. Silakan coba lagi.'
             ], 500);
         }
     }
@@ -94,11 +94,11 @@ class EvaluationController extends Controller
         $evaluatee = User::where('username', $supervisorId)->first();
 
         if (!$evaluatee) {
-            return response()->json(['error' => 'Evaluatee not found.'], 404);
+            return response()->json(['error' => 'Karyawan yang dievaluasi tidak ditemukan.'], 404);
         }
 
         if (!$this->canEvaluate($evaluator, $evaluatee)) {
-            return response()->json(['error' => 'Unauthorized. You can only view evaluations for your direct subordinates.'], 403);
+            return response()->json(['error' => 'Tidak memiliki akses. Anda hanya dapat melihat evaluasi bawahan Anda.'], 403);
         }
 
         $evaluationType = $this->resolveEvaluationType($evaluator, $evaluatee);

@@ -162,4 +162,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(ActivityLog::class, 'user_id', 'username');
     }
+
+    public function pushSubscriptions()
+    {
+        return $this->hasMany(PushSubscription::class, 'user_id', 'username');
+    }
+
+    public function userNotifications()
+    {
+        return $this->hasMany(UserNotification::class, 'recipient_id', 'username');
+    }
 }

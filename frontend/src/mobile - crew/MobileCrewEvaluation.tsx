@@ -33,14 +33,14 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                     setStats(data);
                 }
             } catch (error) {
-                console.error("Failed to fetch evaluation stats", error);
+                console.error("Gagal mengambil statistik evaluasi", error);
             }
         };
         fetchEvaluation();
     }, [selectedDate]);
 
     // Live Data
-    const crewName = user?.name || "Crew Member";
+    const crewName = user?.name || "Karyawan";
     const activePercentage = stats.active_percentage || 0;
     const yearlyScore = stats.yearly_score || 0;
     const personalityScore = stats.personality_score || 0;
@@ -82,11 +82,11 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
     const isCurrentSelectedMonth =
         selectedDate.getFullYear() === new Date().getFullYear() &&
         selectedDate.getMonth() === new Date().getMonth();
-    const activityMonitorTitle = `${selectedDate.toLocaleString('default', { month: 'long' })} Activity Monitor${isCurrentSelectedMonth ? ' (MTD)' : ''}`;
+    const activityMonitorTitle = `${selectedDate.toLocaleString('id-ID', { month: 'long' })} Monitoring Aktivitas${isCurrentSelectedMonth ? ' (Bulanan)' : ''}`;
 
     return (
         <CrewLayout
-            title="Evaluation"
+            title="Evaluasi"
             showBack={true}
             onBack={onBack}
         >
@@ -95,7 +95,7 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                 {/* 1. Header (Month/Year) - Matches Supervisor Header */}
                 <div className="bg-white rounded-3xl p-5 shadow-sm mb-6">
                     <h2 className="text-center text-sm font-bold text-gray-600 mb-4">
-                        Evaluation History
+                        Riwayat Evaluasi
                     </h2>
 
                     {/* Pill Dropdowns */}
@@ -108,7 +108,7 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                             >
                                 {getAvailableMonths(selectedDate.getFullYear()).map(i => (
                                     <option key={i} value={i}>
-                                        {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
+                                        {new Date(0, i).toLocaleString('id-ID', { month: 'long' })}
                                     </option>
                                 ))}
                             </select>
@@ -139,7 +139,7 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                         <div className="w-full bg-white rounded-full h-4 mb-2 overflow-hidden">
                             <div className="bg-green-500 h-full rounded-full transition-all duration-1000" style={{ width: `${activePercentage}%` }}></div>
                         </div>
-                        <p className="text-xs text-gray-500">Active Percentage - {activePercentage}% ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
+                        <p className="text-xs text-gray-500">Persentase Aktivitas - {activePercentage}% ({selectedDate.toLocaleString('id-ID', { month: 'long' })})</p>
                     </div>
 
                     {/* Activity Monitor */}
@@ -163,24 +163,24 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                                 </div>
                             </>
                         ) : (
-                            <p className="text-xs text-gray-400 italic">No activity logged yet for this month.</p>
+                            <p className="text-xs text-gray-400 italic">Belum ada aktivitas pada bulan ini.</p>
                         )}
                     </div>
 
                     {/* Personality Score */}
                     <div className="bg-gray-100 rounded-3xl p-5">
-                        <p className="text-xs font-medium text-gray-600 mb-2 uppercase">POINT SIKAP KEPRIBADIAN ({selectedDate.toLocaleString('default', { month: 'long' })})</p>
-                        <p className="text-sm font-bold text-gray-700">Total Point : {personalityScore}</p>
+                        <p className="text-xs font-medium text-gray-600 mb-2 uppercase">POIN SIKAP KEPRIBADIAN ({selectedDate.toLocaleString('id-ID', { month: 'long' })})</p>
+                        <p className="text-sm font-bold text-gray-700">Total Nilai : {personalityScore}</p>
                     </div>
 
                     {/* Calendar View */}
                     <div className="bg-white rounded-3xl p-6 shadow-sm">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-sm font-bold text-gray-800">{selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+                            <h3 className="text-sm font-bold text-gray-800">{selectedDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}</h3>
                         </div>
 
                         <div className="grid grid-cols-7 text-center text-[10px] text-gray-400 font-bold uppercase mb-3">
-                            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                            <span>MIN</span><span>SEN</span><span>SEL</span><span>RAB</span><span>KAM</span><span>JUM</span><span>SAB</span>
                         </div>
 
                         <div className="grid grid-cols-7 gap-y-3">
@@ -205,8 +205,8 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
 
                     {/* Yearly Overall Point */}
                     <div className="bg-gray-100 rounded-3xl p-6 pb-12">
-                        <p className="text-xs font-medium text-gray-500 uppercase mb-4">YEARLY OVERALL POINT</p>
-                        <p className="text-sm font-medium text-gray-500 mb-1">Total Point :</p>
+                        <p className="text-xs font-medium text-gray-500 uppercase mb-4">AKUMULASI NILAI TAHUNAN</p>
+                        <p className="text-sm font-medium text-gray-500 mb-1">Total Nilai :</p>
                         <p className="text-6xl font-medium text-black tracking-tight">{yearlyScore}</p>
                     </div>
                 </div>

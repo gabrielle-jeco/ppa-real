@@ -33,6 +33,10 @@ services:
       YOJADWAL_PASSWORD_FIELD: password
       YOJADWAL_SUCCESS_FIELD: success
       YOJADWAL_ALLOW_LOCAL_SUPERADMIN_FALLBACK: "true"
+      WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-false}"
+      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-mailto:admin@yodaily.local}"
+      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
+      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"
       TZ: Asia/Jakarta
     depends_on:
       - db
@@ -44,6 +48,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
     container_name: perf-app-frontend
     restart: unless-stopped
     ports:
