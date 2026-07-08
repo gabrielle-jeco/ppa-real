@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Camera } from 'lucide-react';
+import { Camera, Check, ChevronDown } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 
@@ -244,7 +244,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                     >
                                         <div className="flex items-center gap-3 flex-1 min-w-0">
                                             <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${task.status === 'approved' ? 'bg-blue-100 border-blue-500 text-blue-600' : 'border-gray-300 bg-white'}`}>
-                                                {task.status === 'approved' && <span className="font-bold text-xs">✓</span>}
+                                                {task.status === 'approved' && <Check size={14} strokeWidth={3} />}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-bold text-gray-800 text-sm line-clamp-1 mb-0.5">{task.title}</p>

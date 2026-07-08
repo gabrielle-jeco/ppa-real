@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Camera, Trash2 } from 'lucide-react';
+import { Camera, Check, ChevronDown, Trash2 } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileTaskPreview from './MobileTaskPreview';
 import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
@@ -382,7 +382,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                     onClick={() => canApproveTask(task) && handleToggleStatus(task)}
                                                     className={`w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer ${isApproved ? 'bg-blue-100 border-blue-500 text-blue-600' : canApproveTask(task) ? 'border-gray-300 bg-white hover:border-blue-500' : 'border-gray-300 bg-gray-50 cursor-not-allowed'}`}
                                                 >
-                                                    {isApproved && <span className="font-bold text-xs">✓</span>}
+                                                    {isApproved && <Check size={14} strokeWidth={3} />}
                                                 </div>
                                                 <div className="flex-1 min-w-0 pr-2">
                                                     <p className={`font-bold text-sm line-clamp-1 mb-0.5 ${isApproved ? 'text-gray-500' : 'text-gray-800'}`}>{task.title}</p>
