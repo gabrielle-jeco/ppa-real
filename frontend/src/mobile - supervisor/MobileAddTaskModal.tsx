@@ -197,6 +197,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                             rows={3}
                             className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-5 py-4 text-sm text-gray-700 font-medium transition-all resize-none"
                         />
+                        <p className="mt-1 text-[10px] text-gray-400">Tekan Enter untuk baris baru.</p>
                     </div>
 
 

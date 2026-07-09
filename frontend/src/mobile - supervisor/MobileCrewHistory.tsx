@@ -34,36 +34,43 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     const [activityLogs, setActivityLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
+    const fetchData = async (silent = false) => {
+        if (!crew?.id) return;
+
+        if (!silent) setLoading(true);
+        try {
+            const dateStr = selectedDate.toLocaleDateString('en-CA');
+            const token = localStorage.getItem('auth_token') || '';
+
+            const taskReq = fetch(`/api/crews/${crew.id}/tasks?date=${dateStr}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const activityReq = fetch(`/api/crew/activity-logs?date=${dateStr}&user_id=${crew.id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const [taskRes, activityRes] = await Promise.all([taskReq, activityReq]);
+
+            if (taskRes.ok) setTasks(await taskRes.json());
+            if (activityRes.ok) setActivityLogs(await activityRes.json());
+        } catch (error) {
+            console.error("Gagal mengambil data riwayat", error);
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    };
+
     // Fetch Tasks & Activities
     useEffect(() => {
-        const fetchData = async () => {
-            if (!crew?.id) return;
-
-            setLoading(true);
-            try {
-                const dateStr = selectedDate.toLocaleDateString('en-CA');
-                const token = localStorage.getItem('auth_token') || '';
-
-                const taskReq = fetch(`/api/crews/${crew.id}/tasks?date=${dateStr}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                const activityReq = fetch(`/api/crew/activity-logs?date=${dateStr}&user_id=${crew.id}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                const [taskRes, activityRes] = await Promise.all([taskReq, activityReq]);
-
-                if (taskRes.ok) setTasks(await taskRes.json());
-                if (activityRes.ok) setActivityLogs(await activityRes.json());
-            } catch (error) {
-                console.error("Gagal mengambil data riwayat", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchData();
+    }, [selectedDate, viewMode, crew?.id]);
+
+    useEffect(() => {
+        if (!crew?.id) return;
+
+        const timer = window.setInterval(() => fetchData(true), 15000);
+        return () => window.clearInterval(timer);
     }, [selectedDate, viewMode, crew?.id]);
 
     useEffect(() => {

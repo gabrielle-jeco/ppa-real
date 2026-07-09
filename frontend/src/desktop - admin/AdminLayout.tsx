@@ -20,7 +20,7 @@ export default function AdminLayout({ children, onLogout }: AdminLayoutProps) {
                     <button
                         onClick={onLogout}
                         className="w-full flex justify-center p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                        title="Logout"
+                        title="Keluar"
                     >
                         <LogOut size={24} />
                     </button>

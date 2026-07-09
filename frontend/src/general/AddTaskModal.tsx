@@ -168,13 +168,14 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
 
                     {/* Note Input */}
                     <div>
-                        <input
-                            type="text"
+                        <textarea
                             placeholder="Deskripsi pekerjaan"
                             value={note}
                             onChange={(e) => setNote(e.target.value)}
-                            className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-primary outline-none shadow-sm"
+                            rows={4}
+                            className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-primary outline-none shadow-sm resize-none"
                         />
+                        <p className="mt-1 text-[10px] text-gray-400">Tekan Enter untuk baris baru.</p>
                     </div>
 
 

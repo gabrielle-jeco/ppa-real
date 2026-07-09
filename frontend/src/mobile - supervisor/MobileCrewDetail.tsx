@@ -28,6 +28,13 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
     }, [crew?.id, selectedDate]);
 
     useEffect(() => {
+        if (!crew?.id) return;
+
+        const timer = window.setInterval(fetchTasks, 15000);
+        return () => window.clearInterval(timer);
+    }, [crew?.id, selectedDate]);
+
+    useEffect(() => {
         tasks.forEach(notifyApprovalGrace);
     }, [tasks]);
 

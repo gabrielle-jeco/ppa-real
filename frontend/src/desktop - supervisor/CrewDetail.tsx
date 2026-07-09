@@ -44,6 +44,19 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
     }, [selectedDate]);
 
     useEffect(() => {
+        if (!crew?.id) return;
+
+        const timer = window.setInterval(() => {
+            fetchTasks();
+            if (rightPanelMode === 'ACTIVITY') {
+                fetchActivityLogs();
+            }
+        }, 15000);
+
+        return () => window.clearInterval(timer);
+    }, [crew?.id, selectedDate, rightPanelMode]);
+
+    useEffect(() => {
         tasks.forEach(notifyApprovalGrace);
     }, [tasks]);
 
