@@ -633,12 +633,14 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                 <div className="lg:col-span-4 xl:col-span-4 2xl:col-span-4 flex flex-col h-full ease-in-out duration-300 min-h-0">
                     {(rightPanelMode === 'ACTIVITY' || viewMode === 'EVALUATION') ? (
                         viewMode === 'EVALUATION' ? (
-                            <div className="h-full flex flex-col">
-                                <div className="mb-4">
+                            <div className="h-full flex flex-col min-h-0">
+                                <div className="mb-4 shrink-0">
                                     <h2 className="text-lg font-bold text-gray-800 mb-2">
                                         {selectedDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
                                     </h2>
+                                </div>
 
+                                <div className="flex-1 overflow-y-auto pr-2 pb-4 min-h-0">
                                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
                                         <h3 className="text-sm font-semibold text-gray-600 mb-4">{activityMonitorTitle}</h3>
 
