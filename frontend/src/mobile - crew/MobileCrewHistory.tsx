@@ -21,42 +21,49 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
     const [activityLogs, setActivityLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
+    const fetchData = async (silent = false) => {
+        if (!user?.user_id) return;
+
+        if (!silent) setLoading(true);
+        try {
+            const dateStr = selectedDate.toLocaleDateString('en-CA');
+            const token = localStorage.getItem('auth_token') || '';
+
+            const taskReq = fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}&role=${selectedRole}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const activityReq = fetch(`/api/crew/activity-logs?date=${dateStr}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const [taskRes, activityRes] = await Promise.all([taskReq, activityReq]);
+
+            if (taskRes.ok) {
+                setTasks(await taskRes.json());
+            } else {
+                setTasks([]);
+            }
+            if (activityRes.ok) setActivityLogs(await activityRes.json());
+
+        } catch (error) {
+            console.error("Gagal mengambil data riwayat", error);
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    };
+
     // Fetch Tasks & Activities
     useEffect(() => {
-        const fetchData = async () => {
-            if (!user?.user_id) return;
-
-            setLoading(true);
-            try {
-                const dateStr = selectedDate.toLocaleDateString('en-CA');
-                const token = localStorage.getItem('auth_token') || '';
-
-                const taskReq = fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}&role=${selectedRole}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                const activityReq = fetch(`/api/crew/activity-logs?date=${dateStr}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                const [taskRes, activityRes] = await Promise.all([taskReq, activityReq]);
-
-                if (taskRes.ok) {
-                    setTasks(await taskRes.json());
-                } else {
-                    setTasks([]);
-                }
-                if (activityRes.ok) setActivityLogs(await activityRes.json());
-
-            } catch (error) {
-                console.error("Failed to fetch history data", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchData();
     }, [selectedDate, user?.user_id, refreshTrigger, selectedRole]);
+
+    useEffect(() => {
+        if (!user?.user_id) return;
+
+        const timer = window.setInterval(() => fetchData(true), 15000);
+        return () => window.clearInterval(timer);
+    }, [selectedDate, user?.user_id, selectedRole]);
 
 
 

@@ -18,43 +18,51 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
     const [guideRequired, setGuideRequired] = useState(false);
     const [guideMessage, setGuideMessage] = useState('');
 
+    const fetchTasks = async (silent = false) => {
+        if (!user?.user_id) return;
+        if (!silent) setLoading(true);
+        try {
+            // Format date as YYYY-MM-DD (Local Time)
+            const offset = selectedDate.getTimezoneOffset();
+            const localDate = new Date(selectedDate.getTime() - (offset * 60 * 1000));
+            const dateStr = localDate.toISOString().split('T')[0];
+            const response = await fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}&role=${selectedRole}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setTasks(data);
+                setGuideRequired(false);
+                setGuideMessage('');
+            } else if (response.status === 423) {
+                const data = await response.json();
+                setTasks([]);
+                setGuideRequired(true);
+                setGuideMessage(data.message || 'Silakan konfirmasi panduan hari ini sebelum mengakses pekerjaan.');
+            }
+        } catch (error) {
+            console.error("Gagal mengambil pekerjaan", error);
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    };
+
     // Fetch Tasks
     useEffect(() => {
-        const fetchTasks = async () => {
-            setLoading(true);
-            try {
-                // Format date as YYYY-MM-DD (Local Time)
-                const offset = selectedDate.getTimezoneOffset();
-                const localDate = new Date(selectedDate.getTime() - (offset * 60 * 1000));
-                const dateStr = localDate.toISOString().split('T')[0];
-                const response = await fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}&role=${selectedRole}`, {
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-                    }
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    setTasks(data);
-                    setGuideRequired(false);
-                    setGuideMessage('');
-                } else if (response.status === 423) {
-                    const data = await response.json();
-                    setTasks([]);
-                    setGuideRequired(true);
-                    setGuideMessage(data.message || 'Silakan konfirmasi panduan hari ini sebelum mengakses pekerjaan.');
-                }
-            } catch (error) {
-                console.error("Failed to fetch tasks", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         if (user?.user_id) {
             fetchTasks();
         }
     }, [selectedDate, user?.user_id, refreshTrigger, selectedRole]);
+
+    useEffect(() => {
+        if (!user?.user_id) return;
+
+        const timer = window.setInterval(() => fetchTasks(true), 15000);
+        return () => window.clearInterval(timer);
+    }, [selectedDate, user?.user_id, selectedRole]);
 
     const completedCount = tasks.filter(t => t.status === 'approved').length;
     const totalCount = tasks.length;

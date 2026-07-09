@@ -31,6 +31,13 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
         }
     }, [supervisor?.id, selectedDate]);
 
+    useEffect(() => {
+        if (!supervisor?.id) return;
+
+        const timer = window.setInterval(fetchMyTasks, 15000);
+        return () => window.clearInterval(timer);
+    }, [supervisor?.id, selectedDate]);
+
     const fetchMyTasks = async () => {
         if (!supervisor?.id) return;
         try {

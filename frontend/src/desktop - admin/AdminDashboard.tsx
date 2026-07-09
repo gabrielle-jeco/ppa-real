@@ -265,7 +265,7 @@ export default function AdminDashboard() {
             const payload = await requestJson('/api/cms/overview', 'GET');
             setData(payload);
         } catch (error: any) {
-            setMessage(error.message || 'Failed to load CMS data.');
+            setMessage(error.message || 'Gagal memuat data CMS.');
         } finally {
             setLoading(false);
         }
@@ -280,7 +280,7 @@ export default function AdminDashboard() {
             setUsersData(res.data || []);
             setUsersTotalPages(res.last_page || 1);
         } catch (error: any) {
-            setMessage(error.message || 'Failed to load users.');
+            setMessage(error.message || 'Gagal memuat data user.');
         }
     };
 
@@ -293,7 +293,7 @@ export default function AdminDashboard() {
             setJobLevelsData(res.data || []);
             setJobLevelsTotalPages(res.last_page || 1);
         } catch (error: any) {
-            setMessage(error.message || 'Failed to load job levels.');
+            setMessage(error.message || 'Gagal memuat job level.');
         }
     };
 
@@ -306,7 +306,7 @@ export default function AdminDashboard() {
             setUserLocationsData(res.data || []);
             setUserLocationsTotalPages(res.last_page || 1);
         } catch (error: any) {
-            setMessage(error.message || 'Failed to load user locations.');
+            setMessage(error.message || 'Gagal memuat lokasi user.');
         }
     };
 
@@ -318,7 +318,7 @@ export default function AdminDashboard() {
             setLocationsData(res.data || []);
             setLocationsTotalPages(res.last_page || 1);
         } catch (error: any) {
-            setMessage(error.message || 'Failed to load locations.');
+            setMessage(error.message || 'Gagal memuat lokasi.');
         }
     };
 
@@ -330,7 +330,7 @@ export default function AdminDashboard() {
             setRegionalsData(res.data || []);
             setRegionalsTotalPages(res.last_page || 1);
         } catch (error: any) {
-            setMessage(error.message || 'Failed to load regionals.');
+            setMessage(error.message || 'Gagal memuat regional.');
         }
     };
 
@@ -341,7 +341,7 @@ export default function AdminDashboard() {
             const res = await requestJson(`/api/cms/leaders?${query.toString()}`, 'GET');
             setLeadersData(res || []);
         } catch (error: any) {
-            setMessage(error.message || 'Failed to load leaders.');
+            setMessage(error.message || 'Gagal memuat daftar atasan.');
         }
     };
 
@@ -353,7 +353,7 @@ export default function AdminDashboard() {
             const res = await requestJson(`/api/cms/reporting-lines?${query.toString()}`, 'GET');
             setReportingLinesData(res || []);
         } catch (error: any) {
-            setMessage(error.message || 'Failed to load reporting lines.');
+            setMessage(error.message || 'Gagal memuat relasi atasan.');
         }
     };
 
@@ -382,7 +382,7 @@ export default function AdminDashboard() {
                 subordinate_ids: activeSubordinates,
             }));
         } catch (error: any) {
-            setMessage(error.message || 'Failed to load existing subordinates.');
+            setMessage(error.message || 'Gagal memuat bawahan yang sudah terhubung.');
             setLineForm((current) => ({ ...current, leader_id: leaderId, subordinate_ids: [] }));
         }
     };
@@ -475,7 +475,7 @@ export default function AdminDashboard() {
             await fetchUsers();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to save user.');
+            setMessage(error.message || 'Gagal menyimpan user.');
         } finally {
             setSaving(false);
         }
@@ -499,7 +499,7 @@ export default function AdminDashboard() {
             await fetchReportingLines();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to save reporting line.');
+            setMessage(error.message || 'Gagal menyimpan relasi atasan.');
         } finally {
             setSaving(false);
         }
@@ -516,7 +516,7 @@ export default function AdminDashboard() {
             await fetchReportingLines();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to delete reporting line.');
+            setMessage(error.message || 'Gagal menghapus relasi atasan.');
         } finally {
             setSaving(false);
         }
@@ -535,7 +535,7 @@ export default function AdminDashboard() {
             await fetchReportingLines();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to update reporting line.');
+            setMessage(error.message || 'Gagal memperbarui relasi atasan.');
         } finally {
             setSaving(false);
         }
@@ -572,33 +572,33 @@ export default function AdminDashboard() {
 
             if (guideForm.id) {
                 await requestJson(`/api/cms/work-stations/${guideForm.id}`, 'PATCH', payload);
-                setMessage('Work station updated.');
+                setMessage('Work station berhasil diperbarui.');
             } else {
                 await requestJson('/api/cms/work-stations', 'POST', payload);
-                setMessage('Work station created.');
+                setMessage('Work station berhasil dibuat.');
             }
 
             closeGuideForm();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to save work station.');
+            setMessage(error.message || 'Gagal menyimpan work station.');
         } finally {
             setSaving(false);
         }
     };
 
     const deleteWorkStation = async (id: string) => {
-        if (!id || !window.confirm('Delete this work station? Stations with history cannot be deleted.')) return;
+        if (!id || !window.confirm('Hapus work station ini? Work station yang memiliki riwayat tidak dapat dihapus.')) return;
 
         setSaving(true);
         setMessage('');
         try {
             await requestJson(`/api/cms/work-stations/${id}`, 'DELETE');
-            setMessage('Work station deleted.');
+            setMessage('Work station berhasil dihapus.');
             closeGuideForm();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to delete work station.');
+            setMessage(error.message || 'Gagal menghapus work station.');
         } finally {
             setSaving(false);
         }
@@ -665,35 +665,35 @@ export default function AdminDashboard() {
 
             if (selectedLocationInitial) {
                 await requestJson(`/api/cms/locations/${selectedLocationInitial}`, 'PATCH', payload);
-                setMessage('Location updated.');
+                setMessage('Lokasi berhasil diperbarui.');
             } else {
                 await requestJson('/api/cms/locations', 'POST', payload);
-                setMessage('Location created.');
+                setMessage('Lokasi berhasil dibuat.');
             }
 
             closeLocationForm();
             await fetchLocations();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to save location.');
+            setMessage(error.message || 'Gagal menyimpan lokasi.');
         } finally {
             setSaving(false);
         }
     };
 
     const deleteLocation = async (initial: string) => {
-        if (!window.confirm('Delete this location? Assigned locations cannot be deleted.')) return;
+        if (!window.confirm('Hapus lokasi ini? Lokasi yang sudah terhubung ke user tidak dapat dihapus.')) return;
 
         setSaving(true);
         setMessage('');
         try {
             await requestJson(`/api/cms/locations/${initial}`, 'DELETE');
-            setMessage('Location deleted.');
+            setMessage('Lokasi berhasil dihapus.');
             closeLocationForm();
             await fetchLocations();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to delete location.');
+            setMessage(error.message || 'Gagal menghapus lokasi.');
         } finally {
             setSaving(false);
         }
@@ -704,10 +704,10 @@ export default function AdminDashboard() {
         setMessage('');
         try {
             await requestJson(`/api/cms/user-locations/${assignment.id}`, 'PATCH', { job_level: jobLevel });
-            setMessage('Application role updated.');
+            setMessage('Role aplikasi berhasil diperbarui.');
             await fetchUserLocations();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to update application role.');
+            setMessage(error.message || 'Gagal memperbarui role aplikasi.');
         } finally {
             setSaving(false);
         }
@@ -718,11 +718,11 @@ export default function AdminDashboard() {
         setMessage('');
         try {
             const payload = await requestJson('/api/cms/user-locations/sync', 'POST');
-            setMessage(payload?.message || 'User locations synchronized.');
+            setMessage(payload?.message || 'Data lokasi user berhasil disinkronkan.');
             await fetchUserLocations();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to synchronize user locations.');
+            setMessage(error.message || 'Gagal menyinkronkan lokasi user.');
         } finally {
             setSaving(false);
         }
@@ -736,11 +736,11 @@ export default function AdminDashboard() {
             await requestJson(`/api/cms/job-levels/${jobLevel.id}`, 'PATCH', {
                 visible_in_yodaily: nextVisible,
             });
-            setMessage(`${jobLevel.name} ${nextVisible ? 'shown in' : 'hidden from'} YoDaily.`);
+            setMessage(`${jobLevel.name} berhasil ${nextVisible ? 'ditampilkan di' : 'disembunyikan dari'} YoDaily.`);
             await fetchJobLevels();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to update job level.');
+            setMessage(error.message || 'Gagal memperbarui job level.');
         } finally {
             setSaving(false);
         }
@@ -788,33 +788,33 @@ export default function AdminDashboard() {
 
             if (evaluationForm.id) {
                 await requestJson(`/api/cms/evaluation-masters/${evaluationForm.id}`, 'PATCH', payload);
-                setMessage('Evaluation master updated.');
+                setMessage('Master evaluasi berhasil diperbarui.');
             } else {
                 await requestJson('/api/cms/evaluation-masters', 'POST', payload);
-                setMessage('Evaluation master created.');
+                setMessage('Master evaluasi berhasil dibuat.');
             }
 
             closeEvaluationForm();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to save evaluation master.');
+            setMessage(error.message || 'Gagal menyimpan master evaluasi.');
         } finally {
             setSaving(false);
         }
     };
 
     const deleteEvaluationMaster = async (id: string) => {
-        if (!id || !window.confirm('Delete this evaluation item?')) return;
+        if (!id || !window.confirm('Hapus item evaluasi ini?')) return;
 
         setSaving(true);
         setMessage('');
         try {
             await requestJson(`/api/cms/evaluation-masters/${id}`, 'DELETE');
-            setMessage('Evaluation item deleted.');
+            setMessage('Item evaluasi berhasil dihapus.');
             closeEvaluationForm();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to delete evaluation item.');
+            setMessage(error.message || 'Gagal menghapus item evaluasi.');
         } finally {
             setSaving(false);
         }
@@ -862,33 +862,33 @@ export default function AdminDashboard() {
 
             if (roleForm.id) {
                 await requestJson(`/api/cms/roles/${roleForm.id}`, 'PATCH', payload);
-                setMessage('Role updated.');
+                setMessage('Role akun berhasil diperbarui.');
             } else {
                 await requestJson('/api/cms/roles', 'POST', payload);
-                setMessage('Role created.');
+                setMessage('Role akun berhasil dibuat.');
             }
 
             closeRoleForm();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to save role.');
+            setMessage(error.message || 'Gagal menyimpan role akun.');
         } finally {
             setSaving(false);
         }
     };
 
     const deleteRole = async (id: string) => {
-        if (!id || !window.confirm('Delete this role?')) return;
+        if (!id || !window.confirm('Hapus role akun ini?')) return;
 
         setSaving(true);
         setMessage('');
         try {
             await requestJson(`/api/cms/roles/${id}`, 'DELETE');
-            setMessage('Role deleted.');
+            setMessage('Role akun berhasil dihapus.');
             closeRoleForm();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to delete role.');
+            setMessage(error.message || 'Gagal menghapus role akun.');
         } finally {
             setSaving(false);
         }
@@ -927,33 +927,33 @@ export default function AdminDashboard() {
 
             if (appRoleForm.id) {
                 await requestJson(`/api/cms/app-roles/${appRoleForm.id}`, 'PATCH', payload);
-                setMessage('App role updated.');
+                setMessage('Role aplikasi berhasil diperbarui.');
             } else {
                 await requestJson('/api/cms/app-roles', 'POST', payload);
-                setMessage('App role created.');
+                setMessage('Role aplikasi berhasil dibuat.');
             }
 
             closeAppRoleForm();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to save app role.');
+            setMessage(error.message || 'Gagal menyimpan role aplikasi.');
         } finally {
             setSaving(false);
         }
     };
 
     const deleteAppRole = async (id: string) => {
-        if (!id || !window.confirm('Delete this app role? Assigned roles cannot be deleted.')) return;
+        if (!id || !window.confirm('Hapus role aplikasi ini? Role yang sudah dipakai tidak dapat dihapus.')) return;
 
         setSaving(true);
         setMessage('');
         try {
             await requestJson(`/api/cms/app-roles/${id}`, 'DELETE');
-            setMessage('App role deleted.');
+            setMessage('Role aplikasi berhasil dihapus.');
             closeAppRoleForm();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to delete app role.');
+            setMessage(error.message || 'Gagal menghapus role aplikasi.');
         } finally {
             setSaving(false);
         }
@@ -988,49 +988,49 @@ export default function AdminDashboard() {
         try {
             if (selectedRegionalId) {
                 await requestJson(`/api/cms/regionals/${selectedRegionalId}`, 'PATCH', regionalForm);
-                setMessage('Regional updated.');
+                setMessage('Regional berhasil diperbarui.');
             } else {
                 await requestJson('/api/cms/regionals', 'POST', regionalForm);
-                setMessage('Regional created.');
+                setMessage('Regional berhasil dibuat.');
             }
 
             closeRegionalForm();
             await fetchRegionals();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to save regional.');
+            setMessage(error.message || 'Gagal menyimpan regional.');
         } finally {
             setSaving(false);
         }
     };
 
     const deleteRegional = async (id: number) => {
-        if (!window.confirm('Delete this regional?')) return;
+        if (!window.confirm('Hapus regional ini?')) return;
 
         setSaving(true);
         setMessage('');
         try {
             await requestJson(`/api/cms/regionals/${id}`, 'DELETE');
-            setMessage('Regional deleted.');
+            setMessage('Regional berhasil dihapus.');
             closeRegionalForm();
             await fetchRegionals();
             await fetchOverview();
         } catch (error: any) {
-            setMessage(error.message || 'Failed to delete regional.');
+            setMessage(error.message || 'Gagal menghapus regional.');
         } finally {
             setSaving(false);
         }
     };
 
     if (loading) {
-        return <div className="h-full flex items-center justify-center text-gray-400">Loading CMS...</div>;
+        return <div className="h-full flex items-center justify-center text-gray-400">Memuat CMS...</div>;
     }
 
     if (!data) {
         return (
             <div className="h-full flex flex-col items-center justify-center gap-4 text-gray-500">
-                <p>{message || 'Failed to load CMS data.'}</p>
-                <button onClick={fetchOverview} className="px-4 py-2 bg-primary text-white rounded-xl">Retry</button>
+                <p>{message || 'Gagal memuat data CMS.'}</p>
+                <button onClick={fetchOverview} className="px-4 py-2 bg-primary text-white rounded-xl">Coba Lagi</button>
             </div>
         );
     }
@@ -1043,22 +1043,23 @@ export default function AdminDashboard() {
             <header className="mb-8 flex items-start justify-between">
                 <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-gray-400 font-bold">YoDaily CMS</p>
-                    <h1 className="text-3xl font-extrabold text-gray-900 mt-2">Admin Panel</h1>
-                    <p className="text-gray-500 mt-2">Manage users, hierarchy, store assignment, and work station guides.</p>
+                    <h1 className="text-3xl font-extrabold text-gray-900 mt-2">Panel Admin</h1>
+                    <p className="text-gray-500 mt-2">Kelola user, role, relasi, assignment tempat kerja, work station, lokasi, regional, dan evaluasi.</p>
                 </div>
                 <button onClick={fetchOverview} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl shadow-sm text-sm font-semibold hover:bg-gray-50">
                     <RefreshCcw size={16} />
-                    Refresh
+                    Muat Ulang
                 </button>
             </header>
 
-            <section className="grid grid-cols-5 gap-4 mb-6">
+            <section className="grid grid-cols-6 gap-4 mb-6">
                 {[
-                    ['Users', data.stats.users],
-                    ['Active', data.stats.active_users],
-                    ['Locations', data.stats.locations],
-                    ['Relations', data.stats.reporting_lines],
-                    ['App Roles', data.stats.app_roles],
+                    ['User', data.stats.users],
+                    ['Aktif', data.stats.active_users],
+                    ['Reporting Line', data.stats.reporting_lines],
+                    ['Role Aplikasi', data.stats.app_roles],
+                    ['Lokasi', data.stats.locations],
+                    ['Regional', data.stats.regionals],
                 ].map(([label, value]) => (
                     <div key={label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
                         <p className="text-xs text-gray-400 font-bold uppercase">{label}</p>
@@ -1074,14 +1075,14 @@ export default function AdminDashboard() {
             )}
 
             <div className="flex gap-3 mb-6">
-                {canAccess('users_locations') && <TabButton active={activeTab === 'users'} icon={<UsersRound size={16} />} label="Users & Locations" onClick={() => setActiveTab('users')} />}
-                {canAccess('users_locations') && <TabButton active={activeTab === 'jobLevels'} icon={<ShieldCheck size={16} />} label="HR Job Levels" onClick={() => setActiveTab('jobLevels')} />}
-                {canAccess('users_locations') && <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="App Roles" onClick={() => setActiveTab('appRoles')} />}
-                {canAccess('reporting_lines') && <TabButton active={activeTab === 'hierarchy'} icon={<GitBranch size={16} />} label="Reporting Lines" onClick={() => setActiveTab('hierarchy')} />}
-                <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Work Station Master" onClick={() => setActiveTab('guides')} />
-                {canAccess('locations') && <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Location Master" onClick={() => setActiveTab('locations')} />}
-                {canAccess('regionals') && <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Regional Master" onClick={() => setActiveTab('regionals')} />}
-                {canAccess('evaluation_masters') && <TabButton active={activeTab === 'evaluations'} icon={<ShieldCheck size={16} />} label="Evaluation Master" onClick={() => setActiveTab('evaluations')} />}
+                {canAccess('users_locations') && <TabButton active={activeTab === 'users'} icon={<UsersRound size={16} />} label="User & Lokasi" onClick={() => setActiveTab('users')} />}
+                {canAccess('users_locations') && <TabButton active={activeTab === 'jobLevels'} icon={<ShieldCheck size={16} />} label="Job Level HR" onClick={() => setActiveTab('jobLevels')} />}
+                {canAccess('users_locations') && <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="Role Aplikasi" onClick={() => setActiveTab('appRoles')} />}
+                {canAccess('reporting_lines') && <TabButton active={activeTab === 'hierarchy'} icon={<GitBranch size={16} />} label="Relasi Atasan" onClick={() => setActiveTab('hierarchy')} />}
+                <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Master Work Station" onClick={() => setActiveTab('guides')} />
+                {canAccess('locations') && <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Master Lokasi" onClick={() => setActiveTab('locations')} />}
+                {canAccess('regionals') && <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Master Regional" onClick={() => setActiveTab('regionals')} />}
+                {canAccess('evaluation_masters') && <TabButton active={activeTab === 'evaluations'} icon={<ShieldCheck size={16} />} label="Master Evaluasi" onClick={() => setActiveTab('evaluations')} />}
             </div>
 
             {activeTab === 'users' && (
@@ -1094,11 +1095,11 @@ export default function AdminDashboard() {
                 }`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
-                            <h2 className="font-black text-gray-900 whitespace-nowrap">User Master</h2>
+                            <h2 className="font-black text-gray-900 whitespace-nowrap">Master User</h2>
                             <div className="w-64">
                                 <CustomSelect
                                     value={storeFilter}
-                                    placeholder="Filter Store"
+                                    placeholder="Filter Toko"
                                     options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
                                     onChange={(value) => { setStoreFilter(value); setUsersPage(1); }}
                                     searchable
@@ -1107,7 +1108,7 @@ export default function AdminDashboard() {
                             <div className="flex-1 max-w-md relative">
                                 <input 
                                     type="text" 
-                                    placeholder="Search name or NIK..." 
+                                    placeholder="Cari nama atau NIK..." 
                                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     value={usersSearch}
                                     onChange={(e) => { setUsersSearch(e.target.value); setUsersPage(1); }}
@@ -1115,30 +1116,30 @@ export default function AdminDashboard() {
                             </div>
                             <button onClick={() => { resetUserForm(); setIsUserFormOpen(true); }} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 flex items-center gap-2 whitespace-nowrap">
                                 <UserPlus size={16} />
-                                New User
+                                User Baru
                             </button>
                             {isAdminRole && (
                                 <button onClick={resetRoleForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">
-                                    Add Account Role
+                                    Tambah Role Akun
                                 </button>
                             )}
                         </div>
                         <div className="divide-y divide-gray-100 max-h-[560px] overflow-y-auto">
                             {usersData.length === 0 ? (
-                                <div className="p-8 text-center text-gray-400 text-sm">No users found.</div>
+                                <div className="p-8 text-center text-gray-400 text-sm">User tidak ditemukan.</div>
                             ) : usersData.map((user) => (
                                 <button key={user.username} onClick={() => { selectUser(user); setIsUserFormOpen(true); }} className={`w-full text-left px-6 py-4 hover:bg-purple-50 transition ${selectedUsername === user.username ? 'bg-purple-50' : ''}`}>
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <p className="font-black text-gray-900">{user.name}</p>
-                                            <p className="text-xs text-gray-400">{user.username} · {user.job_level_name || 'No role'}</p>
+                                            <p className="text-xs text-gray-400">{user.username} - {user.job_level_name || 'Belum ada role'}</p>
                                         </div>
                                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${user.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            {user.active ? 'Active' : 'Inactive'}
+                                            {user.active ? 'Aktif' : 'Tidak Aktif'}
                                         </span>
                                     </div>
                                     <p className="text-xs text-gray-500 mt-2">
-                                        Locations: {user.locations.map((location) => location.initial).join(', ') || '-'} · Leader: {user.leader?.name || '-'} · Subordinates: {user.subordinates_count}
+                                        Lokasi: {user.locations.map((location) => location.initial).join(', ') || '-'} - Atasan: {user.leader?.name || '-'} - Bawahan: {user.subordinates_count}
                                     </p>
                                 </button>
                             ))}
@@ -1154,55 +1155,55 @@ export default function AdminDashboard() {
                         <form onSubmit={saveUser} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">User Data</p>
-                                    <h2 className="text-xl font-black text-gray-900">{selectedUsername ? 'Edit User' : 'Create User'}</h2>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data User</p>
+                                    <h2 className="text-xl font-black text-gray-900">{selectedUsername ? 'Ubah User' : 'Buat User'}</h2>
                                 </div>
                                 <button type="button" onClick={closeUserForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
                             </div>
                             <Field label="NIK / Username">
                                 <input disabled={!!selectedUsername} value={userForm.username} onChange={(e) => setUserForm({ ...userForm, username: e.target.value })} className="input" required />
                             </Field>
-                            <Field label="Name">
+                            <Field label="Nama">
                                 <input value={userForm.name} onChange={(e) => setUserForm({ ...userForm, name: e.target.value })} className="input" required />
                             </Field>
                             <Field label="Email">
                                 <input value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="input" />
                             </Field>
-                            <Field label="Initial Store">
+                            <Field label="Initial Toko">
                                 <CustomSelect
                                     value={userForm.initial_store}
-                                    placeholder="Choose initial store"
+                                    placeholder="Pilih initial toko"
                                     options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
                                     onChange={(value) => setUserForm({ ...userForm, initial_store: value })}
                                 />
                             </Field>
                             <Field label="Password">
-                                <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="input" placeholder={selectedUsername ? 'Leave blank to keep current password' : 'Default: password'} />
+                                <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="input" placeholder={selectedUsername ? 'Kosongkan jika tidak ingin mengganti password' : 'Default: password'} />
                             </Field>
-                            <Field label="Account Role">
+                            <Field label="Role Akun">
                                 <CustomSelect
                                     value={userForm.role_id}
-                                    placeholder="Choose account role"
+                                    placeholder="Pilih role akun"
                                     options={data.roles.map((role) => ({ value: String(role.id), label: role.name }))}
                                     onChange={(value) => setUserForm({ ...userForm, role_id: value })}
                                 />
                             </Field>
-                            <Field label="HR/Corporate Job Level">
+                            <Field label="Job Level HR/Corporate">
                                 <CustomSelect
                                     value={userForm.job_level_id}
-                                    placeholder="Choose HR job level"
+                                    placeholder="Pilih job level HR"
                                     options={data.job_levels.map((level) => ({ value: String(level.id), label: level.position_code ? `${level.position_code} - ${level.name}` : level.name }))}
                                     onChange={(value) => setUserForm({ ...userForm, job_level_id: value })}
                                 />
                             </Field>
                             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
                                 <input type="checkbox" checked={userForm.active} onChange={(e) => setUserForm({ ...userForm, active: e.target.checked })} />
-                                Active user
+                                User aktif
                             </label>
-                            <Field label="Locations">
+                            <Field label="Lokasi">
                                 <CustomMultiSelect
                                     values={userForm.location_ids}
-                                    placeholder="Choose locations"
+                                    placeholder="Pilih lokasi"
                                     options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
                                     onChange={(values) => setUserForm({ ...userForm, location_ids: values })}
                                 />
@@ -1216,7 +1217,7 @@ export default function AdminDashboard() {
                                 </div>
                             </Field>
                             <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
-                                {saving ? 'Saving...' : 'Save User'}
+                                {saving ? 'Menyimpan...' : 'Simpan User'}
                             </button>
                         </form>
                     )}
@@ -1225,17 +1226,17 @@ export default function AdminDashboard() {
                         <form onSubmit={saveRole} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-5">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Account Role Data</p>
-                                    <h2 className="text-xl font-black text-gray-900">{roleForm.id ? 'Edit Account Role' : 'Create Account Role'}</h2>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Role Akun</p>
+                                    <h2 className="text-xl font-black text-gray-900">{roleForm.id ? 'Ubah Role Akun' : 'Buat Role Akun'}</h2>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {roleForm.id && !['admin', 'user'].includes(roleForm.name.toLowerCase()) && (
-                                        <button type="button" onClick={() => deleteRole(roleForm.id)} className="text-sm font-bold text-red-500">Delete</button>
+                                        <button type="button" onClick={() => deleteRole(roleForm.id)} className="text-sm font-bold text-red-500">Hapus</button>
                                     )}
                                     <button type="button" onClick={closeRoleForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
                                 </div>
                             </div>
-                            <Field label="Role Name">
+                            <Field label="Nama Role">
                                 <input
                                     value={roleForm.name}
                                     onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
@@ -1244,16 +1245,16 @@ export default function AdminDashboard() {
                                     required
                                 />
                             </Field>
-                            <Field label="Description">
+                            <Field label="Deskripsi">
                                 <input
                                     value={roleForm.description}
                                     onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
                                     className="input"
-                                    placeholder="Short role description"
+                                    placeholder="Deskripsi singkat role"
                                 />
                             </Field>
                             <div>
-                                <p className="text-sm font-bold text-gray-700 mb-3">Permission</p>
+                                <p className="text-sm font-bold text-gray-700 mb-3">Hak Akses</p>
                                 <div className="space-y-3">
                                     {data.cms_permissions.map((permission) => (
                                         <label key={permission.key} className="flex items-center gap-3 text-sm font-semibold text-gray-700">
@@ -1270,7 +1271,7 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
                             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                                <p className="text-sm font-black text-gray-800 mb-3">Existing Account Roles</p>
+                                <p className="text-sm font-black text-gray-800 mb-3">Daftar Role Akun</p>
                                 <div className="space-y-2 max-h-52 overflow-y-auto">
                                     {data.roles.map((role) => (
                                         <button
@@ -1281,7 +1282,7 @@ export default function AdminDashboard() {
                                         >
                                             <div className="flex items-center justify-between gap-3">
                                                 <span className="font-bold text-sm capitalize">{role.name}</span>
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-primary">{role.users_count || 0} user(s)</span>
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-primary">{role.users_count || 0} user</span>
                                             </div>
                                             <p className="text-xs text-gray-400 mt-1">{role.description || '-'}</p>
                                         </button>
@@ -1289,7 +1290,7 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
                             <button disabled={saving} className="bg-primary text-white rounded-xl py-3 px-8 font-bold shadow-lg shadow-purple-100 disabled:opacity-50 self-start">
-                                {saving ? 'Saving...' : 'Submit'}
+                                {saving ? 'Menyimpan...' : 'Simpan'}
                             </button>
                         </form>
                     )}
@@ -1300,16 +1301,16 @@ export default function AdminDashboard() {
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                         <div>
-                            <h2 className="font-black text-gray-900">HR Job Level Master</h2>
-                            <p className="text-xs text-gray-400">Show or hide official HR positions from YoDaily user setup.</p>
+                            <h2 className="font-black text-gray-900">Master Job Level HR</h2>
+                            <p className="text-xs text-gray-400">Tampilkan atau sembunyikan posisi resmi HR dari pengaturan user YoDaily.</p>
                         </div>
                         <div className="w-52">
                             <CustomSelect
                                 value={jobLevelsVisibility}
-                                placeholder="All visibility"
+                                placeholder="Semua visibilitas"
                                 options={[
-                                    { value: 'visible', label: 'Visible in YoDaily' },
-                                    { value: 'hidden', label: 'Hidden from YoDaily' },
+                                    { value: 'visible', label: 'Tampil di YoDaily' },
+                                    { value: 'hidden', label: 'Disembunyikan dari YoDaily' },
                                 ]}
                                 onChange={(value) => { setJobLevelsVisibility(value); setJobLevelsPage(1); }}
                             />
@@ -1317,7 +1318,7 @@ export default function AdminDashboard() {
                         <div className="flex-1 max-w-md relative">
                             <input
                                 type="text"
-                                placeholder="Search position, code, grade, department..."
+                                placeholder="Cari posisi, kode, grade, departemen..."
                                 className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                 value={jobLevelsSearch}
                                 onChange={(event) => { setJobLevelsSearch(event.target.value); setJobLevelsPage(1); }}
@@ -1326,7 +1327,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
                         {jobLevelsData.length === 0 ? (
-                            <div className="p-8 text-center text-gray-400 text-sm">No job levels found.</div>
+                            <div className="p-8 text-center text-gray-400 text-sm">Job level tidak ditemukan.</div>
                         ) : jobLevelsData.map((jobLevel) => (
                             <div key={jobLevel.id} className="px-6 py-4 grid grid-cols-[1.2fr_0.7fr_0.8fr_180px] gap-4 items-center hover:bg-gray-50 transition">
                                 <div>
@@ -1343,7 +1344,7 @@ export default function AdminDashboard() {
                                 </div>
                                 <div className="flex items-center justify-end gap-3">
                                     <span className={`text-[10px] font-black px-2 py-1 rounded-full ${jobLevel.visible_in_yodaily ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                        {jobLevel.visible_in_yodaily ? 'Visible' : 'Hidden'}
+                                        {jobLevel.visible_in_yodaily ? 'Tampil' : 'Tersembunyi'}
                                     </span>
                                     <button
                                         type="button"
@@ -1370,12 +1371,12 @@ export default function AdminDashboard() {
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <div>
-                                <h2 className="font-black text-gray-900">Application Role by Location</h2>
+                                <h2 className="font-black text-gray-900">Role Aplikasi per Lokasi</h2>
                             </div>
                             <div className="w-64">
                                 <CustomSelect
                                     value={storeFilter}
-                                    placeholder="Filter Store"
+                                    placeholder="Filter Toko"
                                     options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
                                     onChange={(value) => { setStoreFilter(value); setUserLocationsPage(1); }}
                                     searchable
@@ -1384,22 +1385,22 @@ export default function AdminDashboard() {
                             <div className="flex-1 max-w-sm relative">
                                 <input 
                                     type="text" 
-                                    placeholder="Search user or location..." 
+                                    placeholder="Cari user atau lokasi..." 
                                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     value={userLocationsSearch}
                                     onChange={(e) => { setUserLocationsSearch(e.target.value); setUserLocationsPage(1); }}
                                 />
                             </div>
                             <button onClick={resetAppRoleForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">
-                                Add App Role
+                                Tambah Role Aplikasi
                             </button>
                             <button disabled={saving} onClick={syncUserLocations} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50 whitespace-nowrap">
-                                Sync From Users
+                                Sinkron dari User
                             </button>
                         </div>
                         <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
                             {userLocationsData.length === 0 ? (
-                                <div className="p-8 text-center text-gray-400 text-sm">No assignments found.</div>
+                                <div className="p-8 text-center text-gray-400 text-sm">Assignment tidak ditemukan.</div>
                             ) : userLocationsData.map((assignment) => (
                                 <div key={assignment.id} className="px-6 py-4 grid grid-cols-[1fr_1fr_260px] gap-4 items-center">
                                     <div>
@@ -1412,7 +1413,7 @@ export default function AdminDashboard() {
                                     </div>
                                     <CustomSelect
                                         value={assignment.job_level || ''}
-                                        placeholder="Choose app role"
+                                        placeholder="Pilih role aplikasi"
                                         options={data.app_job_levels.map((level) => ({ value: level, label: level }))}
                                         onChange={(value) => value && updateUserLocationRole(assignment, value)}
                                     />
@@ -1430,17 +1431,17 @@ export default function AdminDashboard() {
                         <form onSubmit={saveAppRole} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-5">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">App Role Data</p>
-                                    <h2 className="text-xl font-black text-gray-900">{appRoleForm.id ? 'Edit App Role' : 'Create App Role'}</h2>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Role Aplikasi</p>
+                                    <h2 className="text-xl font-black text-gray-900">{appRoleForm.id ? 'Ubah Role Aplikasi' : 'Buat Role Aplikasi'}</h2>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {appRoleForm.id && (
-                                        <button type="button" onClick={() => deleteAppRole(appRoleForm.id)} className="text-sm font-bold text-red-500">Delete</button>
+                                        <button type="button" onClick={() => deleteAppRole(appRoleForm.id)} className="text-sm font-bold text-red-500">Hapus</button>
                                     )}
                                     <button type="button" onClick={closeAppRoleForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
                                 </div>
                             </div>
-                            <Field label="Role Name">
+                            <Field label="Nama Role">
                                 <input
                                     value={appRoleForm.name}
                                     onChange={(e) => setAppRoleForm({ ...appRoleForm, name: e.target.value })}
@@ -1449,12 +1450,12 @@ export default function AdminDashboard() {
                                 />
                             </Field>
 
-                            <Field label="Description">
+                            <Field label="Deskripsi">
                                 <input
                                     value={appRoleForm.description}
                                     onChange={(e) => setAppRoleForm({ ...appRoleForm, description: e.target.value })}
                                     className="input"
-                                    placeholder="Short role description"
+                                    placeholder="Deskripsi singkat role"
                                 />
                             </Field>
 
@@ -1465,12 +1466,12 @@ export default function AdminDashboard() {
                                         checked={appRoleForm.active}
                                         onChange={(e) => setAppRoleForm({ ...appRoleForm, active: e.target.checked })}
                                     />
-                                    Active app role
+                                    Role aplikasi aktif
                                 </label>
                             </div>
 
                             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                                <p className="text-sm font-black text-gray-800 mb-3">Available App Roles</p>
+                                <p className="text-sm font-black text-gray-800 mb-3">Daftar Role Aplikasi</p>
                                 <div className="space-y-2 max-h-64 overflow-y-auto">
                                     {data.app_roles.map((role) => (
                                         <button
@@ -1482,17 +1483,17 @@ export default function AdminDashboard() {
                                             <div className="flex items-center justify-between gap-3">
                                                 <span className="font-bold text-sm">{role.name}</span>
                                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${role.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                                    {role.active ? 'Active' : 'Inactive'}
+                                                    {role.active ? 'Aktif' : 'Tidak Aktif'}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-gray-400 mt-1">{role.description || '-'} · {role.users_count || 0} assignment(s)</p>
+                                            <p className="text-xs text-gray-400 mt-1">{role.description || '-'} · {role.users_count || 0} assignment</p>
                                         </button>
                                     ))}
                                 </div>
                             </div>
 
                             <button disabled={saving} className="bg-primary text-white rounded-xl py-3 px-8 font-bold shadow-lg shadow-purple-100 disabled:opacity-50 self-start">
-                                {saving ? 'Saving...' : 'Submit'}
+                                {saving ? 'Menyimpan...' : 'Simpan'}
                             </button>
                         </form>
                     )}
@@ -1504,40 +1505,40 @@ export default function AdminDashboard() {
                     <form onSubmit={saveReportingLine} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
                         <div>
                             <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Hierarchy</p>
-                            <h2 className="text-xl font-black text-gray-900">Assign Leader</h2>
+                            <h2 className="text-xl font-black text-gray-900">Atur Atasan</h2>
                         </div>
-                        <Field label="Filter Store">
+                        <Field label="Filter Toko">
                             <CustomSelect
                                 value={storeFilter}
-                                placeholder="Filter Store"
+                                placeholder="Filter Toko"
                                 options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
                                 onChange={(value) => { setStoreFilter(value); setSelectedLeaderId(''); setUsersPage(1); }}
                                 searchable
                             />
                         </Field>
-                        <Field label="Leader">
+                        <Field label="Atasan">
                             <CustomSelect
                                 value={lineForm.leader_id}
-                                placeholder="Choose leader"
+                                placeholder="Pilih atasan"
                                 options={leadersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
                                 onChange={selectReportingLeader}
                                 searchable
                             />
                         </Field>
-                        <Field label="Subordinate">
+                        <Field label="Bawahan">
                             <CustomMultiSelect
                                 values={lineForm.subordinate_ids}
-                                placeholder="Choose subordinate(s)"
+                                placeholder="Pilih bawahan"
                                 options={usersData
                                     .filter((user) => user.username !== lineForm.leader_id)
                                     .map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
                                 onChange={(values) => setLineForm({ ...lineForm, subordinate_ids: values })}
                             />
                         </Field>
-                        <Field label="Status">
+                            <Field label="Status">
                             <CustomSelect
                                 value={lineForm.status}
-                                placeholder="Choose status"
+                                placeholder="Pilih status"
                                 options={[
                                     { value: 'active', label: 'active' },
                                     { value: 'inactive', label: 'inactive' },
@@ -1545,19 +1546,19 @@ export default function AdminDashboard() {
                                 onChange={(value) => setLineForm({ ...lineForm, status: value as 'active' | 'inactive' })}
                             />
                         </Field>
-                        <p className="text-xs text-gray-400 mt-2">Select one or more subordinates, then save once to assign them to the selected leader.</p>
+                        <p className="text-xs text-gray-400 mt-2">Pilih satu atau beberapa bawahan, lalu simpan sekali untuk menghubungkan ke atasan terpilih.</p>
                         <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
-                            Save Relation
+                            Simpan Relasi
                         </button>
                     </form>
 
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 bg-white flex items-center gap-4">
                             <div className="flex-1">
-                                <h2 className="font-black text-gray-900 mb-2">Filter Subordinates by Leader</h2>
+                                <h2 className="font-black text-gray-900 mb-2">Filter Bawahan berdasarkan Atasan</h2>
                                 <CustomSelect
                                     value={selectedLeaderId}
-                                    placeholder="Select a leader to view their reporting lines..."
+                                    placeholder="Pilih atasan untuk melihat relasinya..."
                                     options={leadersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
                                     onChange={(value) => setSelectedLeaderId(value)}
                                     searchable
@@ -1566,7 +1567,7 @@ export default function AdminDashboard() {
                             <div className="flex-1 self-end relative">
                                 <input 
                                     type="text" 
-                                    placeholder="Search subordinate..." 
+                                    placeholder="Cari bawahan..." 
                                     className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     value={hierarchySearch}
                                     onChange={(e) => setHierarchySearch(e.target.value)}
@@ -1575,9 +1576,9 @@ export default function AdminDashboard() {
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
                             {!selectedLeaderId ? (
-                                <div className="p-8 text-center text-gray-400 text-sm">Please select a leader above to view their subordinates.</div>
+                                <div className="p-8 text-center text-gray-400 text-sm">Pilih atasan terlebih dahulu untuk melihat daftar bawahannya.</div>
                             ) : reportingLinesData.length === 0 ? (
-                                <div className="p-8 text-center text-gray-400 text-sm">No subordinates found for this leader.</div>
+                                <div className="p-8 text-center text-gray-400 text-sm">Bawahan untuk atasan ini tidak ditemukan.</div>
                             ) : reportingLinesData.filter(line => (line.subordinate_name || line.subordinate_id).toLowerCase().includes(hierarchySearch.toLowerCase())).map((line) => (
                                 <div key={line.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition">
                                     <div>
@@ -1591,7 +1592,7 @@ export default function AdminDashboard() {
                                         <button onClick={() => toggleReportingLineStatus(line)} className="text-xs font-bold text-primary hover:bg-purple-50 px-3 py-2 rounded-xl">
                                             {line.status === 'active' ? 'Deactivate' : 'Activate'}
                                         </button>
-                                        <button onClick={() => deleteReportingLine(line.id)} className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl">Delete</button>
+                                        <button onClick={() => deleteReportingLine(line.id)} className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl">Hapus</button>
                                     </div>
                                 </div>
                             ))}
@@ -1605,19 +1606,19 @@ export default function AdminDashboard() {
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <div>
-                                <h2 className="font-black text-gray-900 whitespace-nowrap">Work Station Master</h2>
-                                <p className="text-xs text-gray-400">Manage station availability and crew guide content.</p>
+                                <h2 className="font-black text-gray-900 whitespace-nowrap">Master Work Station</h2>
+                                <p className="text-xs text-gray-400">Kelola ketersediaan station dan isi panduan crew.</p>
                             </div>
                             <div className="flex-1 max-w-sm relative">
                                 <input 
                                     type="text" 
-                                    placeholder="Search station..." 
+                                    placeholder="Cari station..." 
                                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     value={guidesSearch}
                                     onChange={(e) => setGuidesSearch(e.target.value)}
                                 />
                             </div>
-                            <button onClick={() => { setGuideForm({ id: '', name: '', guideText: '', active: true }); setIsGuideFormOpen(true); }} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Work Station</button>
+                            <button onClick={() => { setGuideForm({ id: '', name: '', guideText: '', active: true }); setIsGuideFormOpen(true); }} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">Work Station Baru</button>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
                             {data.work_stations.filter(station => station.name.toLowerCase().includes(guidesSearch.toLowerCase())).map((station) => (
@@ -1628,7 +1629,7 @@ export default function AdminDashboard() {
                                             <p className="text-xs text-gray-400">{station.guide_content.length} guide item(s)</p>
                                         </div>
                                         <span className={`text-[10px] font-black px-2 py-1 rounded-full ${station.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            {station.active ? 'Active' : 'Inactive'}
+                                            {station.active ? 'Aktif' : 'Tidak Aktif'}
                                         </span>
                                     </div>
                                 </button>
@@ -1641,40 +1642,40 @@ export default function AdminDashboard() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Work Station</p>
-                                    <h2 className="text-xl font-black text-gray-900">{guideForm.id ? 'Edit Work Station' : 'Create Work Station'}</h2>
+                                    <h2 className="text-xl font-black text-gray-900">{guideForm.id ? 'Ubah Work Station' : 'Buat Work Station'}</h2>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {guideForm.id && (
-                                        <button type="button" onClick={() => deleteWorkStation(guideForm.id)} className="text-sm font-bold text-red-500">Delete</button>
+                                        <button type="button" onClick={() => deleteWorkStation(guideForm.id)} className="text-sm font-bold text-red-500">Hapus</button>
                                     )}
                                     <button type="button" onClick={closeGuideForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
                                 </div>
                             </div>
-                        <Field label="Station Name">
+                        <Field label="Nama Station">
                             <input value={guideForm.name} onChange={(e) => setGuideForm({ ...guideForm, name: e.target.value })} className="input" required />
                         </Field>
                         <Field label="Status">
                             <CustomSelect
                                 value={guideForm.active ? 'active' : 'inactive'}
-                                placeholder="Choose status"
+                                placeholder="Pilih status"
                                 options={[
-                                    { value: 'active', label: 'Active - available for new tasks and crew guide selection' },
-                                    { value: 'inactive', label: 'Inactive - hidden from new operational flows' },
+                                    { value: 'active', label: 'Aktif - tersedia untuk tugas baru dan pilihan panduan crew' },
+                                    { value: 'inactive', label: 'Tidak aktif - disembunyikan dari alur operasional baru' },
                                 ]}
                                 onChange={(value) => setGuideForm({ ...guideForm, active: value !== 'inactive' })}
                             />
                         </Field>
-                        <Field label="Guide Content">
+                        <Field label="Isi Panduan">
                             <textarea
                                 value={guideForm.guideText}
                                 onChange={(e) => setGuideForm({ ...guideForm, guideText: e.target.value })}
                                 className="input min-h-[320px]"
-                                placeholder="One guide item per line"
+                                placeholder="Satu item panduan per baris"
                             />
                         </Field>
                         <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50 flex items-center justify-center gap-2">
                             <Save size={16} />
-                            {saving ? 'Saving...' : 'Save Work Station'}
+                            {saving ? 'Menyimpan...' : 'Simpan Work Station'}
                         </button>
                     </form>
                 )}
@@ -1686,14 +1687,14 @@ export default function AdminDashboard() {
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <div>
-                                <h2 className="font-black text-gray-900">Evaluation Master</h2>
-                                <p className="text-xs text-gray-400">Manage monthly evaluation questions.</p>
+                                <h2 className="font-black text-gray-900">Master Evaluasi</h2>
+                                <p className="text-xs text-gray-400">Kelola pertanyaan evaluasi bulanan.</p>
                             </div>
-                            <button onClick={resetEvaluationForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Evaluation</button>
+                            <button onClick={resetEvaluationForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">Evaluasi Baru</button>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
                             {data.evaluation_masters.length === 0 ? (
-                                <div className="p-8 text-center text-gray-400 text-sm">No evaluation item found.</div>
+                                <div className="p-8 text-center text-gray-400 text-sm">Item evaluasi tidak ditemukan.</div>
                             ) : data.evaluation_masters.map((item) => (
                                 <button key={item.id} onClick={() => selectEvaluation(item)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 transition ${evaluationForm.id === String(item.id) ? 'bg-purple-50' : ''}`}>
                                     <div className="flex items-center justify-between">
@@ -1702,7 +1703,7 @@ export default function AdminDashboard() {
                                             <p className="text-xs text-gray-400">{item.title} - {item.subtitle}</p>
                                         </div>
                                         <span className={`text-[10px] font-black px-2 py-1 rounded-full ${item.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            {item.active ? 'Active' : 'Inactive'}
+                                            {item.active ? 'Aktif' : 'Tidak Aktif'}
                                         </span>
                                     </div>
                                 </button>
@@ -1714,12 +1715,12 @@ export default function AdminDashboard() {
                         <form onSubmit={saveEvaluationMaster} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Evaluation Data</p>
-                                    <h2 className="text-xl font-black text-gray-900">{evaluationForm.id ? 'Edit Evaluation' : 'Create Evaluation'}</h2>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Evaluasi</p>
+                                    <h2 className="text-xl font-black text-gray-900">{evaluationForm.id ? 'Ubah Evaluasi' : 'Buat Evaluasi'}</h2>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {evaluationForm.id && (
-                                        <button type="button" onClick={() => deleteEvaluationMaster(evaluationForm.id)} className="text-sm font-bold text-red-500">Delete</button>
+                                        <button type="button" onClick={() => deleteEvaluationMaster(evaluationForm.id)} className="text-sm font-bold text-red-500">Hapus</button>
                                     )}
                                     <button type="button" onClick={closeEvaluationForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
                                 </div>
@@ -1732,7 +1733,7 @@ export default function AdminDashboard() {
                                     <Field label="Sub Judul">
                                         <input value={evaluationForm.subtitle} onChange={(e) => setEvaluationForm({ ...evaluationForm, subtitle: e.target.value })} className="input" required />
                                     </Field>
-                                    <Field label="Category">
+                                    <Field label="Kategori">
                                         <input value={evaluationForm.question} onChange={(e) => setEvaluationForm({ ...evaluationForm, question: e.target.value })} className="input" required />
                                     </Field>
                                     {evaluationForm.answers.map((answer, index) => (
@@ -1754,7 +1755,7 @@ export default function AdminDashboard() {
                                                         onClick={() => setEvaluationForm({ ...evaluationForm, answers: evaluationForm.answers.filter((_, itemIndex) => itemIndex !== index) })}
                                                         className="px-3 rounded-xl border border-red-100 text-red-500 text-xs font-bold hover:bg-red-50"
                                                     >
-                                                        Remove
+                                                        Hapus
                                                     </button>
                                                 )}
                                             </div>
@@ -1765,28 +1766,28 @@ export default function AdminDashboard() {
                                         onClick={() => setEvaluationForm({ ...evaluationForm, answers: [...evaluationForm.answers, ''] })}
                                         className="px-4 py-2 rounded-xl border border-purple-100 text-primary text-sm font-bold hover:bg-purple-50"
                                     >
-                                        Add Poin
+                                        Tambah Poin
                                     </button>
                                     <div className="grid grid-cols-2 gap-3">
-                                        <Field label="Sort Order">
+                                        <Field label="Urutan">
                                             <input type="number" value={evaluationForm.sort_order} onChange={(e) => setEvaluationForm({ ...evaluationForm, sort_order: e.target.value })} className="input" />
                                         </Field>
                                         <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 pt-7">
                                             <input type="checkbox" checked={evaluationForm.active} onChange={(e) => setEvaluationForm({ ...evaluationForm, active: e.target.checked })} />
-                                            Active
+                                            Aktif
                                         </label>
                                     </div>
                                     <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
-                                        {saving ? 'Saving...' : 'Save Evaluation'}
+                                        {saving ? 'Menyimpan...' : 'Simpan Evaluasi'}
                                     </button>
                                 </div>
 
                                 <div className="bg-gray-50 rounded-3xl border border-gray-100 p-6">
-                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Preview Evaluation</p>
-                                    <h2 className="text-xl font-bold text-gray-800 mb-2">{evaluationForm.title || 'MONTHLY EVALUATION'}</h2>
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Preview Evaluasi</p>
+                                    <h2 className="text-xl font-bold text-gray-800 mb-2">{evaluationForm.title || 'EVALUASI BULANAN'}</h2>
                                     <p className="text-sm text-gray-400 mb-6 uppercase tracking-wider">{evaluationForm.subtitle || 'SIKAP KEPRIBADIAN'}</p>
                                     <div>
-                                        <h3 className="font-semibold text-gray-700 mb-1">{evaluationForm.question || 'Category title'}</h3>
+                                        <h3 className="font-semibold text-gray-700 mb-1">{evaluationForm.question || 'Judul kategori'}</h3>
                                         <div className="text-xs text-gray-500 mb-3 leading-relaxed space-y-1">
                                             {evaluationForm.answers.map((answer, index) => (
                                                 <p key={index}>{index + 1}. {answer || `Poin ${index + 1}`}</p>
@@ -1811,30 +1812,30 @@ export default function AdminDashboard() {
                 <div className={`grid gap-6 transition-all duration-300 ${isLocationFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
-                            <h2 className="font-black text-gray-900 whitespace-nowrap">Location Master</h2>
+                            <h2 className="font-black text-gray-900 whitespace-nowrap">Master Lokasi</h2>
                             <div className="flex-1 max-w-sm relative">
                                 <input 
                                     type="text" 
-                                    placeholder="Search location..." 
+                                    placeholder="Cari lokasi..." 
                                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     value={locationsSearch}
                                     onChange={(e) => { setLocationsSearch(e.target.value); setLocationsPage(1); }}
                                 />
                             </div>
-                            <button onClick={resetLocationForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Location</button>
+                            <button onClick={resetLocationForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">Lokasi Baru</button>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
                             {locationsData.length === 0 ? (
-                                <div className="p-8 text-center text-gray-400 text-sm">No locations found.</div>
+                                <div className="p-8 text-center text-gray-400 text-sm">Lokasi tidak ditemukan.</div>
                             ) : locationsData.map((location) => (
                                 <button key={location.initial} onClick={() => selectLocation(location)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 transition ${selectedLocationInitial === location.initial ? 'bg-purple-50' : ''}`}>
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <p className="font-black text-gray-900">{location.name}</p>
-                                            <p className="text-xs text-gray-400">{location.initial} · Store {location.store_code || '-'} · {location.city || '-'}</p>
+                                            <p className="text-xs text-gray-400">{location.initial} - Toko {location.store_code || '-'} - {location.city || '-'}</p>
                                         </div>
                                         <span className={`text-[10px] font-black px-2 py-1 rounded-full ${Boolean(location.is_active ?? true) ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            {Boolean(location.is_active ?? true) ? 'Active' : 'Inactive'}
+                                            {Boolean(location.is_active ?? true) ? 'Aktif' : 'Tidak Aktif'}
                                         </span>
                                     </div>
                                 </button>
@@ -1851,12 +1852,12 @@ export default function AdminDashboard() {
                         <form onSubmit={saveLocation} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Location Data</p>
-                                    <h2 className="text-xl font-black text-gray-900">{selectedLocationInitial ? 'Edit Location' : 'Create Location'}</h2>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Lokasi</p>
+                                    <h2 className="text-xl font-black text-gray-900">{selectedLocationInitial ? 'Ubah Lokasi' : 'Buat Lokasi'}</h2>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {selectedLocationInitial && (
-                                        <button type="button" onClick={() => deleteLocation(selectedLocationInitial)} className="text-sm font-bold text-red-500">Delete</button>
+                                        <button type="button" onClick={() => deleteLocation(selectedLocationInitial)} className="text-sm font-bold text-red-500">Hapus</button>
                                     )}
                                     <button type="button" onClick={closeLocationForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
                                 </div>
@@ -1864,35 +1865,35 @@ export default function AdminDashboard() {
                         <Field label="Initial">
                             <input disabled={!!selectedLocationInitial} value={locationForm.initial} onChange={(e) => setLocationForm({ ...locationForm, initial: e.target.value.toUpperCase() })} className="input" required />
                         </Field>
-                        <Field label="Name">
+                        <Field label="Nama">
                             <input value={locationForm.name} onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })} className="input" required />
                         </Field>
                         <div className="grid grid-cols-2 gap-3">
-                            <Field label="Store Code">
+                            <Field label="Kode Toko">
                                 <input type="number" value={locationForm.store_code} onChange={(e) => setLocationForm({ ...locationForm, store_code: e.target.value })} className="input" />
                             </Field>
-                            <Field label="Region Code">
+                            <Field label="Kode Regional">
                                 <input type="number" value={locationForm.region_code} onChange={(e) => setLocationForm({ ...locationForm, region_code: e.target.value })} className="input" />
                             </Field>
                         </div>
-                        <Field label="City">
+                        <Field label="Kota">
                             <input value={locationForm.city} onChange={(e) => setLocationForm({ ...locationForm, city: e.target.value })} className="input" />
                         </Field>
-                        <Field label="Address">
+                        <Field label="Alamat">
                             <input value={locationForm.address} onChange={(e) => setLocationForm({ ...locationForm, address: e.target.value })} className="input" />
                         </Field>
-                        <Field label="Phone">
+                        <Field label="Telepon">
                             <input value={locationForm.phone} onChange={(e) => setLocationForm({ ...locationForm, phone: e.target.value })} className="input" />
                         </Field>
-                        <Field label="Store Type">
+                        <Field label="Tipe Toko">
                             <input value={locationForm.type_store} onChange={(e) => setLocationForm({ ...locationForm, type_store: e.target.value })} className="input" />
                         </Field>
                         <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
                             <input type="checkbox" checked={locationForm.is_active} onChange={(e) => setLocationForm({ ...locationForm, is_active: e.target.checked })} />
-                            Active location
+                            Lokasi aktif
                         </label>
                         <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
-                            {saving ? 'Saving...' : 'Save Location'}
+                            {saving ? 'Menyimpan...' : 'Simpan Lokasi'}
                         </button>
                     </form>
                     )}
@@ -1903,21 +1904,21 @@ export default function AdminDashboard() {
                 <div className={`grid gap-6 transition-all duration-300 ${isRegionalFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
-                            <h2 className="font-black text-gray-900 whitespace-nowrap">Regional Master</h2>
+                            <h2 className="font-black text-gray-900 whitespace-nowrap">Master Regional</h2>
                             <div className="flex-1 max-w-sm relative">
                                 <input 
                                     type="text" 
-                                    placeholder="Search regional..." 
+                                    placeholder="Cari regional..." 
                                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     value={regionalsSearch}
                                     onChange={(e) => { setRegionalsSearch(e.target.value); setRegionalsPage(1); }}
                                 />
                             </div>
-                            <button onClick={resetRegionalForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">New Regional</button>
+                            <button onClick={resetRegionalForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">Regional Baru</button>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
                             {regionalsData.length === 0 ? (
-                                <div className="p-8 text-center text-gray-400 text-sm">No regionals found.</div>
+                                <div className="p-8 text-center text-gray-400 text-sm">Regional tidak ditemukan.</div>
                             ) : regionalsData.map((regional) => (
                                 <button key={regional.id} onClick={() => selectRegional(regional)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 transition ${selectedRegionalId === regional.id ? 'bg-purple-50' : ''}`}>
                                     <p className="font-black text-gray-900">{regional.nama_regional}</p>
@@ -1936,12 +1937,12 @@ export default function AdminDashboard() {
                         <form onSubmit={saveRegional} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Regional Data</p>
-                                    <h2 className="text-xl font-black text-gray-900">{selectedRegionalId ? 'Edit Regional' : 'Create Regional'}</h2>
+                                    <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Regional</p>
+                                    <h2 className="text-xl font-black text-gray-900">{selectedRegionalId ? 'Ubah Regional' : 'Buat Regional'}</h2>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {selectedRegionalId && (
-                                        <button type="button" onClick={() => deleteRegional(selectedRegionalId)} className="text-sm font-bold text-red-500">Delete</button>
+                                        <button type="button" onClick={() => deleteRegional(selectedRegionalId)} className="text-sm font-bold text-red-500">Hapus</button>
                                     )}
                                     <button type="button" onClick={closeRegionalForm} className="p-2 text-gray-400 hover:text-gray-900 transition"><X size={20} /></button>
                                 </div>
@@ -1953,10 +1954,10 @@ export default function AdminDashboard() {
                             <input value={regionalForm.nama_regional} onChange={(e) => setRegionalForm({ ...regionalForm, nama_regional: e.target.value })} className="input" required />
                         </Field>
                         <Field label="Cabang">
-                            <input value={regionalForm.cabang} onChange={(e) => setRegionalForm({ ...regionalForm, cabang: e.target.value })} className="input" placeholder="Initial store or branch note" />
+                            <input value={regionalForm.cabang} onChange={(e) => setRegionalForm({ ...regionalForm, cabang: e.target.value })} className="input" placeholder="Initial toko atau catatan cabang" />
                         </Field>
                         <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
-                            {saving ? 'Saving...' : 'Save Regional'}
+                            {saving ? 'Menyimpan...' : 'Simpan Regional'}
                         </button>
                     </form>
                     )}
@@ -2026,7 +2027,7 @@ function PaginationControls({ page, totalPages, onPageChange }: { page: number; 
                     onClick={() => goToPage(safePage - 1)}
                     className="px-3 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-600 disabled:opacity-30 hover:text-primary hover:border-primary transition"
                 >
-                    Previous
+                    Sebelumnya
                 </button>
 
                 <div className="flex items-center gap-1">
@@ -2051,23 +2052,23 @@ function PaginationControls({ page, totalPages, onPageChange }: { page: number; 
                     onClick={() => goToPage(safePage + 1)}
                     className="px-3 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-600 disabled:opacity-30 hover:text-primary hover:border-primary transition"
                 >
-                    Next
+                    Berikutnya
                 </button>
             </div>
 
             <form onSubmit={submitJump} className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-400">Page {safePage} of {safeTotal}</span>
+                <span className="text-xs font-bold text-gray-400">Halaman {safePage} dari {safeTotal}</span>
                 <input
                     type="number"
                     min={1}
                     max={safeTotal}
                     value={jumpPage}
                     onChange={(event) => setJumpPage(event.target.value)}
-                    placeholder="Go to"
+                    placeholder="Ke"
                     className="w-20 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 outline-none focus:border-primary focus:ring-2 focus:ring-purple-100"
                 />
                 <button className="px-3 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-600 hover:text-primary hover:border-primary transition">
-                    Go
+                    Buka
                 </button>
             </form>
         </div>
@@ -2140,7 +2141,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
                             <input 
                                 type="text"
                                 autoFocus
-                                placeholder="Search..."
+                                placeholder="Cari..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
@@ -2161,7 +2162,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
                         {placeholder}
                     </button>
                     {filteredOptions.length === 0 ? (
-                        <div className="px-3 py-4 text-center text-xs text-gray-400">No matching options</div>
+                        <div className="px-3 py-4 text-center text-xs text-gray-400">Tidak ada pilihan yang cocok</div>
                     ) : filteredOptions.map((option) => (
                         <button
                             key={option.value}
@@ -2204,7 +2205,7 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
         ? placeholder
         : selectedOptions.length <= 2
             ? selectedOptions.map((option) => option.label).join(', ')
-            : `${selectedOptions.length} selected`;
+            : `${selectedOptions.length} dipilih`;
 
     const toggleValue = (value: string) => {
         onChange(values.includes(value)
@@ -2228,7 +2229,7 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
                         <input
                             type="text"
                             autoFocus
-                            placeholder="Search..."
+                            placeholder="Cari..."
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                             className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
@@ -2244,10 +2245,10 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
                         }}
                         className="w-full rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-500 hover:bg-gray-50"
                     >
-                        Clear selection
+                        Hapus pilihan
                     </button>
                     {filteredOptions.length === 0 ? (
-                        <div className="px-3 py-4 text-center text-xs text-gray-400">No matching options</div>
+                        <div className="px-3 py-4 text-center text-xs text-gray-400">Tidak ada pilihan yang cocok</div>
                     ) : filteredOptions.map((option) => (
                         <button
                             key={option.value}
