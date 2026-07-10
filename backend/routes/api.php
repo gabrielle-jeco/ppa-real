@@ -82,6 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users', [App\Http\Controllers\AdminController::class, 'getUsers']);
         Route::get('/user-locations', [App\Http\Controllers\AdminController::class, 'getUserLocations']);
         Route::get('/leaders', [App\Http\Controllers\AdminController::class, 'getLeaders']);
+        Route::get('/reporting-users', [App\Http\Controllers\AdminController::class, 'getReportingUsers']);
         Route::get('/reporting-lines', [App\Http\Controllers\AdminController::class, 'getReportingLines']);
 
         Route::post('/reporting-lines', [App\Http\Controllers\AdminController::class, 'storeReportingLine']);

@@ -40,36 +40,37 @@ class AdminController extends Controller
     public function overview()
     {
         $this->authorizeSuperadmin();
+        $canUseLocations = $this->canAnyPermission(['users_locations', 'app_roles', 'reporting_lines', 'locations']);
 
-        $workStations = WorkStation::orderBy('name')->get()->map(fn(WorkStation $station) => [
+        $workStations = $this->canPermission('work_stations') ? WorkStation::orderBy('name')->get()->map(fn(WorkStation $station) => [
             'id' => $station->id,
             'name' => $station->name,
             'guide_content' => $station->guide_content ?: [],
             'active' => (bool) $station->active,
-        ]);
+        ]) : collect();
 
         return response()->json([
             'stats' => [
-                'users' => User::count(),
-                'active_users' => User::where('active', true)->count(),
-                'locations' => Location::count(),
-                'reporting_lines' => ReportingLine::where('status', 'active')->count(),
+                'users' => $this->canPermission('users_locations') ? User::count() : 0,
+                'active_users' => $this->canPermission('users_locations') ? User::where('active', true)->count() : 0,
+                'locations' => $this->canPermission('locations') ? Location::count() : 0,
+                'reporting_lines' => $this->canPermission('reporting_lines') ? ReportingLine::where('status', 'active')->count() : 0,
                 'work_stations' => $workStations->count(),
-                'user_locations' => UserLocation::count(),
-                'regionals' => Regional::count(),
-                'account_roles' => Role::count(),
-                'app_roles' => AppRole::count(),
-            'evaluation_masters' => EvaluationMaster::count(),
-            'job_levels' => JobLevel::where('visible_in_yodaily', true)->count(),
+                'user_locations' => $this->canPermission('app_roles') ? UserLocation::count() : 0,
+                'regionals' => $this->canPermission('regionals') ? Regional::count() : 0,
+                'account_roles' => $this->canPermission('role_management') ? Role::count() : 0,
+                'app_roles' => $this->canPermission('app_roles') ? AppRole::count() : 0,
+                'evaluation_masters' => $this->canPermission('evaluation_masters') ? EvaluationMaster::count() : 0,
+                'job_levels' => $this->canPermission('job_levels') ? JobLevel::where('visible_in_yodaily', true)->count() : 0,
             ],
-            'roles' => Role::orderBy('name')->get()->map(fn(Role $role) => $this->formatRole($role)),
-            'cms_permissions' => collect(self::CMS_PERMISSIONS)->map(fn($label, $key) => ['key' => $key, 'label' => $label])->values(),
+            'roles' => $this->canPermission('role_management') ? Role::orderBy('name')->get()->map(fn(Role $role) => $this->formatRole($role)) : [],
+            'cms_permissions' => $this->canPermission('role_management') ? collect(self::CMS_PERMISSIONS)->map(fn($label, $key) => ['key' => $key, 'label' => $label])->values() : [],
             'current_account_role' => Auth::user()?->accountRole?->name,
             'current_permissions' => Auth::user()?->accountRole?->permissions ?: [],
-            'job_levels' => JobLevel::where('visible_in_yodaily', true)
+            'job_levels' => $this->canAnyPermission(['users_locations', 'job_levels']) ? JobLevel::where('visible_in_yodaily', true)
                 ->orderBy('name')
-                ->get(['id', 'position_code', 'name', 'description', 'grade', 'department', 'visible_in_yodaily', 'external_active']),
-            'locations' => Location::orderBy('name')->get([
+                ->get(['id', 'position_code', 'name', 'description', 'grade', 'department', 'visible_in_yodaily', 'external_active']) : [],
+            'locations' => $canUseLocations ? Location::orderBy('name')->get([
                 'initial',
                 'name',
                 'store_code',
@@ -79,12 +80,12 @@ class AdminController extends Controller
                 'region_code',
                 'is_active',
                 'type_store',
-            ]),
+            ]) : [],
             'work_stations' => $workStations,
-            'app_roles' => AppRole::orderBy('name')->get()->map(fn(AppRole $role) => $this->formatAppRole($role)),
-            'app_job_levels' => $this->appJobLevelNames(),
-            'regionals' => Regional::orderBy('kode_regional')->get(),
-            'evaluation_masters' => EvaluationMaster::orderBy('sort_order')->orderBy('id')->get()->map(fn(EvaluationMaster $master) => $this->formatEvaluationMaster($master)),
+            'app_roles' => $this->canPermission('app_roles') ? AppRole::orderBy('name')->get()->map(fn(AppRole $role) => $this->formatAppRole($role)) : [],
+            'app_job_levels' => $this->canPermission('app_roles') ? $this->appJobLevelNames() : [],
+            'regionals' => $this->canPermission('regionals') ? Regional::orderBy('kode_regional')->get() : [],
+            'evaluation_masters' => $this->canPermission('evaluation_masters') ? EvaluationMaster::orderBy('sort_order')->orderBy('id')->get()->map(fn(EvaluationMaster $master) => $this->formatEvaluationMaster($master)) : [],
         ]);
     }
 
@@ -227,6 +228,34 @@ class AdminController extends Controller
         return response()->json($leadersArray);
     }
 
+    public function getReportingUsers(Request $request)
+    {
+        $this->authorizePermission('reporting_lines');
+
+        $query = User::without(['jobLevel', 'locations', 'userLocations'])
+            ->whereHas('jobLevel', fn($q) => $q->where('visible_in_yodaily', true))
+            ->with(['jobLevel:id,position_code,name,grade,department'])
+            ->orderBy('name');
+
+        if ($request->filled('search')) {
+            $search = strtolower($request->query('search'));
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(username) like ?', ["%{$search}%"]);
+            });
+        }
+
+        if ($request->filled('store')) {
+            $query->whereHas('locations', fn($q) => $q->where('locations.initial', $request->query('store')));
+        }
+
+        return response()->json($query->get(['username', 'name', 'job_level_id'])->map(fn(User $user) => [
+            'username' => $user->username,
+            'name' => $user->name,
+            'role_type' => $user->role_type,
+        ]));
+    }
+
     public function getReportingLines(Request $request)
     {
         $this->authorizePermission('reporting_lines');
@@ -315,7 +344,7 @@ class AdminController extends Controller
             'email' => $data['email'] ?? null,
             'password' => Hash::make($data['password'] ?? 'password'),
             'job_level_id' => $data['job_level_id'],
-            'role_id' => $data['role_id'] ?? $this->defaultAccountRoleId(),
+            'role_id' => $this->canPermission('role_management') ? ($data['role_id'] ?? $this->defaultAccountRoleId()) : $this->defaultAccountRoleId(),
             'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? true,
         ]);
@@ -414,7 +443,7 @@ class AdminController extends Controller
             'name' => $data['name'],
             'email' => $data['email'] ?? null,
             'job_level_id' => $data['job_level_id'],
-            'role_id' => $data['role_id'] ?? $this->defaultAccountRoleId(),
+            'role_id' => $this->canPermission('role_management') ? ($data['role_id'] ?? $this->defaultAccountRoleId()) : $user->role_id,
             'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? false,
         ]);
@@ -805,7 +834,17 @@ class AdminController extends Controller
     {
         $this->authorizeSuperadmin();
 
-        abort_if(!Auth::user()?->accountRole?->hasPermission($permission), 403, 'Unauthorized');
+        abort_if(!$this->canPermission($permission), 403, 'Unauthorized');
+    }
+
+    private function canPermission(string $permission): bool
+    {
+        return (bool) Auth::user()?->accountRole?->hasPermission($permission);
+    }
+
+    private function canAnyPermission(array $permissions): bool
+    {
+        return collect($permissions)->contains(fn($permission) => $this->canPermission($permission));
     }
 
     private function authorizeRoleManagement(): void
