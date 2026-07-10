@@ -3,6 +3,19 @@ import { BookOpenCheck, Check, ChevronDown, GitBranch, MapPinned, RefreshCcw, Sa
 
 type Tab = 'users' | 'jobLevels' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations';
 
+const TAB_PERMISSIONS: Record<Tab, string> = {
+    users: 'users_locations',
+    jobLevels: 'job_levels',
+    appRoles: 'app_roles',
+    hierarchy: 'reporting_lines',
+    guides: 'work_stations',
+    locations: 'locations',
+    regionals: 'regionals',
+    evaluations: 'evaluation_masters',
+};
+
+const TAB_ORDER: Tab[] = ['users', 'jobLevels', 'appRoles', 'hierarchy', 'guides', 'locations', 'regionals', 'evaluations'];
+
 type JobLevel = {
     id: number;
     name: string;
@@ -236,6 +249,9 @@ export default function AdminDashboard() {
     const [isEvaluationFormOpen, setIsEvaluationFormOpen] = useState(false);
     const [isLocationFormOpen, setIsLocationFormOpen] = useState(false);
     const [isRegionalFormOpen, setIsRegionalFormOpen] = useState(false);
+    const currentPermissionsKey = data?.current_permissions.join('|') || '';
+    const isAdminAccount = data?.current_account_role?.toLowerCase() === 'admin';
+    const canAccessPermission = (permission: string) => Boolean(isAdminAccount || data?.current_permissions.includes(permission));
 
     useEffect(() => {
         fetchOverview();
@@ -243,11 +259,20 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         if (!data) return;
+        if (canAccessPermission(TAB_PERMISSIONS[activeTab])) return;
+
+        const nextTab = TAB_ORDER.find((tab) => canAccessPermission(TAB_PERMISSIONS[tab]));
+        if (nextTab) setActiveTab(nextTab);
+    }, [activeTab, data?.current_account_role, currentPermissionsKey]);
+
+    useEffect(() => {
+        if (!data) return;
+        if (!canAccessPermission(TAB_PERMISSIONS[activeTab])) return;
+
         if (activeTab === 'users') fetchUsers();
         else if (activeTab === 'jobLevels') fetchJobLevels();
         else if (activeTab === 'appRoles') {
             fetchUserLocations();
-            fetchUsers();
         }
         else if (activeTab === 'hierarchy') {
             fetchUsers();
@@ -256,7 +281,7 @@ export default function AdminDashboard() {
         }
         else if (activeTab === 'locations') fetchLocations();
         else if (activeTab === 'regionals') fetchRegionals();
-    }, [activeTab, usersPage, usersSearch, jobLevelsPage, jobLevelsSearch, jobLevelsVisibility, userLocationsPage, userLocationsSearch, locationsPage, locationsSearch, regionalsPage, regionalsSearch, selectedLeaderId, storeFilter, data?.stats]);
+    }, [activeTab, usersPage, usersSearch, jobLevelsPage, jobLevelsSearch, jobLevelsVisibility, userLocationsPage, userLocationsSearch, locationsPage, locationsSearch, regionalsPage, regionalsSearch, selectedLeaderId, storeFilter, data?.stats, data?.current_account_role, currentPermissionsKey]);
 
     const fetchOverview = async () => {
         setLoading(true);
@@ -1035,7 +1060,7 @@ export default function AdminDashboard() {
         );
     }
 
-    const isAdminRole = data.current_account_role === 'admin';
+    const isAdminRole = isAdminAccount;
     const canAccess = (permission: string) => isAdminRole || data.current_permissions.includes(permission);
 
     return (
@@ -1076,10 +1101,10 @@ export default function AdminDashboard() {
 
             <div className="flex gap-3 mb-6">
                 {canAccess('users_locations') && <TabButton active={activeTab === 'users'} icon={<UsersRound size={16} />} label="User & Lokasi" onClick={() => setActiveTab('users')} />}
-                {canAccess('users_locations') && <TabButton active={activeTab === 'jobLevels'} icon={<ShieldCheck size={16} />} label="Job Level HR" onClick={() => setActiveTab('jobLevels')} />}
-                {canAccess('users_locations') && <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="Role Aplikasi" onClick={() => setActiveTab('appRoles')} />}
+                {canAccess('job_levels') && <TabButton active={activeTab === 'jobLevels'} icon={<ShieldCheck size={16} />} label="Job Level HR" onClick={() => setActiveTab('jobLevels')} />}
+                {canAccess('app_roles') && <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="Role Aplikasi" onClick={() => setActiveTab('appRoles')} />}
                 {canAccess('reporting_lines') && <TabButton active={activeTab === 'hierarchy'} icon={<GitBranch size={16} />} label="Relasi Atasan" onClick={() => setActiveTab('hierarchy')} />}
-                <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Master Work Station" onClick={() => setActiveTab('guides')} />
+                {canAccess('work_stations') && <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Master Work Station" onClick={() => setActiveTab('guides')} />}
                 {canAccess('locations') && <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Master Lokasi" onClick={() => setActiveTab('locations')} />}
                 {canAccess('regionals') && <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Master Regional" onClick={() => setActiveTab('regionals')} />}
                 {canAccess('evaluation_masters') && <TabButton active={activeTab === 'evaluations'} icon={<ShieldCheck size={16} />} label="Master Evaluasi" onClick={() => setActiveTab('evaluations')} />}
@@ -1118,7 +1143,7 @@ export default function AdminDashboard() {
                                 <UserPlus size={16} />
                                 User Baru
                             </button>
-                            {isAdminRole && (
+                            {canAccess('role_management') && (
                                 <button onClick={resetRoleForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">
                                     Tambah Role Akun
                                 </button>

@@ -26,11 +26,15 @@ class AdminController extends Controller
 {
     private const DEFAULT_APP_JOB_LEVELS = ['sc', 'supervisor', 'manager', 'regional_manager'];
     private const CMS_PERMISSIONS = [
-        'users_locations' => 'User & Location',
-        'reporting_lines' => 'Reporting Lines',
-        'locations' => 'Location',
-        'regionals' => 'Region Master',
-        'evaluation_masters' => 'Evaluation Master',
+        'users_locations' => 'User & Lokasi',
+        'job_levels' => 'Job Level HR',
+        'app_roles' => 'Role Aplikasi',
+        'reporting_lines' => 'Relasi Atasan',
+        'work_stations' => 'Master Work Station',
+        'locations' => 'Master Lokasi',
+        'regionals' => 'Master Regional',
+        'evaluation_masters' => 'Master Evaluasi',
+        'role_management' => 'Role Akun',
     ];
 
     public function overview()
@@ -86,7 +90,7 @@ class AdminController extends Controller
 
     public function getJobLevels(Request $request)
     {
-        $this->authorizePermission('users_locations');
+        $this->authorizePermission('job_levels');
 
         $query = JobLevel::orderBy('name');
 
@@ -156,7 +160,7 @@ class AdminController extends Controller
 
     public function getUserLocations(Request $request)
     {
-        $this->authorizePermission('users_locations');
+        $this->authorizePermission('app_roles');
 
         $query = UserLocation::with(['user.jobLevel', 'location'])
             ->whereHas('user.jobLevel', fn($q) => $q->where('visible_in_yodaily', true));
@@ -478,7 +482,7 @@ class AdminController extends Controller
 
     public function storeWorkStation(Request $request)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('work_stations');
 
         if ($request->has('name')) {
             $request->merge(['name' => strtolower(trim((string) $request->input('name')))]);
@@ -502,7 +506,7 @@ class AdminController extends Controller
 
     public function updateWorkStation(Request $request, WorkStation $workStation)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('work_stations');
 
         if ($request->has('name')) {
             $request->merge(['name' => strtolower(trim((string) $request->input('name')))]);
@@ -526,7 +530,7 @@ class AdminController extends Controller
 
     public function destroyWorkStation(WorkStation $workStation)
     {
-        $this->authorizeSuperadmin();
+        $this->authorizePermission('work_stations');
 
         $hasHistory = Task::where('work_station_id', $workStation->id)->exists()
             || ActivityLog::where('work_station_id', $workStation->id)->exists()
@@ -545,7 +549,7 @@ class AdminController extends Controller
 
     public function updateJobLevel(Request $request, JobLevel $jobLevel)
     {
-        $this->authorizePermission('users_locations');
+        $this->authorizePermission('job_levels');
 
         $data = $request->validate([
             'visible_in_yodaily' => ['required', 'boolean'],
@@ -560,7 +564,7 @@ class AdminController extends Controller
 
     public function updateUserLocation(Request $request, UserLocation $userLocation)
     {
-        $this->authorizePermission('users_locations');
+        $this->authorizePermission('app_roles');
 
         $data = $request->validate([
             'job_level' => ['required', Rule::exists('app_roles', 'name')->where('active', true)],
@@ -575,7 +579,7 @@ class AdminController extends Controller
 
     public function storeUserLocation(Request $request)
     {
-        $this->authorizePermission('users_locations');
+        $this->authorizePermission('app_roles');
 
         $data = $request->validate([
             'user_id' => ['required', 'exists:users,username'],
@@ -593,7 +597,7 @@ class AdminController extends Controller
 
     public function syncUserLocationsFromUsers()
     {
-        $this->authorizePermission('users_locations');
+        $this->authorizePermission('app_roles');
 
         $created = DB::affectingStatement(<<<'SQL'
             INSERT INTO user_locations (user_id, location_id, job_level, created_at, updated_at)
@@ -710,7 +714,7 @@ class AdminController extends Controller
 
     public function storeAppRole(Request $request)
     {
-        $this->authorizeRoleManagement();
+        $this->authorizePermission('app_roles');
 
         $role = AppRole::create($this->validatedAppRole($request));
 
@@ -719,7 +723,7 @@ class AdminController extends Controller
 
     public function updateAppRole(Request $request, AppRole $appRole)
     {
-        $this->authorizeRoleManagement();
+        $this->authorizePermission('app_roles');
 
         $appRole->update($this->validatedAppRole($request, $appRole));
 
@@ -728,7 +732,7 @@ class AdminController extends Controller
 
     public function destroyAppRole(AppRole $appRole)
     {
-        $this->authorizeRoleManagement();
+        $this->authorizePermission('app_roles');
 
         if (UserLocation::where('job_level', $appRole->name)->exists()) {
             throw ValidationException::withMessages([
@@ -748,7 +752,7 @@ class AdminController extends Controller
         $data = $this->validatedRole($request);
         $data['name'] = strtolower(trim($data['name']));
         if ($data['name'] === 'admin') {
-            $data['permissions'] = array_keys(self::CMS_PERMISSIONS + ['role_management' => 'Role Management']);
+            $data['permissions'] = array_keys(self::CMS_PERMISSIONS);
         }
 
         $role = Role::create($data);
@@ -763,7 +767,7 @@ class AdminController extends Controller
         $data = $this->validatedRole($request, $role);
         $data['name'] = strtolower(trim($data['name']));
         if ($data['name'] === 'admin') {
-            $data['permissions'] = array_keys(self::CMS_PERMISSIONS + ['role_management' => 'Role Management']);
+            $data['permissions'] = array_keys(self::CMS_PERMISSIONS);
         }
 
         $role->update($data);
@@ -806,9 +810,7 @@ class AdminController extends Controller
 
     private function authorizeRoleManagement(): void
     {
-        $this->authorizeSuperadmin();
-
-        abort_if(strtolower((string) Auth::user()?->accountRole?->name) !== 'admin', 403, 'Unauthorized');
+        $this->authorizePermission('role_management');
     }
 
     private function syncUserLocations(User $user, array $locationIds): void

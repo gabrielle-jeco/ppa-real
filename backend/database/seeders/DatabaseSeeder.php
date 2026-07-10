@@ -28,7 +28,17 @@ class DatabaseSeeder extends Seeder
             ['name' => 'admin'],
             [
                 'description' => 'Full CMS administrator',
-                'permissions' => ['users_locations', 'reporting_lines', 'locations', 'regionals', 'evaluation_masters', 'role_management'],
+                'permissions' => [
+                    'users_locations',
+                    'job_levels',
+                    'app_roles',
+                    'reporting_lines',
+                    'work_stations',
+                    'locations',
+                    'regionals',
+                    'evaluation_masters',
+                    'role_management',
+                ],
             ]
         );
         $userRole = Role::updateOrCreate(

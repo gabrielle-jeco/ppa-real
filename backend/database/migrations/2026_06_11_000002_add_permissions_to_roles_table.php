@@ -22,7 +22,10 @@ return new class extends Migration {
             'description' => 'Full CMS administrator',
             'permissions' => json_encode([
                 'users_locations',
+                'job_levels',
+                'app_roles',
                 'reporting_lines',
+                'work_stations',
                 'locations',
                 'regionals',
                 'evaluation_masters',
