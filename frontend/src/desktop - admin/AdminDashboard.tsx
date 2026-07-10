@@ -217,6 +217,7 @@ export default function AdminDashboard() {
     const [hierarchySearch, setHierarchySearch] = useState('');
 
     const [leadersData, setLeadersData] = useState<Array<{username: string, name: string, role_type: string}>>([]);
+    const [reportingUsersData, setReportingUsersData] = useState<Array<{username: string, name: string, role_type: string}>>([]);
     const [selectedLeaderId, setSelectedLeaderId] = useState('');
     const [reportingLinesData, setReportingLinesData] = useState<ReportingLine[]>([]);
 
@@ -275,7 +276,7 @@ export default function AdminDashboard() {
             fetchUserLocations();
         }
         else if (activeTab === 'hierarchy') {
-            fetchUsers();
+            fetchReportingUsers();
             fetchLeaders();
             fetchReportingLines();
         }
@@ -367,6 +368,17 @@ export default function AdminDashboard() {
             setLeadersData(res || []);
         } catch (error: any) {
             setMessage(error.message || 'Gagal memuat daftar atasan.');
+        }
+    };
+
+    const fetchReportingUsers = async () => {
+        try {
+            const query = new URLSearchParams();
+            if (storeFilter) query.append('store', storeFilter);
+            const res = await requestJson(`/api/cms/reporting-users?${query.toString()}`, 'GET');
+            setReportingUsersData(res || []);
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal memuat kandidat bawahan.');
         }
     };
 
@@ -1063,6 +1075,15 @@ export default function AdminDashboard() {
     const isAdminRole = isAdminAccount;
     const canAccess = (permission: string) => isAdminRole || data.current_permissions.includes(permission);
 
+    const statCards = [
+        canAccess('users_locations') ? ['User', data.stats.users] : null,
+        canAccess('users_locations') ? ['Aktif', data.stats.active_users] : null,
+        canAccess('reporting_lines') ? ['Reporting Line', data.stats.reporting_lines] : null,
+        canAccess('app_roles') ? ['Role Aplikasi', data.stats.app_roles] : null,
+        canAccess('locations') ? ['Lokasi', data.stats.locations] : null,
+        canAccess('regionals') ? ['Regional', data.stats.regionals] : null,
+    ].filter((item): item is [string, number] => Boolean(item));
+
     return (
         <div className="h-full overflow-y-auto px-8 py-8">
             <header className="mb-8 flex items-start justify-between">
@@ -1078,14 +1099,7 @@ export default function AdminDashboard() {
             </header>
 
             <section className="grid grid-cols-6 gap-4 mb-6">
-                {[
-                    ['User', data.stats.users],
-                    ['Aktif', data.stats.active_users],
-                    ['Reporting Line', data.stats.reporting_lines],
-                    ['Role Aplikasi', data.stats.app_roles],
-                    ['Lokasi', data.stats.locations],
-                    ['Regional', data.stats.regionals],
-                ].map(([label, value]) => (
+                {statCards.map(([label, value]) => (
                     <div key={label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
                         <p className="text-xs text-gray-400 font-bold uppercase">{label}</p>
                         <p className="text-2xl font-black text-gray-900 mt-2">{value}</p>
@@ -1110,7 +1124,7 @@ export default function AdminDashboard() {
                 {canAccess('evaluation_masters') && <TabButton active={activeTab === 'evaluations'} icon={<ShieldCheck size={16} />} label="Master Evaluasi" onClick={() => setActiveTab('evaluations')} />}
             </div>
 
-            {activeTab === 'users' && (
+            {activeTab === 'users' && canAccess('users_locations') && (
                 <div className={`grid gap-6 transition-all duration-300 ${
                     isUserFormOpen && isRoleFormOpen
                         ? 'grid-cols-[1fr_0.75fr_0.75fr]'
@@ -1205,14 +1219,16 @@ export default function AdminDashboard() {
                             <Field label="Password">
                                 <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="input" placeholder={selectedUsername ? 'Kosongkan jika tidak ingin mengganti password' : 'Default: password'} />
                             </Field>
-                            <Field label="Role Akun">
-                                <CustomSelect
-                                    value={userForm.role_id}
-                                    placeholder="Pilih role akun"
-                                    options={data.roles.map((role) => ({ value: String(role.id), label: role.name }))}
-                                    onChange={(value) => setUserForm({ ...userForm, role_id: value })}
-                                />
-                            </Field>
+                            {canAccess('role_management') && (
+                                <Field label="Role Akun">
+                                    <CustomSelect
+                                        value={userForm.role_id}
+                                        placeholder="Pilih role akun"
+                                        options={data.roles.map((role) => ({ value: String(role.id), label: role.name }))}
+                                        onChange={(value) => setUserForm({ ...userForm, role_id: value })}
+                                    />
+                                </Field>
+                            )}
                             <Field label="Job Level HR/Corporate">
                                 <CustomSelect
                                     value={userForm.job_level_id}
@@ -1322,7 +1338,7 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {activeTab === 'jobLevels' && (
+            {activeTab === 'jobLevels' && canAccess('job_levels') && (
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                         <div>
@@ -1391,7 +1407,7 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {activeTab === 'appRoles' && (
+            {activeTab === 'appRoles' && canAccess('app_roles') && (
                 <div className={`grid gap-6 transition-all duration-300 ${isAppRoleFormOpen ? 'grid-cols-[1.2fr_0.8fr]' : 'grid-cols-1'}`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
@@ -1525,7 +1541,7 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {activeTab === 'hierarchy' && (
+            {activeTab === 'hierarchy' && canAccess('reporting_lines') && (
                 <div className="grid grid-cols-[0.9fr_1.1fr] gap-6">
                     <form onSubmit={saveReportingLine} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
                         <div>
@@ -1554,7 +1570,7 @@ export default function AdminDashboard() {
                             <CustomMultiSelect
                                 values={lineForm.subordinate_ids}
                                 placeholder="Pilih bawahan"
-                                options={usersData
+                                options={reportingUsersData
                                     .filter((user) => user.username !== lineForm.leader_id)
                                     .map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
                                 onChange={(values) => setLineForm({ ...lineForm, subordinate_ids: values })}
@@ -1626,7 +1642,7 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {activeTab === 'guides' && (
+            {activeTab === 'guides' && canAccess('work_stations') && (
                 <div className={`grid gap-6 transition-all duration-300 ${isGuideFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
@@ -1707,7 +1723,7 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {activeTab === 'evaluations' && (
+            {activeTab === 'evaluations' && canAccess('evaluation_masters') && (
                 <div className={`grid gap-6 transition-all duration-300 ${isEvaluationFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
@@ -1833,7 +1849,7 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {activeTab === 'locations' && (
+            {activeTab === 'locations' && canAccess('locations') && (
                 <div className={`grid gap-6 transition-all duration-300 ${isLocationFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
@@ -1925,7 +1941,7 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {activeTab === 'regionals' && (
+            {activeTab === 'regionals' && canAccess('regionals') && (
                 <div className={`grid gap-6 transition-all duration-300 ${isRegionalFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
