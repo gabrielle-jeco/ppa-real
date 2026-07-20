@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import TaskStartStatus from './TaskStartStatus';
 
 interface TaskPreviewProps {
     task: any;
@@ -37,6 +38,11 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
                 <div>
                     <h2 className="font-bold text-gray-800 text-lg">Bukti Tugas</h2>
                     <p className="text-sm text-gray-400">{task.title}</p>
+                    <TaskStartStatus
+                        task={task}
+                        scheduleClassName="text-xs text-gray-400 mt-1"
+                        statusClassName="text-xs text-amber-500 font-semibold"
+                    />
                     <p className="text-xs text-gray-400 mt-1 min-h-[20px]">
                         Diunggah: {currentEvidence?.created_at ? new Date(currentEvidence.created_at).toLocaleString() : '-'}
                     </p>

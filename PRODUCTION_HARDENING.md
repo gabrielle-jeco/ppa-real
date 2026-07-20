@@ -11,6 +11,7 @@ Checklist singkat sebelum deploy production/internal office network.
 - Set `YOJADWAL_ENABLED=true` jika login user sudah wajib lewat YoJadwal.
 - Set `YOJADWAL_ALLOW_LOCAL_SUPERADMIN_FALLBACK=false` jika superadmin lokal tidak boleh fallback selain database aplikasi.
 - Gunakan `APP_KEY`, DB password, dan secret lain yang kuat dan berbeda dari local/dev.
+- Isi `YODAILY_USER_MONITORING_PASSWORD` hanya jika admin perlu membuka akun operasional untuk pemantauan. Kosongkan untuk menonaktifkannya, batasi distribusinya, dan audit entri log `monitoring_token`.
 
 ## Docker/network
 

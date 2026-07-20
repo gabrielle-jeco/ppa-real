@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Calendar, Clock, X } from 'lucide-react';
-import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateInputValue } from '../utils/taskDateWindow';
+import { Calendar, X } from 'lucide-react';
+import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
 
 interface AddTaskModalProps {
     isOpen: boolean;
@@ -8,39 +8,53 @@ interface AddTaskModalProps {
     onSubmit: (task: any) => void;
     defaultDate?: string; // YYYY-MM-DD
     requireCategory?: boolean;
+    initialTask?: any;
+    submitLabel?: string;
 }
 
-export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false }: AddTaskModalProps) {
-    const formatCurrentTime = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false, initialTask, submitLabel = 'Simpan' }: AddTaskModalProps) {
+    const initializedKeyRef = React.useRef<string | null>(null);
     const [title, setTitle] = useState('');
     const [date, setDate] = useState(defaultDate || '');
-    const [time, setTime] = useState('');
+    const [startTime, setStartTime] = useState('');
+    const [dueTime, setDueTime] = useState('');
     const [note, setNote] = useState('');
     const [workStationId, setWorkStationId] = useState('');
+    const [weightLabel, setWeightLabel] = useState('mudah');
     const [workStations, setWorkStations] = useState<any[]>([]);
-    const [currentTime, setCurrentTime] = useState(formatCurrentTime);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
     const minTaskTime = date === minTaskDate
         ? new Date().toTimeString().slice(0, 5)
         : undefined;
 
-    // Reset/Update date when defaultDate changes or modal opens
     React.useEffect(() => {
-        if (isOpen && defaultDate) {
-            setDate(defaultDate);
+        const modalKey = initialTask?.id ? `edit:${initialTask.id}` : `create:${defaultDate || ''}`;
+        if (!isOpen) {
+            initializedKeyRef.current = null;
+            return;
         }
-    }, [isOpen, defaultDate]);
+        if (initializedKeyRef.current === modalKey) return;
+        initializedKeyRef.current = modalKey;
 
-    React.useEffect(() => {
-        if (!isOpen) return;
-
-        const updateTime = () => setCurrentTime(formatCurrentTime());
-        updateTime();
-        const timer = window.setInterval(updateTime, 30000);
-
-        return () => window.clearInterval(timer);
-    }, [isOpen]);
+        if (initialTask) {
+            setTitle(initialTask.title || '');
+            setDate(toDateFieldValue(initialTask.due_at, defaultDate || ''));
+            setStartTime(toTimeFieldValue(initialTask.start_at, toTimeFieldValue(initialTask.due_at, new Date().toTimeString().slice(0, 5))));
+            setDueTime(toTimeFieldValue(initialTask.due_at));
+            setNote(initialTask.note || initialTask.description || '');
+            setWorkStationId(initialTask.work_station_id ? String(initialTask.work_station_id) : '');
+            setWeightLabel(initialTask.weight_label || 'mudah');
+        } else {
+            setDate(defaultDate || '');
+            setStartTime(new Date().toTimeString().slice(0, 5));
+            setDueTime('');
+            setTitle('');
+            setNote('');
+            setWorkStationId('');
+            setWeightLabel('mudah');
+        }
+    }, [isOpen, defaultDate, initialTask]);
 
     React.useEffect(() => {
         if (!isOpen || !requireCategory) return;
@@ -62,8 +76,17 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // Combine date and time
-        const dueAt = `${date} ${time}:00`;
+        const now = new Date();
+        let effectiveStartTime = startTime;
+        let startAtDate = new Date(`${date}T${effectiveStartTime}:00`);
+        if (date === toDateInputValue(now) && startAtDate < now) {
+            effectiveStartTime = now.toTimeString().slice(0, 5);
+            startAtDate = new Date(`${date}T${effectiveStartTime}:00`);
+            setStartTime(effectiveStartTime);
+        }
+
+        const startAt = `${date} ${effectiveStartTime}:00`;
+        const dueAt = `${date} ${dueTime}:00`;
         const selectedTaskDate = new Date(`${date}T00:00:00`);
         if (isBeforeToday(selectedTaskDate) || isAfterTaskWindow(selectedTaskDate)) {
             alert('Tanggal pekerjaan di luar periode penugasan yang diizinkan.');
@@ -73,9 +96,15 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
             alert('Tenggat pekerjaan tidak boleh lebih awal dari jam saat ini.');
             return;
         }
+        if (new Date(dueAt.replace(' ', 'T')) < startAtDate) {
+            alert('Tenggat pekerjaan tidak boleh lebih awal dari jam mulai.');
+            return;
+        }
         onSubmit({
             title,
+            start_at: startAt,
             due_at: dueAt,
+            weight_label: weightLabel,
             note,
             ...(requireCategory ? { work_station_id: workStationId } : {}),
         });
@@ -83,9 +112,11 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
         // Reset form
         setTitle('');
         setDate('');
-        setTime('');
+        setStartTime('');
+        setDueTime('');
         setNote('');
         setWorkStationId('');
+        setWeightLabel('mudah');
     };
 
     return (
@@ -99,11 +130,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold text-gray-800 mb-3 text-center">Tenggat Pekerjaan</h2>
-                <div className="mb-5 rounded-2xl bg-purple-50 px-4 py-3 text-xs font-bold text-primary flex items-center justify-between">
-                    <span>Jam saat ini</span>
-                    <span>{currentTime}</span>
-                </div>
+                <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">Tenggat Pekerjaan</h2>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
@@ -136,34 +163,61 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                     )}
 
                     {/* Date Picker */}
-                    <div className="relative">
-                        <input
-                            type="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            min={minTaskDate}
-                            max={maxTaskDate}
-                            className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
-                            required
-                        />
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-purple-600">
-                            <Calendar size={20} />
+                    <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">Tanggal</label>
+                        <div className="relative">
+                            <input
+                                type="date"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                min={minTaskDate}
+                                max={maxTaskDate}
+                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
+                                required
+                            />
+                            <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-purple-600">
+                                <Calendar size={20} />
+                            </div>
                         </div>
                     </div>
 
-                    {/* Time Picker */}
-                    <div className="relative">
-                        <input
-                            type="time"
-                            value={time}
-                            onChange={(e) => setTime(e.target.value)}
-                            min={minTaskTime}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">Jam mulai</label>
+                            <input
+                                type="time"
+                                value={startTime}
+                                onChange={(e) => setStartTime(e.target.value)}
+                                min={minTaskTime}
+                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">Tenggat</label>
+                            <input
+                                type="time"
+                                value={dueTime}
+                                onChange={(e) => setDueTime(e.target.value)}
+                                min={date === minTaskDate ? startTime || minTaskTime : startTime}
+                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">Bobot</label>
+                        <select
+                            value={weightLabel}
+                            onChange={(e) => setWeightLabel(e.target.value)}
                             className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
                             required
-                        />
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-purple-600">
-                            <Clock size={20} />
-                        </div>
+                        >
+                            <option value="mudah">Mudah (2)</option>
+                            <option value="menengah">Menengah (6)</option>
+                            <option value="sulit">Sulit (10)</option>
+                        </select>
                     </div>
 
                     {/* Note Input */}
@@ -185,7 +239,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                             type="submit"
                             className="bg-primary text-white font-bold py-3 px-8 rounded-full hover:bg-purple-700 transition shadow-lg w-full md:w-auto"
                         >
-                            Simpan
+                            {submitLabel}
                         </button>
                     </div>
                 </form>

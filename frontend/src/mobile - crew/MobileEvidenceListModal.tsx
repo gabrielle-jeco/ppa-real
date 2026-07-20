@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Image as ImageIcon, ChevronRight, Calendar } from 'lucide-react';
+import TaskStartStatus from '../general/TaskStartStatus';
 
 interface MobileEvidenceListModalProps {
     isOpen: boolean;
@@ -93,7 +94,15 @@ export default function MobileEvidenceListModal({
             >
                 {/* Header */}
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-gray-800">Daftar Bukti</h2>
+                    <div className="min-w-0 pr-3">
+                        <h2 className="text-xl font-bold text-gray-800">Daftar Bukti</h2>
+                        <p className="text-sm text-gray-500 mt-0.5 truncate">{task?.title || 'Pekerjaan'}</p>
+                        <TaskStartStatus
+                            task={task}
+                            scheduleClassName="text-xs text-gray-400 mt-1"
+                            statusClassName="text-xs text-amber-500 font-semibold"
+                        />
+                    </div>
                     <button
                         onClick={handleClose}
                         className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition"

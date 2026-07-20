@@ -163,6 +163,21 @@ class SupervisorController extends Controller
 
         $teamAverageScore = (int) round($crewScores->avg('score') ?? 0);
 
+        $workloadMonitor = $subordinates->map(function ($crew) use ($tasks) {
+            $crewTasks = $tasks->where('employee_id', $crew->username);
+            $totalWeight = (int) $crewTasks->sum(fn ($task) => (int) ($task->weight_value ?: 2));
+
+            return [
+                'id' => $crew->username,
+                'name' => $crew->full_name,
+                'task_count' => $crewTasks->count(),
+                'total_weight' => $totalWeight,
+                'average_weight' => $crewTasks->count() > 0 ? round($totalWeight / $crewTasks->count(), 1) : 0,
+            ];
+        })
+            ->sortByDesc('total_weight')
+            ->values();
+
         $pendingApprovals = $tasks
             ->filter(fn ($task) => !in_array($task->status, $completedStatuses, true) && $task->evidences->isNotEmpty())
             ->values()
@@ -170,6 +185,7 @@ class SupervisorController extends Controller
                 'id' => $task->id,
                 'crew_name' => $task->assignedTo?->full_name ?? $task->employee_id,
                 'title' => $task->title,
+                'start_at' => optional($task->start_at)->toDateTimeString(),
                 'due_at' => optional($task->due_at)->toDateTimeString(),
             ]);
 
@@ -234,6 +250,7 @@ class SupervisorController extends Controller
                 ->take(5),
             'pending_approvals' => $pendingApprovals->take(8),
             'attendance_monitor' => $attendanceMonitor,
+            'workload_monitor' => $workloadMonitor,
             'notifications' => [
                 [
                     'id' => 'pending-approvals',

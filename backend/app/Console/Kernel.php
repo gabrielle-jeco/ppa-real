@@ -15,7 +15,13 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')->hourly();
+        $schedule->command('notifications:dispatch-tasks')
+            ->everyFiveMinutes()
+            ->withoutOverlapping(10);
+
+        $schedule->command('notifications:dispatch-evaluations')
+            ->dailyAt('08:00')
+            ->withoutOverlapping(30);
     }
 
     /**

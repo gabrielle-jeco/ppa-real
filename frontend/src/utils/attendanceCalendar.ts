@@ -23,10 +23,12 @@ export function getAttendanceColor(status?: string | null, isFuture = false) {
         case 'A':
             return 'bg-red-500 text-white shadow-sm';
         case 'S':
+            return 'bg-blue-500 text-white shadow-sm';
         case 'C':
+            return 'bg-purple-500 text-white shadow-sm';
         case 'L':
-            return 'bg-gray-300 text-white';
+            return 'bg-gray-500 text-white shadow-sm';
         default:
-            return 'bg-gray-100 text-gray-700';
+            return 'bg-orange-100 text-gray-700';
     }
 }

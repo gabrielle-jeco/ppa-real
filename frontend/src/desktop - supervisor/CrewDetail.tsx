@@ -1,22 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Trash2, ChevronDown, CheckCircle, XCircle, Ban } from 'lucide-react';
+import { Camera, Trash2, ChevronDown, CheckCircle, XCircle, Ban, Edit3 } from 'lucide-react';
 import AddTaskModal from '../general/AddTaskModal';
+import BulkTaskModal from '../general/BulkTaskModal';
 import TaskPreview from '../general/TaskPreview';
 import EvaluationForm from '../general/EvaluationForm';
 import SubmissionHistory from './SubmissionHistory';
+import TaskStartStatus from '../general/TaskStartStatus';
 import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 import { canAssignTaskOnDate, clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
+import { isTaskNotStarted } from '../utils/taskTiming';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
 
 interface CrewDetailProps {
     crew: any;
+    crews?: any[];
     onTaskChange?: () => void;
 }
 
-export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
+export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetailProps) {
     const [tasks, setTasks] = useState<any[]>([]);
 
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [isBulkTaskModalOpen, setIsBulkTaskModalOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState<any>(null);
+    const [editingBatch, setEditingBatch] = useState<any>(null);
 
     // Right Panel Modes: 'ACTIVITY', 'PREVIEW', 'HISTORY'
     const [rightPanelMode, setRightPanelMode] = useState<'ACTIVITY' | 'PREVIEW' | 'HISTORY'>('ACTIVITY');
@@ -165,7 +172,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                supervisor_id: crew.id,
+                    supervisor_id: crew.id,
                     ...taskData
                 })
             });
@@ -178,6 +185,56 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
         }
     };
 
+    const handleBulkAddTask = async (taskData: any) => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const isEditingBatch = Boolean(editingBatch?.id);
+            const res = await fetch(isEditingBatch ? `/api/task-batches/${editingBatch.id}` : '/api/tasks/bulk', {
+                method: isEditingBatch ? 'PATCH' : 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(taskData)
+            });
+            if (res.ok) {
+                setEditingBatch(null);
+                fetchTasks();
+                onTaskChange?.();
+            } else {
+                const data = await res.json().catch(() => ({}));
+                alert(data.message || (isEditingBatch ? 'Gagal memperbarui penugasan massal.' : 'Gagal membuat penugasan massal.'));
+            }
+        } catch (error) {
+            console.error("Gagal membuat penugasan massal", error);
+        }
+    };
+
+    const handleUpdateTask = async (taskData: any) => {
+        if (!editingTask) return;
+        try {
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch(`/api/tasks/${editingTask.task_id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(taskData)
+            });
+            if (res.ok) {
+                setEditingTask(null);
+                fetchTasks();
+                onTaskChange?.();
+            } else {
+                const data = await res.json().catch(() => ({}));
+                alert(data.message || 'Gagal memperbarui tugas.');
+            }
+        } catch (error) {
+            console.error("Gagal memperbarui tugas", error);
+        }
+    };
+
     const handleDeleteTask = async (taskId: number) => {
         if (!window.confirm("Hapus tugas ini?")) return;
         try {
@@ -186,7 +243,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            setTasks(tasks.filter(t => t.task_id !== taskId));
+            fetchTasks();
             onTaskChange?.();
         } catch (error) {
             console.error("Gagal menghapus tugas", error);
@@ -270,7 +327,39 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
     };
 
     const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
-    const canApproveTask = (task: any) => new Date(task.due_at).getTime() + 24 * 60 * 60 * 1000 >= Date.now();
+    const canApproveTask = (task: any) => addApprovalGraceDay(new Date(task.due_at)).getTime() >= Date.now();
+
+    const addApprovalGraceDay = (date: Date) => {
+        const result = new Date(date);
+        result.setHours(result.getHours() + 24);
+        return result;
+    };
+
+    const canEditTask = (task: any) => (
+        (task.assignment_type || 'individual') === 'individual'
+        && task.status !== 'approved'
+        && (task.evidences || []).length === 0
+        && !isTaskPastDue(task)
+    );
+    const canEditBatchTask = (task: any) => (
+        (task.assignment_type || 'individual') !== 'individual'
+        && task.assignment_batch
+        && task.status !== 'approved'
+        && (task.evidences || []).length === 0
+        && !isTaskPastDue(task)
+    );
+    const closeBulkTaskModal = () => {
+        setIsBulkTaskModalOpen(false);
+        setEditingBatch(null);
+    };
+    const openBulkTaskModal = () => {
+        setEditingBatch(null);
+        setIsBulkTaskModalOpen(true);
+    };
+    const openBatchEditor = (batch: any) => {
+        setIsBulkTaskModalOpen(false);
+        setEditingBatch(batch);
+    };
 
     const isCurrentSelectedMonth =
         selectedDate.getFullYear() === new Date().getFullYear() &&
@@ -387,6 +476,24 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                 defaultDate={selectedDate.toLocaleDateString('en-CA')}
                 requireCategory
             />
+            <AddTaskModal
+                isOpen={!!editingTask}
+                onClose={() => setEditingTask(null)}
+                onSubmit={handleUpdateTask}
+                defaultDate={selectedDate.toLocaleDateString('en-CA')}
+                requireCategory
+                initialTask={editingTask}
+                submitLabel="Simpan Perubahan"
+            />
+            <BulkTaskModal
+                isOpen={isBulkTaskModalOpen || !!editingBatch}
+                onClose={closeBulkTaskModal}
+                onSubmit={handleBulkAddTask}
+                defaultDate={selectedDate.toLocaleDateString('en-CA')}
+                crews={crews.map((item) => ({ id: item.id, name: item.name }))}
+                initialBatch={editingBatch}
+                submitLabel={editingBatch ? 'Simpan Perubahan' : 'Buat Penugasan'}
+            />
 
             <div className="items-center justify-between hidden lg:flex mb-6"></div>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 h-full flex-1 min-h-0">
@@ -427,11 +534,11 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
 
                         <div className="mb-0">
                             <h4 className="font-bold text-gray-800 text-sm mb-3">Tugas</h4>
-                            <div className="relative mb-3 h-12">
+                            <div className="relative mb-3 grid grid-cols-[1fr_auto] gap-2">
                                 <button
                                     onClick={() => setIsTaskModalOpen(true)}
                                     disabled={!canAssignOnSelectedDate}
-                                    className={`w-full h-full border rounded-lg px-4 flex items-center justify-between text-xs font-semibold shadow-sm transition group ${canAssignOnSelectedDate
+                                    className={`h-12 border rounded-lg px-4 flex items-center justify-between text-xs font-semibold shadow-sm transition group ${canAssignOnSelectedDate
                                         ? 'bg-white border-gray-200 hover:border-primary text-gray-600 hover:text-primary cursor-pointer'
                                         : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
                                         }`}
@@ -440,6 +547,16 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                     {canAssignOnSelectedDate && (
                                         <span className="bg-gray-100 group-hover:bg-purple-100 text-gray-500 group-hover:text-primary rounded-full w-5 h-5 flex items-center justify-center text-lg leading-none pb-0.5">+</span>
                                     )}
+                                </button>
+                                <button
+                                    onClick={openBulkTaskModal}
+                                    disabled={!canAssignOnSelectedDate}
+                                    className={`h-12 px-4 rounded-lg text-xs font-bold shadow-sm transition ${canAssignOnSelectedDate
+                                        ? 'bg-primary text-white hover:bg-purple-700'
+                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                        }`}
+                                >
+                                    Massal
                                 </button>
                             </div>
                             <div className="flex items-center gap-2 mb-1">
@@ -584,20 +701,36 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                             </div>
                                             <div className="flex-1">
                                                 <p className={`text-sm font-medium ${task.status === 'approved' ? 'text-gray-800' : 'text-gray-600'}`}>{task.title}</p>
-                                                {task.work_station?.name && (
-                                                    <p className="text-[10px] text-primary font-semibold capitalize mt-1">Kategori: {task.work_station.name}</p>
-                                                )}
+                                                <p className="text-[10px] text-primary font-semibold capitalize mt-1">Kategori: {task.work_station?.name || 'Umum'}</p>
+                                                <TaskStartStatus
+                                                    task={task}
+                                                    scheduleClassName="text-[10px] text-gray-400 mt-1"
+                                                    statusClassName="text-[10px] text-amber-500 font-semibold mt-1"
+                                                />
                                                 <p className="text-[10px] text-gray-400 mt-1">Tenggat: {new Date(task.due_at).toLocaleString('id-ID')}</p>
+                                                <p className="text-[10px] text-gray-400 mt-1 capitalize">
+                                                    Bobot: {task.weight_label || 'mudah'} ({task.weight_value || 2})
+                                                    {task.assignment_type && task.assignment_type !== 'individual' ? ` - ${task.assignment_type}` : ''}
+                                                </p>
                                                 {task.note && <p className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words mt-0.5">{task.note}</p>}
                                             </div>
                                             <div className="flex flex-col gap-2 items-center">
                                                 <button onClick={() => handleViewPhoto(task)} className="bg-primary text-white text-[10px] font-bold py-1.5 px-4 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center gap-1">
                                                     <Camera size={12} /> Foto
                                                 </button>
-                                                {/* Only allow deleting Crew's tasks if not approved */}
-                                                {(isToday(selectedDate) && !isTaskPastDue(task) && task.status !== 'approved') && (
+                                                {(!isTaskPastDue(task) && task.status !== 'approved') && (
                                                     <button onClick={() => handleDeleteTask(task.task_id)} className="text-red-400 hover:text-red-600 p-1 opacity-50 group-hover:opacity-100 transition">
                                                         <Trash2 size={14} />
+                                                    </button>
+                                                )}
+                                                {canEditTask(task) && (
+                                                    <button onClick={() => setEditingTask(task)} className="text-gray-400 hover:text-primary p-1 opacity-50 group-hover:opacity-100 transition" title="Edit tugas">
+                                                        <Edit3 size={14} />
+                                                    </button>
+                                                )}
+                                                {canEditBatchTask(task) && (
+                                                    <button onClick={() => openBatchEditor(task.assignment_batch)} className="text-gray-400 hover:text-primary p-1 opacity-50 group-hover:opacity-100 transition" title="Edit penugasan massal">
+                                                        <Edit3 size={14} />
                                                     </button>
                                                 )}
                                             </div>
@@ -768,7 +901,7 @@ export default function CrewDetail({ crew, onTaskChange }: CrewDetailProps) {
                                 task={previewTask}
                                 onClose={handleClosePreview}
                                 onDeleteProof={handleDeleteProof}
-                                readOnly={previewTask.status === 'approved' || new Date(previewTask.due_at) < new Date() || !isToday(selectedDate)}
+                                readOnly={previewTask.status === 'approved' || new Date(previewTask.due_at) < new Date() || isTaskNotStarted(previewTask) || !isToday(selectedDate)}
                             />
                         )
                     )}

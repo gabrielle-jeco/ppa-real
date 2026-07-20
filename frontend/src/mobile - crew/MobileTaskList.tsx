@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Check, ChevronDown } from 'lucide-react';
 import CrewLayout from './CrewLayout';
+import TaskStartStatus from '../general/TaskStartStatus';
 import { markNotificationSeen, notifyOnce, notifyUpcomingTask } from '../utils/browserNotifications';
 
 interface MobileTaskListProps {
@@ -155,7 +156,14 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                                                 <p className={`text-sm font-medium leading-tight mb-1 ${isCompleted ? 'text-gray-500' : 'text-gray-700'}`}>
                                                     {task.title}
                                                 </p>
+                                                <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
+                                                <TaskStartStatus
+                                                    task={task}
+                                                    scheduleClassName="text-[10px] text-gray-400 mb-0.5"
+                                                    statusClassName="text-[10px] text-amber-500 font-semibold mb-0.5"
+                                                />
                                                 <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                <p className="text-[10px] text-gray-400 mb-0.5 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
                                                 {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                             </div>
                                         </div>
