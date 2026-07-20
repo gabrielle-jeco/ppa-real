@@ -33,6 +33,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/supervisor/{id}/tasks', [App\Http\Controllers\TaskController::class, 'index']);
     Route::get('/crews/{id}/tasks', [App\Http\Controllers\TaskController::class, 'index']);
     Route::post('/tasks', [App\Http\Controllers\TaskController::class, 'store']);
+    Route::post('/tasks/bulk', [App\Http\Controllers\TaskController::class, 'bulkStore']);
+    Route::patch('/task-batches/{id}', [App\Http\Controllers\TaskController::class, 'updateBatch']);
+    Route::patch('/tasks/{id}', [App\Http\Controllers\TaskController::class, 'update']);
     Route::delete('/tasks/{id}', [App\Http\Controllers\TaskController::class, 'destroy']);
     Route::patch('/tasks/{id}/status', [App\Http\Controllers\TaskController::class, 'updateStatus']);
     Route::delete('/tasks/{id}/evidence', [App\Http\Controllers\TaskController::class, 'removeEvidence']);

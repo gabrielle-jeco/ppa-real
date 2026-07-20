@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Calendar, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import TaskStartStatus from '../general/TaskStartStatus';
 
 interface MobileCrewTaskPreviewProps {
     task: any;
@@ -110,6 +111,11 @@ export default function MobileCrewTaskPreview({
                     {/* Bottom Info on Image */}
                     <div className="absolute bottom-0 left-0 right-0 p-6 text-white z-10">
                         <h2 className="text-xl font-bold leading-tight mb-1">{task.title}</h2>
+                        <TaskStartStatus
+                            task={task}
+                            scheduleClassName="text-xs text-white/80 mb-0.5"
+                            statusClassName="text-xs text-amber-300 font-bold mb-1"
+                        />
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 text-white/80 text-xs">
                                 <span className="flex items-center gap-1">

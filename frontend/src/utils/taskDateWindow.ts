@@ -6,6 +6,26 @@ const startOfDay = (date: Date) => {
 
 export const toDateInputValue = (date: Date) => date.toLocaleDateString('en-CA');
 
+export const toDateFieldValue = (value: unknown, fallback = toDateInputValue(new Date())) => {
+    if (!value) return fallback;
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return value.slice(0, 10);
+    }
+
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value as string | number);
+    return Number.isNaN(date.getTime()) ? fallback : toDateInputValue(date);
+};
+
+export const toTimeFieldValue = (value: unknown, fallback = '') => {
+    if (!value) return fallback;
+    if (typeof value === 'string' && /^\d{2}:\d{2}/.test(value)) {
+        return value.slice(0, 5);
+    }
+
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value as string | number);
+    return Number.isNaN(date.getTime()) ? fallback : date.toTimeString().slice(0, 5);
+};
+
 export const getTaskWindowEndDate = (baseDate = new Date()) => {
     const base = startOfDay(baseDate);
     const cutoffMonth = base.getDate() <= 21 ? base.getMonth() : base.getMonth() + 1;

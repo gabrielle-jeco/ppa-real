@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Camera, ChevronDown } from 'lucide-react';
 import TaskPreview from '../general/TaskPreview';
+import TaskStartStatus from '../general/TaskStartStatus';
 import ManagerReviewForm from './ManagerReviewForm';
 import { getAttendanceColor as getAttendanceStatusColor, getAttendanceDay } from '../utils/attendanceCalendar';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
@@ -324,43 +325,54 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                     {viewMode === 'TASKS' ? (
                         <>
                             <div className="mb-4">
-                                <h2 className="font-bold text-gray-800 text-lg">Crew Task Monitoring</h2>
+                                <h2 className="font-bold text-gray-800 text-lg">Monitoring Pekerjaan Crew</h2>
                                 <p className="text-sm text-gray-400">
-                                    {selectedCrew ? `${selectedCrew.name} - ${selectedDate.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}` : 'Select a crew to view assigned tasks'}
+                                    {selectedCrew ? `${selectedCrew.name} - ${selectedDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}` : 'Pilih crew untuk melihat pekerjaan yang diberikan'}
                                 </p>
                             </div>
 
                             <div className="flex-1 overflow-y-auto pr-2 space-y-3">
                                 {!selectedCrew && (
-                                    <div className="text-center text-gray-400 py-10 bg-white rounded-2xl border border-gray-100">Select a crew to view assigned tasks.</div>
+                                    <div className="text-center text-gray-400 py-10 bg-white rounded-2xl border border-gray-100">Pilih crew untuk melihat pekerjaan yang diberikan.</div>
                                 )}
                                 {selectedCrew && selectedTasks.length === 0 && (
-                                    <div className="text-center text-gray-400 py-10 bg-white rounded-2xl border border-gray-100">No tasks found for this crew and date.</div>
+                                    <div className="text-center text-gray-400 py-10 bg-white rounded-2xl border border-gray-100">Tidak ada pekerjaan untuk crew dan tanggal ini.</div>
                                 )}
                                 {selectedTasks.map((task: any) => {
                                     const beforeCount = (task.evidences || []).filter((evidence: any) => evidence.type === 'before').length;
                                     const afterCount = (task.evidences || []).filter((evidence: any) => evidence.type === 'after').length;
                                     const statusColor = ['approved', 'completed'].includes(task.status) ? 'text-green-600 bg-green-50' : 'text-gray-500 bg-gray-100';
+                                    const statusLabels: Record<string, string> = {
+                                        approved: 'Disetujui',
+                                        completed: 'Selesai',
+                                        pending: 'Menunggu',
+                                        submitted: 'Dikirim',
+                                    };
 
                                     return (
                                         <div key={task.task_id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition">
                                             <div className="flex items-start gap-3">
                                                 <div className={`mt-0.5 px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${statusColor}`}>
-                                                    {task.status}
+                                                    {statusLabels[task.status] || task.status}
                                                 </div>
                                                 <div className="flex-1">
                                                     <p className="text-sm font-semibold text-gray-700">{task.title}</p>
-                                                    <p className="text-[10px] text-gray-400 mt-1">Due: {new Date(task.due_at).toLocaleString()}</p>
-                                                    {task.work_station?.name && <p className="text-[10px] text-gray-500 mt-0.5">Category: {task.work_station.name}</p>}
+                                                    <TaskStartStatus
+                                                        task={task}
+                                                        scheduleClassName="text-[10px] text-gray-400 mt-1"
+                                                        statusClassName="text-[10px] text-amber-500 font-semibold mt-0.5"
+                                                    />
+                                                    <p className="text-[10px] text-gray-400 mt-1">Tenggat: {new Date(task.due_at).toLocaleString('id-ID')}</p>
+                                                    {task.work_station?.name && <p className="text-[10px] text-gray-500 mt-0.5">Kategori: {task.work_station.name}</p>}
                                                     {task.note && <p className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words mt-0.5">{task.note}</p>}
-                                                    <p className="text-[10px] text-gray-400 mt-2">Evidence: before {beforeCount}, after {afterCount}</p>
+                                                    <p className="text-[10px] text-gray-400 mt-2">Bukti: sebelum {beforeCount}, sesudah {afterCount}</p>
                                                 </div>
                                                 <button
                                                     onClick={() => setPreviewTask(task)}
                                                     className="bg-primary text-white text-[10px] font-bold py-1.5 px-4 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center gap-1"
                                                 >
                                                     <Camera size={12} />
-                                                    Evidence
+                                                    Bukti
                                                 </button>
                                             </div>
                                         </div>

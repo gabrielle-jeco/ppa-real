@@ -59,7 +59,7 @@ export default function SupervisorDashboard() {
 
             <div className="flex-1 overflow-hidden relative flex flex-col min-h-0">
                 {selectedCrew ? (
-                    <CrewDetail crew={selectedCrew} onTaskChange={fetchDashboardData} />
+                    <CrewDetail crew={selectedCrew} crews={dashboardData.crews || []} onTaskChange={fetchDashboardData} />
                 ) : (
                     <div className="h-full flex items-center justify-center text-gray-400">Pilih karyawan untuk melihat detail.</div>
                 )}

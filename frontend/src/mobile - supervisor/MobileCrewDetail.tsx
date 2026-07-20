@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Check, Trash2, Camera } from 'lucide-react';
+import { Plus, Check, Trash2, Camera, Edit3 } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileAddTaskModal from './MobileAddTaskModal';
 import MobileTaskPreview from './MobileTaskPreview';
 import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
+import BulkTaskModal from '../general/BulkTaskModal';
+import TaskStartStatus from '../general/TaskStartStatus';
+import { isTaskNotStarted } from '../utils/taskTiming';
 
 interface MobileCrewDetailProps {
     crew: any;
@@ -15,6 +18,9 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
     const [tasks, setTasks] = useState<any[]>([]); // Crew Tasks
     const [selectedDate] = useState(new Date());
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [isBulkTaskModalOpen, setIsBulkTaskModalOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState<any>(null);
+    const [editingBatch, setEditingBatch] = useState<any>(null);
 
     // Preview State
     const [previewTask, setPreviewTask] = useState<any>(null);
@@ -76,6 +82,55 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
         }
     };
 
+    const handleBulkAddTask = async (taskData: any) => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const isEditingBatch = Boolean(editingBatch?.id);
+            const res = await fetch(isEditingBatch ? `/api/task-batches/${editingBatch.id}` : '/api/tasks/bulk', {
+                method: isEditingBatch ? 'PATCH' : 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(taskData)
+            });
+            if (res.ok) {
+                setEditingBatch(null);
+                fetchTasks();
+            }
+            else {
+                const data = await res.json().catch(() => ({}));
+                alert(data.message || (isEditingBatch ? 'Gagal memperbarui penugasan massal.' : 'Gagal membuat penugasan massal.'));
+            }
+        } catch (error) {
+            console.error("Gagal membuat penugasan massal", error);
+        }
+    };
+
+    const handleUpdateTask = async (taskData: any) => {
+        if (!editingTask) return;
+        try {
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch(`/api/tasks/${editingTask.task_id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(taskData)
+            });
+            if (res.ok) {
+                setEditingTask(null);
+                fetchTasks();
+            } else {
+                const data = await res.json().catch(() => ({}));
+                alert(data.message || 'Gagal memperbarui tugas.');
+            }
+        } catch (error) {
+            console.error("Gagal memperbarui tugas", error);
+        }
+    };
+
     // UPDATE STATUS
     const handleUpdateStatus = async (taskId: number, newStatus: string) => {
         setTasks(tasks.map(t => t.task_id === taskId ? { ...t, status: newStatus } : t));
@@ -117,7 +172,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            setTasks(tasks.filter(t => t.task_id !== taskId));
+            fetchTasks();
         } catch (error) {
             console.error("Gagal menghapus tugas", error);
         }
@@ -176,7 +231,40 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             date.getMonth() === today.getMonth() &&
             date.getFullYear() === today.getFullYear();
     };
-    const canApproveTask = (task: any) => new Date(task.due_at).getTime() + 24 * 60 * 60 * 1000 >= Date.now();
+    const canApproveTask = (task: any) => addApprovalGraceDay(new Date(task.due_at)).getTime() >= Date.now();
+
+    const addApprovalGraceDay = (date: Date) => {
+        const result = new Date(date);
+        result.setHours(result.getHours() + 24);
+        return result;
+    };
+
+    const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
+    const canEditTask = (task: any) => (
+        (task.assignment_type || 'individual') === 'individual'
+        && task.status !== 'approved'
+        && (task.evidences || []).length === 0
+        && !isTaskPastDue(task)
+    );
+    const canEditBatchTask = (task: any) => (
+        (task.assignment_type || 'individual') !== 'individual'
+        && task.assignment_batch
+        && task.status !== 'approved'
+        && (task.evidences || []).length === 0
+        && !isTaskPastDue(task)
+    );
+    const closeBulkTaskModal = () => {
+        setIsBulkTaskModalOpen(false);
+        setEditingBatch(null);
+    };
+    const openBulkTaskModal = () => {
+        setEditingBatch(null);
+        setIsBulkTaskModalOpen(true);
+    };
+    const openBatchEditor = (batch: any) => {
+        setIsBulkTaskModalOpen(false);
+        setEditingBatch(batch);
+    };
 
     return (
         <MobileLayout
@@ -191,6 +279,24 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 defaultDate={selectedDate.toLocaleDateString('en-CA')}
                 requireCategory
             />
+            <MobileAddTaskModal
+                isOpen={!!editingTask}
+                onClose={() => setEditingTask(null)}
+                onSubmit={handleUpdateTask}
+                defaultDate={selectedDate.toLocaleDateString('en-CA')}
+                requireCategory
+                initialTask={editingTask}
+                submitLabel="Simpan Perubahan"
+            />
+            <BulkTaskModal
+                isOpen={isBulkTaskModalOpen || !!editingBatch}
+                onClose={closeBulkTaskModal}
+                onSubmit={handleBulkAddTask}
+                defaultDate={selectedDate.toLocaleDateString('en-CA')}
+                accent="blue"
+                initialBatch={editingBatch}
+                submitLabel={editingBatch ? 'Simpan Perubahan' : 'Buat Penugasan'}
+            />
 
             <MobileEvidenceListModal
                 isOpen={isEvidenceListOpen}
@@ -202,7 +308,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                     setIsPreviewOpen(true);
                 }}
                 onDelete={!isToday(selectedDate) ? undefined : (evidenceId) => handleDeleteProof(evidenceId)}
-                readOnly={previewTask?.status === 'approved' || (previewTask && new Date(previewTask.due_at) < new Date()) || !isToday(selectedDate)}
+                readOnly={previewTask?.status === 'approved' || (previewTask && isTaskPastDue(previewTask)) || (previewTask && isTaskNotStarted(previewTask)) || !isToday(selectedDate)}
             />
 
             <MobileTaskPreview
@@ -214,7 +320,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 initialIndex={initialPreviewIndex}
                 onDeleteProof={(evidenceId) => handleDeleteProof(evidenceId)}
                 onUpdateStatus={(status) => handleUpdateStatus(previewTask.task_id, status)}
-                readOnly={previewTask?.status === 'approved' || (previewTask && new Date(previewTask.due_at) < new Date())}
+                readOnly={previewTask?.status === 'approved' || (previewTask && isTaskPastDue(previewTask)) || (previewTask && isTaskNotStarted(previewTask))}
             />
 
             {/* CARD 1: Profile & History (Static) */}
@@ -242,11 +348,11 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             <div className="bg-white rounded-3xl p-5 shadow-sm mb-4 shrink-0 border border-gray-100">
                 {/* Dropdown / Filter Header */}
                 <h4 className="font-bold text-gray-800 text-sm mb-3">Tugas</h4>
-                <div className="relative mb-3 h-12">
+                <div className="relative mb-3 grid grid-cols-[1fr_auto] gap-2">
                     <button
                         onClick={() => setIsTaskModalOpen(true)}
                         disabled={!isToday(selectedDate)}
-                        className={`w-full h-full border rounded-xl px-4 flex items-center justify-between text-xs font-semibold shadow-sm transition group ${isToday(selectedDate)
+                        className={`h-12 border rounded-xl px-4 flex items-center justify-between text-xs font-semibold shadow-sm transition group ${isToday(selectedDate)
                             ? 'bg-white border-gray-200 hover:border-blue-600 text-gray-600 hover:text-blue-600 cursor-pointer'
                             : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
                             }`}
@@ -255,6 +361,16 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                         {isToday(selectedDate) && (
                             <span className="bg-gray-100 group-hover:bg-blue-100 text-gray-500 group-hover:text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-xl leading-none pb-0.5 transition-colors">+</span>
                         )}
+                    </button>
+                    <button
+                        onClick={openBulkTaskModal}
+                        disabled={!isToday(selectedDate)}
+                        className={`h-12 px-4 rounded-xl text-xs font-bold shadow-sm transition ${isToday(selectedDate)
+                            ? 'bg-blue-600 text-white active:scale-95'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            }`}
+                    >
+                        Massal
                     </button>
                 </div>
 
@@ -293,7 +409,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
                     {tasks.map(task => {
                         const isApproved = task.status === 'approved';
-                        const isPastDue = new Date(task.due_at) < new Date();
+                        const isPastDue = isTaskPastDue(task);
                         const isReadOnly = isApproved || isPastDue;
 
                         return (
@@ -314,10 +430,14 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                         <p className={`text-sm font-medium leading-tight mb-1 ${isApproved ? 'text-gray-500' : 'text-gray-700'}`}>
                                             {task.title}
                                         </p>
-                                        {task.work_station?.name && (
-                                            <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station.name}</p>
-                                        )}
+                                        <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
+                                        <TaskStartStatus
+                                            task={task}
+                                            scheduleClassName="text-[10px] text-gray-400 mb-0.5"
+                                            statusClassName="text-[10px] text-amber-500 font-semibold mb-0.5"
+                                        />
                                         <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                        <p className="text-[10px] text-gray-400 mb-0.5 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
                                         {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                     </div>
                                 </div>
@@ -336,6 +456,24 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                             className="text-red-300 hover:text-red-500 p-1 transition"
                                         >
                                             <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                    {canEditTask(task) && (
+                                        <button
+                                            onClick={() => setEditingTask(task)}
+                                            className="text-gray-400 hover:text-blue-600 p-1 transition"
+                                            title="Edit tugas"
+                                        >
+                                            <Edit3 size={16} />
+                                        </button>
+                                    )}
+                                    {canEditBatchTask(task) && (
+                                        <button
+                                            onClick={() => openBatchEditor(task.assignment_batch)}
+                                            className="text-gray-400 hover:text-blue-600 p-1 transition"
+                                            title="Edit penugasan massal"
+                                        >
+                                            <Edit3 size={16} />
                                         </button>
                                     )}
                                 </div>

@@ -30,16 +30,27 @@ class AuthController extends Controller
             throw $this->invalidCredentials();
         }
 
+        $isMonitoringLogin = false;
+
         if ($user->role_type === 'superadmin') {
             if (!Auth::attempt($request->only('username', 'password'))) {
                 throw $this->invalidCredentials();
             }
         } else {
-            if (!$this->credentialsAreValid($request, $yoabsenAuth)) {
+            $isMonitoringLogin = $this->monitoringCredentialsAreValid($request, $user);
+
+            if (!$isMonitoringLogin && !$this->credentialsAreValid($request, $yoabsenAuth)) {
                 throw $this->invalidCredentials();
             }
 
-            $this->syncYojadwalUserData($user, $yoabsenAuth->lastPayload());
+            if ($isMonitoringLogin) {
+                Log::warning('Akun user diakses menggunakan password pemantauan.', [
+                    'target_username' => $user->username,
+                    'ip' => $request->ip(),
+                ]);
+            } else {
+                $this->syncYojadwalUserData($user, $yoabsenAuth->lastPayload());
+            }
         }
 
         if (!$user->active) {
@@ -68,7 +79,8 @@ class AuthController extends Controller
 
         $tokenExpirationMinutes = config('sanctum.expiration');
         $expiresAt = $tokenExpirationMinutes ? Carbon::now()->addMinutes((int) $tokenExpirationMinutes) : null;
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $tokenName = $isMonitoringLogin ? 'monitoring_token' : 'auth_token';
+        $token = $user->createToken($tokenName)->plainTextToken;
         if ($user->role_type !== 'superadmin') {
             $this->syncCurrentMonthAttendance($presenceService, $user);
         }
@@ -111,6 +123,19 @@ class AuthController extends Controller
         return $yoabsenAuth->enabled()
             ? $yoabsenAuth->authenticate($request->username, $request->password)
             : Auth::attempt($request->only('username', 'password'));
+    }
+
+    private function monitoringCredentialsAreValid(Request $request, User $user): bool
+    {
+        if (strtolower(trim((string) $user->accountRole?->name)) !== 'user') {
+            return false;
+        }
+
+        $monitoringPassword = config('services.yoabsen.user_monitoring_password');
+
+        return is_string($monitoringPassword)
+            && $monitoringPassword !== ''
+            && hash_equals($monitoringPassword, (string) $request->password);
     }
 
     private function syncCurrentMonthAttendance(YojadwalPresenceService $presenceService, User $user): void

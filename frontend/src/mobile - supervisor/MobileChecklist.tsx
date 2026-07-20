@@ -3,6 +3,7 @@ import { Camera, Check, ChevronDown } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileTaskPreview from './MobileTaskPreview';
 import MobileSupervisorTaskDetail from './MobileSupervisorTaskDetail';
+import TaskStartStatus from '../general/TaskStartStatus';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 
 interface MobileChecklistProps {
@@ -234,7 +235,14 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
 
                                         <div className="flex-1 min-w-0 pr-2">
                                             <p className="text-sm font-medium text-gray-700 leading-tight mb-1">{task.title}</p>
+                                            <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
+                                            <TaskStartStatus
+                                                task={task}
+                                                scheduleClassName="text-[10px] text-gray-400 mb-0.5"
+                                                statusClassName="text-[10px] text-amber-500 font-semibold mb-0.5"
+                                            />
                                             <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                            <p className="text-[10px] text-gray-400 mb-0.5 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
                                             {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                         </div>
                                     </div>

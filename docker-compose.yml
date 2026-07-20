@@ -33,13 +33,44 @@ services:
       YOJADWAL_PASSWORD_FIELD: password
       YOJADWAL_SUCCESS_FIELD: success
       YOJADWAL_ALLOW_LOCAL_SUPERADMIN_FALLBACK: "true"
-      WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-false}"
+      YODAILY_USER_MONITORING_PASSWORD: "${YODAILY_USER_MONITORING_PASSWORD:-}"
+      WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-}"
       WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-mailto:admin@yodaily.local}"
       WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
       WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"
       TZ: Asia/Jakarta
     depends_on:
       - db
+    networks:
+      - app-network
+
+  # Laravel Scheduler for background reminders and Web Push notifications
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: perf-app-scheduler
+    restart: unless-stopped
+    working_dir: /var/www
+    entrypoint: ["php", "artisan", "schedule:work"]
+    command: ["--no-interaction"]
+    volumes:
+      - ./backend:/var/www
+      - backend-vendor:/var/www/vendor
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: performance_app
+      DB_USERNAME: sail
+      DB_PASSWORD: password
+      WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-}"
+      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-mailto:admin@yodaily.local}"
+      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
+      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"
+      TZ: Asia/Jakarta
+    depends_on:
+      - backend
     networks:
       - app-network
 

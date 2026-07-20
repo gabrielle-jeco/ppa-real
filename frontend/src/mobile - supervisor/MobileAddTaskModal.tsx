@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Check } from 'lucide-react';
-import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateInputValue } from '../utils/taskDateWindow';
+import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
 
 interface MobileAddTaskModalProps {
     isOpen: boolean;
@@ -8,18 +8,21 @@ interface MobileAddTaskModalProps {
     onSubmit: (task: any) => void;
     defaultDate?: string;
     requireCategory?: boolean;
+    initialTask?: any;
+    submitLabel?: string;
 }
 
-export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false }: MobileAddTaskModalProps) {
-    const formatCurrentTime = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false, initialTask, submitLabel = 'Buat Pekerjaan' }: MobileAddTaskModalProps) {
+    const initializedKeyRef = useRef<string | null>(null);
     const [title, setTitle] = useState('');
     const [date, setDate] = useState(defaultDate || '');
-    const [time, setTime] = useState('');
+    const [startTime, setStartTime] = useState('');
+    const [dueTime, setDueTime] = useState('');
     const [note, setNote] = useState('');
     const [workStationId, setWorkStationId] = useState('');
+    const [weightLabel, setWeightLabel] = useState('mudah');
     const [workStations, setWorkStations] = useState<any[]>([]);
     const [animateIn, setAnimateIn] = useState(false);
-    const [currentTime, setCurrentTime] = useState(formatCurrentTime);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
     const minTaskTime = date === minTaskDate
@@ -27,23 +30,30 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
         : undefined;
 
     useEffect(() => {
+        const modalKey = initialTask?.id ? `edit:${initialTask.id}` : `create:${defaultDate || ''}`;
         if (isOpen) {
             setAnimateIn(true);
-            if (defaultDate) setDate(defaultDate);
+            if (initializedKeyRef.current === modalKey) return;
+            initializedKeyRef.current = modalKey;
+            if (initialTask) {
+                setTitle(initialTask.title || '');
+                setDate(toDateFieldValue(initialTask.due_at, defaultDate || ''));
+                setStartTime(toTimeFieldValue(initialTask.start_at, toTimeFieldValue(initialTask.due_at, new Date().toTimeString().slice(0, 5))));
+                setDueTime(toTimeFieldValue(initialTask.due_at));
+                setNote(initialTask.note || initialTask.description || '');
+                setWorkStationId(initialTask.work_station_id ? String(initialTask.work_station_id) : '');
+                setWeightLabel(initialTask.weight_label || 'mudah');
+            } else {
+                if (defaultDate) setDate(defaultDate);
+                setStartTime(new Date().toTimeString().slice(0, 5));
+                setDueTime('');
+                setWeightLabel('mudah');
+            }
         } else {
+            initializedKeyRef.current = null;
             setAnimateIn(false);
         }
-    }, [isOpen, defaultDate]);
-
-    useEffect(() => {
-        if (!isOpen) return;
-
-        const updateTime = () => setCurrentTime(formatCurrentTime());
-        updateTime();
-        const timer = window.setInterval(updateTime, 30000);
-
-        return () => window.clearInterval(timer);
-    }, [isOpen]);
+    }, [isOpen, defaultDate, initialTask]);
 
     useEffect(() => {
         if (!isOpen || !requireCategory) return;
@@ -65,7 +75,17 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const dueAt = `${date} ${time}:00`;
+        const now = new Date();
+        let effectiveStartTime = startTime;
+        let startAtDate = new Date(`${date}T${effectiveStartTime}:00`);
+        if (date === toDateInputValue(now) && startAtDate < now) {
+            effectiveStartTime = now.toTimeString().slice(0, 5);
+            startAtDate = new Date(`${date}T${effectiveStartTime}:00`);
+            setStartTime(effectiveStartTime);
+        }
+
+        const startAt = `${date} ${effectiveStartTime}:00`;
+        const dueAt = `${date} ${dueTime}:00`;
         const selectedTaskDate = new Date(`${date}T00:00:00`);
         if (isBeforeToday(selectedTaskDate) || isAfterTaskWindow(selectedTaskDate)) {
             alert('Tanggal pekerjaan di luar periode penugasan yang diizinkan.');
@@ -75,9 +95,15 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
             alert('Tenggat pekerjaan tidak boleh lebih awal dari jam saat ini.');
             return;
         }
+        if (new Date(dueAt.replace(' ', 'T')) < startAtDate) {
+            alert('Tenggat pekerjaan tidak boleh lebih awal dari jam mulai.');
+            return;
+        }
         onSubmit({
             title,
+            start_at: startAt,
             due_at: dueAt,
+            weight_label: weightLabel,
             note,
             ...(requireCategory ? { work_station_id: workStationId } : {}),
         });
@@ -91,9 +117,11 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
             // Reset form
             setTitle('');
             setDate(defaultDate || '');
-            setTime('');
+            setStartTime('');
+            setDueTime('');
             setNote('');
             setWorkStationId('');
+            setWeightLabel('mudah');
         }, 300); // Match transition duration
     };
 
@@ -116,10 +144,6 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                     >
                         <X size={20} />
                     </button>
-                </div>
-                <div className="mb-5 rounded-2xl bg-blue-50 px-4 py-3 text-xs font-bold text-blue-600 flex items-center justify-between">
-                    <span>Jam saat ini</span>
-                    <span>{currentTime}</span>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -173,17 +197,44 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
 
                         {/* Time Picker */}
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Jam</label>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Jam Mulai</label>
                             <div className="relative">
                                 <input
                                     type="time"
-                                    value={time}
-                                    onChange={(e) => setTime(e.target.value)}
+                                    value={startTime}
+                                    onChange={(e) => setStartTime(e.target.value)}
                                     min={minTaskTime}
                                     className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
                                     required
                                 />
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tenggat</label>
+                            <input
+                                type="time"
+                                value={dueTime}
+                                onChange={(e) => setDueTime(e.target.value)}
+                                min={date === minTaskDate ? startTime || minTaskTime : startTime}
+                                className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Bobot</label>
+                            <select
+                                value={weightLabel}
+                                onChange={(e) => setWeightLabel(e.target.value)}
+                                className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
+                                required
+                            >
+                                <option value="mudah">Mudah (2)</option>
+                                <option value="menengah">Menengah (6)</option>
+                                <option value="sulit">Sulit (10)</option>
+                            </select>
                         </div>
                     </div>
 
@@ -208,7 +259,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                             className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 active:scale-95 transition-transform flex items-center justify-center gap-2"
                         >
                             <Check size={20} />
-                            Buat Pekerjaan
+                            {submitLabel}
                         </button>
                     </div>
                 </form>

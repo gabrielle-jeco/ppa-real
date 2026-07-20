@@ -124,7 +124,10 @@ class AdminController extends Controller
         $this->authorizePermission('users_locations');
 
         $query = User::without(['jobLevel', 'locations', 'userLocations'])
-            ->whereHas('jobLevel', fn($q) => $q->where('visible_in_yodaily', true))
+            ->where(function ($q) {
+                $q->whereHas('jobLevel', fn($jobLevelQuery) => $jobLevelQuery->where('visible_in_yodaily', true))
+                    ->orWhereHas('userLocations');
+            })
             ->with([
                 'accountRole:id,name,description,permissions',
                 'jobLevel:id,position_code,name,grade,department',
@@ -164,7 +167,7 @@ class AdminController extends Controller
         $this->authorizePermission('app_roles');
 
         $query = UserLocation::with(['user.jobLevel', 'location'])
-            ->whereHas('user.jobLevel', fn($q) => $q->where('visible_in_yodaily', true));
+            ->whereHas('user');
 
         if ($request->filled('search')) {
             $search = strtolower($request->query('search'));
@@ -199,15 +202,11 @@ class AdminController extends Controller
         $this->authorizePermission('reporting_lines');
         
         $leaderRoles = $this->appJobLevelNames()->reject(fn($role) => $role === 'sc')->values();
-        $leaderUsernames = UserLocation::whereIn('job_level', $leaderRoles)->pluck('user_id');
-        
-        $leaders = User::where(function ($query) use ($leaderUsernames) {
-            $query->whereIn('username', $leaderUsernames)
-                ->orWhereHas('accountRole', function($q) {
-                    $q->where('name', 'admin');
-                });
-            })
-            ->whereHas('jobLevel', fn($q) => $q->where('visible_in_yodaily', true));
+
+        $leaders = User::where(function ($query) use ($leaderRoles) {
+            $query->whereHas('userLocations', fn($q) => $q->whereIn('job_level', $leaderRoles))
+                ->orWhereHas('accountRole', fn($q) => $q->where('name', 'admin'));
+        });
 
         if ($request->filled('store')) {
             $leaders->whereHas('locations', fn($q) => $q->where('locations.initial', $request->query('store')));
@@ -232,8 +231,8 @@ class AdminController extends Controller
     {
         $this->authorizePermission('reporting_lines');
 
-        $query = User::without(['jobLevel', 'locations', 'userLocations'])
-            ->whereHas('jobLevel', fn($q) => $q->where('visible_in_yodaily', true))
+        $query = User::without(['jobLevel'])
+            ->whereHas('userLocations')
             ->with(['jobLevel:id,position_code,name,grade,department'])
             ->orderBy('name');
 
@@ -261,8 +260,8 @@ class AdminController extends Controller
         $this->authorizePermission('reporting_lines');
         
         $query = ReportingLine::with(['leader.jobLevel', 'subordinate.jobLevel'])
-            ->whereHas('leader.jobLevel', fn($q) => $q->where('visible_in_yodaily', true))
-            ->whereHas('subordinate.jobLevel', fn($q) => $q->where('visible_in_yodaily', true))
+            ->whereHas('leader.userLocations')
+            ->whereHas('subordinate.userLocations')
             ->orderBy('leader_id')
             ->orderBy('subordinate_id');
             

@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Check, ChevronDown, Trash2 } from 'lucide-react';
+import { Camera, Check, ChevronDown, Edit3, Trash2 } from 'lucide-react';
 import MobileLayout from './MobileLayout';
+import MobileAddTaskModal from './MobileAddTaskModal';
 import MobileTaskPreview from './MobileTaskPreview';
 import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
+import BulkTaskModal from '../general/BulkTaskModal';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
+import TaskStartStatus from '../general/TaskStartStatus';
+import { isTaskNotStarted } from '../utils/taskTiming';
 
 interface MobileCrewHistoryProps {
     crew: any;
@@ -20,6 +24,8 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     const [previewTask, setPreviewTask] = useState<any>(null);
     const [isEvidenceListOpen, setIsEvidenceListOpen] = useState(false);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState<any>(null);
+    const [editingBatch, setEditingBatch] = useState<any>(null);
 
     const isFutureDate = (date: Date) => {
         return isAfterTaskWindow(date);
@@ -118,9 +124,65 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            setTasks(tasks.filter(t => t.task_id !== taskId));
+            fetchData(true);
         } catch (error) {
             console.error("Gagal menghapus tugas", error);
+        }
+    };
+
+    const handleUpdateTask = async (taskData: any) => {
+        if (!editingTask) return;
+
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch(`/api/tasks/${editingTask.task_id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(taskData)
+            });
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                alert(data.message || 'Gagal memperbarui tugas.');
+                return;
+            }
+
+            setEditingTask(null);
+            fetchData(true);
+        } catch (error) {
+            console.error('Gagal memperbarui tugas', error);
+            alert('Terjadi kesalahan saat memperbarui tugas.');
+        }
+    };
+
+    const handleUpdateBatch = async (taskData: any) => {
+        if (!editingBatch?.id) return;
+
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch(`/api/task-batches/${editingBatch.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(taskData)
+            });
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                alert(data.message || 'Gagal memperbarui penugasan massal.');
+                return;
+            }
+
+            setEditingBatch(null);
+            fetchData(true);
+        } catch (error) {
+            console.error('Gagal memperbarui penugasan massal', error);
+            alert('Terjadi kesalahan saat memperbarui penugasan massal.');
         }
     };
 
@@ -166,7 +228,26 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     };
 
     const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
-    const canApproveTask = (task: any) => new Date(task.due_at).getTime() + 24 * 60 * 60 * 1000 >= Date.now();
+    const canEditTask = (task: any) => (
+        (task.assignment_type || 'individual') === 'individual'
+        && task.status !== 'approved'
+        && (task.evidences || []).length === 0
+        && !isTaskPastDue(task)
+    );
+    const canEditBatchTask = (task: any) => (
+        (task.assignment_type || 'individual') !== 'individual'
+        && task.assignment_batch
+        && task.status !== 'approved'
+        && (task.evidences || []).length === 0
+        && !isTaskPastDue(task)
+    );
+    const canApproveTask = (task: any) => addApprovalGraceDay(new Date(task.due_at)).getTime() >= Date.now();
+
+    const addApprovalGraceDay = (date: Date) => {
+        const result = new Date(date);
+        result.setHours(result.getHours() + 24);
+        return result;
+    };
 
     // Calendar Logic
     const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -229,6 +310,25 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
             onBack={onBack}
             allowScroll={false}
         >
+            <MobileAddTaskModal
+                isOpen={!!editingTask}
+                onClose={() => setEditingTask(null)}
+                onSubmit={handleUpdateTask}
+                defaultDate={selectedDate.toLocaleDateString('en-CA')}
+                requireCategory
+                initialTask={editingTask}
+                submitLabel="Simpan Perubahan"
+            />
+            <BulkTaskModal
+                isOpen={!!editingBatch}
+                onClose={() => setEditingBatch(null)}
+                onSubmit={handleUpdateBatch}
+                defaultDate={selectedDate.toLocaleDateString('en-CA')}
+                accent="blue"
+                initialBatch={editingBatch}
+                submitLabel="Simpan Perubahan"
+            />
+
             <MobileEvidenceListModal
                 isOpen={isEvidenceListOpen}
                 onClose={() => setIsEvidenceListOpen(false)}
@@ -239,7 +339,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                     setIsPreviewOpen(true);
                 }}
                 onDelete={!isToday(selectedDate) ? undefined : (evidenceId) => handleDeleteProof(evidenceId)}
-                readOnly={previewTask?.status === 'approved' || (previewTask && isTaskPastDue(previewTask)) || !isToday(selectedDate)}
+                readOnly={previewTask?.status === 'approved' || (previewTask && isTaskPastDue(previewTask)) || (previewTask && isTaskNotStarted(previewTask)) || !isToday(selectedDate)}
             />
 
             <MobileTaskPreview
@@ -251,7 +351,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 initialIndex={initialPreviewIndex}
                 onDeleteProof={(evidenceId) => handleDeleteProof(evidenceId)}
                 onUpdateStatus={(status) => handleUpdateStatus(previewTask?.task_id, status)}
-                readOnly={previewTask?.status === 'approved' || (previewTask && isTaskPastDue(previewTask)) || !isToday(selectedDate)}
+                readOnly={previewTask?.status === 'approved' || (previewTask && isTaskPastDue(previewTask)) || (previewTask && isTaskNotStarted(previewTask)) || !isToday(selectedDate)}
             />
 
             <div className="flex flex-col h-full">
@@ -393,7 +493,14 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                 </div>
                                                 <div className="flex-1 min-w-0 pr-2">
                                                     <p className={`font-bold text-sm line-clamp-1 mb-0.5 ${isApproved ? 'text-gray-500' : 'text-gray-800'}`}>{task.title}</p>
-                                                    <p className="text-[10px] text-gray-400">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                    <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
+                                                    <TaskStartStatus
+                                                        task={task}
+                                                        scheduleClassName="text-[10px] text-gray-400 mb-0.5"
+                                                        statusClassName="text-[10px] text-amber-500 font-semibold mb-0.5"
+                                                    />
+                                                    <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                    <p className="text-[10px] text-gray-400 mb-0.5 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
                                                     {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                                 </div>
                                             </div>
@@ -411,6 +518,24 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                         className="text-red-300 hover:text-red-500 p-1 transition"
                                                     >
                                                         <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                                {canEditTask(task) && (
+                                                    <button
+                                                        onClick={() => setEditingTask(task)}
+                                                        className="text-gray-400 hover:text-blue-600 p-1 transition"
+                                                        title="Edit tugas"
+                                                    >
+                                                        <Edit3 size={16} />
+                                                    </button>
+                                                )}
+                                                {canEditBatchTask(task) && (
+                                                    <button
+                                                        onClick={() => setEditingBatch(task.assignment_batch)}
+                                                        className="text-gray-400 hover:text-blue-600 p-1 transition"
+                                                        title="Edit penugasan massal"
+                                                    >
+                                                        <Edit3 size={16} />
                                                     </button>
                                                 )}
                                             </div>

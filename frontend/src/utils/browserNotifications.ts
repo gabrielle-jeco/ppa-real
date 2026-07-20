@@ -72,6 +72,7 @@ export async function registerPushSubscription() {
 }
 
 export function notifyUpcomingTask(task: any, prefix = 'crew') {
+    if (webPushPublicKey) return;
     if (!task?.task_id || task.status === 'approved') return;
 
     const dueAt = new Date(task.due_at);
@@ -89,11 +90,12 @@ export function notifyUpcomingTask(task: any, prefix = 'crew') {
 }
 
 export function notifyApprovalGrace(task: any) {
+    if (webPushPublicKey) return;
     if (!task?.task_id || task.status === 'approved') return;
 
     const dueAt = new Date(task.due_at);
     const now = Date.now();
-    const approvalEndsAt = dueAt.getTime() + 24 * 60 * 60 * 1000;
+    const approvalEndsAt = addApprovalGraceDay(dueAt).getTime();
 
     if (now <= dueAt.getTime() || now > approvalEndsAt) return;
 
@@ -105,4 +107,10 @@ export function notifyApprovalGrace(task: any) {
             tag: `approval-grace-${task.task_id}`,
         }
     );
+}
+
+function addApprovalGraceDay(date: Date) {
+    const result = new Date(date);
+    result.setHours(result.getHours() + 24);
+    return result;
 }

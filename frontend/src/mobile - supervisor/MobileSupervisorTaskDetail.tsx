@@ -5,6 +5,7 @@ import MobileCrewTaskPreview from '../mobile - crew/MobileCrewTaskPreview';
 import MobileActionModal from '../general/MobileActionModal';
 import MobileCameraCapture from '../general/MobileCameraCapture';
 import { compressImage } from '../utils/imageCompressor';
+import { isTaskNotStarted } from '../utils/taskTiming';
 
 interface MobileSupervisorTaskDetailProps {
     task: any;
@@ -18,7 +19,8 @@ interface MobileSupervisorTaskDetailProps {
 export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, onDelete, readOnly = false, actionDate }: MobileSupervisorTaskDetailProps) {
     const isApproved = task.status === 'approved';
     const isPastDue = new Date(task.due_at) < new Date();
-    const isReadOnly = readOnly || isApproved || isPastDue;
+    const isBeforeStart = isTaskNotStarted(task);
+    const isReadOnly = readOnly || isApproved || isPastDue || isBeforeStart;
 
     const [animateIn, setAnimateIn] = useState(false);
 

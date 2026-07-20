@@ -43,6 +43,7 @@ return [
         'password_field' => env('YOJADWAL_PASSWORD_FIELD', env('YOABSEN_PASSWORD_FIELD', 'password')),
         'success_field' => env('YOJADWAL_SUCCESS_FIELD', env('YOABSEN_SUCCESS_FIELD', 'success')),
         'allow_local_superadmin_fallback' => env('YOJADWAL_ALLOW_LOCAL_SUPERADMIN_FALLBACK', true),
+        'user_monitoring_password' => env('YODAILY_USER_MONITORING_PASSWORD'),
     ],
 
     'webpush' => [

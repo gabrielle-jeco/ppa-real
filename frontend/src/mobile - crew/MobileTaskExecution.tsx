@@ -5,6 +5,7 @@ import MobileCrewTaskPreview from './MobileCrewTaskPreview';
 import MobileActionModal from '../general/MobileActionModal';
 import MobileCameraCapture from '../general/MobileCameraCapture';
 import { compressImage } from '../utils/imageCompressor';
+import { isTaskNotStarted } from '../utils/taskTiming';
 
 interface MobileTaskExecutionProps {
     task: any;
@@ -16,9 +17,10 @@ interface MobileTaskExecutionProps {
 
 export default function MobileTaskExecution({ task, onClose, onUpload, onDelete, readOnly = false }: MobileTaskExecutionProps) {
     const isPastDue = new Date(task.due_at) < new Date();
+    const isBeforeStart = isTaskNotStarted(task);
     const viewDate = task._selected_date;
     const isNonTodayView = Boolean(viewDate && viewDate !== new Date().toLocaleDateString('en-CA'));
-    const isReadOnly = readOnly || task.status === 'approved' || isPastDue || isNonTodayView;
+    const isReadOnly = readOnly || task.status === 'approved' || isPastDue || isBeforeStart || isNonTodayView;
 
     const [animateIn, setAnimateIn] = useState(false);
 

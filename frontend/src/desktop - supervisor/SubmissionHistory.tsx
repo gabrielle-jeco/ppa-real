@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2, X } from 'lucide-react';
+import TaskStartStatus from '../general/TaskStartStatus';
 
 interface SubmissionHistoryProps {
     task: any;
@@ -24,6 +25,11 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
                 <div>
                     <h2 className="font-bold text-gray-800 text-lg">Riwayat Bukti</h2>
                     <p className="text-sm text-gray-400">{task.title}</p>
+                    <TaskStartStatus
+                        task={task}
+                        scheduleClassName="text-xs text-gray-400 mt-1"
+                        statusClassName="text-xs text-amber-500 font-semibold"
+                    />
                 </div>
                 <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition">
                     <X size={20} className="text-gray-500" />

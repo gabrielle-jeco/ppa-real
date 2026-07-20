@@ -11,6 +11,7 @@ class UserNotification extends Model
 
     protected $fillable = [
         'recipient_id',
+        'dedupe_key',
         'type',
         'title',
         'message',

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import TaskStartStatus from '../general/TaskStartStatus';
 import type { ReactNode } from 'react';
 import { Bell, CheckCircle, ChevronDown, Circle, ClipboardList, UserX, Star, CalendarDays } from 'lucide-react';
 
@@ -13,8 +14,9 @@ type SummaryData = {
         today_total_tasks: number;
     };
     top_performers: Array<{ id: string; name: string; completed_tasks: number; score: number }>;
-    pending_approvals: Array<{ id: number; crew_name: string; title: string; due_at?: string }>;
+    pending_approvals: Array<{ id: number; crew_name: string; title: string; start_at?: string; due_at?: string }>;
     attendance_monitor: Array<{ id: string; name: string; no_absen: number; telat: number; izin: number; sakit: number }>;
+    workload_monitor: Array<{ id: string; name: string; task_count: number; total_weight: number; average_weight: number }>;
 };
 
 type DashboardNotification = {
@@ -39,6 +41,7 @@ const emptySummary: SummaryData = {
     top_performers: [],
     pending_approvals: [],
     attendance_monitor: [],
+    workload_monitor: [],
 };
 
 export default function SupervisorSummaryDashboard() {
@@ -164,6 +167,32 @@ export default function SupervisorSummaryDashboard() {
                         </div>
 
                         <div className="grid grid-cols-1 2xl:grid-cols-3 gap-6">
+                            <DashboardPanel title="Beban Penugasan Tim" accent="border-primary">
+                                <p className="text-[11px] font-semibold text-red-500 mb-4">
+                                    Monitoring bobot pekerjaan berdasarkan tingkat kesulitan tugas yang diberikan hari ini.
+                                </p>
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-gray-200 text-gray-800">
+                                            <th className="px-4 py-2 text-sm">Nama</th>
+                                            <th className="px-2 py-2 text-center text-sm">Tugas</th>
+                                            <th className="px-2 py-2 text-right text-sm">Bobot</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {summary.workload_monitor.length === 0 ? (
+                                            <tr><td className="px-4 py-6 text-sm text-gray-400" colSpan={3}>Belum ada data bobot.</td></tr>
+                                        ) : summary.workload_monitor.slice(0, 5).map((crew, index) => (
+                                            <tr key={crew.id} className="font-bold text-gray-800">
+                                                <td className="px-1 py-2">{index + 1}. {crew.name}</td>
+                                                <td className="px-2 py-2 text-center">{crew.task_count}</td>
+                                                <td className="px-2 py-2 text-right">{crew.total_weight}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </DashboardPanel>
+
                             <DashboardPanel title="Performa Terbaik Tim" accent="border-primary">
                                 <p className="text-[11px] font-semibold text-red-500 mb-4">
                                     Daftar berdasarkan jumlah pekerjaan yang telah diselesaikan dan disetujui supervisor.
@@ -197,7 +226,12 @@ export default function SupervisorSummaryDashboard() {
                                         <p className="text-sm text-gray-400">Tidak ada pekerjaan yang menunggu persetujuan.</p>
                                     ) : summary.pending_approvals.map((task, index) => (
                                         <div key={task.id} className="text-base font-black text-gray-800 leading-snug">
-                                            {index + 1}. {task.crew_name} - {task.title}
+                                            <p>{index + 1}. {task.crew_name} - {task.title}</p>
+                                            <TaskStartStatus
+                                                task={task}
+                                                scheduleClassName="mt-1 text-[11px] font-semibold text-gray-400"
+                                                statusClassName="text-[11px] font-bold text-amber-500"
+                                            />
                                         </div>
                                     ))}
                                 </div>
