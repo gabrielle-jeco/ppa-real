@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Check } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
+import useModalTransition from '../utils/useModalTransition';
 
 interface MobileAddTaskModalProps {
     isOpen: boolean;
@@ -22,7 +24,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
     const [workStationId, setWorkStationId] = useState('');
     const [weightLabel, setWeightLabel] = useState('mudah');
     const [workStations, setWorkStations] = useState<any[]>([]);
-    const [animateIn, setAnimateIn] = useState(false);
+    const { shouldRender, animateIn, contentRef } = useModalTransition(isOpen);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
     const minTaskTime = date === minTaskDate
@@ -32,7 +34,6 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
     useEffect(() => {
         const modalKey = initialTask?.id ? `edit:${initialTask.id}` : `create:${defaultDate || ''}`;
         if (isOpen) {
-            setAnimateIn(true);
             if (initializedKeyRef.current === modalKey) return;
             initializedKeyRef.current = modalKey;
             if (initialTask) {
@@ -51,7 +52,17 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
             }
         } else {
             initializedKeyRef.current = null;
-            setAnimateIn(false);
+            const resetTimer = window.setTimeout(() => {
+                setTitle('');
+                setDate(defaultDate || '');
+                setStartTime('');
+                setDueTime('');
+                setNote('');
+                setWorkStationId('');
+                setWeightLabel('mudah');
+            }, 300);
+
+            return () => window.clearTimeout(resetTimer);
         }
     }, [isOpen, defaultDate, initialTask]);
 
@@ -71,7 +82,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
         fetchWorkStations();
     }, [isOpen, requireCategory]);
 
-    if (!isOpen) return null;
+    if (!shouldRender) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -111,25 +122,16 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
     };
 
     const handleClose = () => {
-        setAnimateIn(false);
-        setTimeout(() => {
-            onClose();
-            // Reset form
-            setTitle('');
-            setDate(defaultDate || '');
-            setStartTime('');
-            setDueTime('');
-            setNote('');
-            setWorkStationId('');
-            setWeightLabel('mudah');
-        }, 300); // Match transition duration
+        initializedKeyRef.current = null;
+        onClose();
     };
 
-    return (
-        <div className={`fixed inset-0 z-50 flex items-end justify-center sm:items-center p-0 sm:p-4 transition-colors duration-300 ${animateIn ? 'bg-black/50 backdrop-blur-[2px]' : 'bg-black/0 pointer-events-none'}`}>
+    return createPortal(
+        <div className={`fixed inset-0 z-[30000] flex items-end justify-center sm:items-center p-0 sm:p-4 transition-colors duration-300 ${animateIn ? 'bg-black/50 backdrop-blur-[2px]' : 'bg-black/0 pointer-events-none'}`}>
             {/* Modal/Sheet Content */}
             <div
-                className={`bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative transition-transform duration-300 ease-out transform ${animateIn ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-full opacity-0 scale-95'
+                ref={contentRef}
+                className={`bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative transition-all duration-300 ease-out transform ${animateIn ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-full opacity-0 sm:translate-y-10 sm:scale-95'
                     }`}
                 onClick={(e) => e.stopPropagation()}
             >
@@ -264,6 +266,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

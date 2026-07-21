@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import TaskStartStatus from '../general/TaskStartStatus';
 import type { ReactNode } from 'react';
-import { Bell, CheckCircle, ChevronDown, Circle, ClipboardList, UserX, Star, CalendarDays } from 'lucide-react';
+import { ChevronDown, ClipboardList, UserX, Star, CalendarDays } from 'lucide-react';
 
 type SummaryData = {
     date: string;
@@ -17,15 +17,6 @@ type SummaryData = {
     pending_approvals: Array<{ id: number; crew_name: string; title: string; start_at?: string; due_at?: string }>;
     attendance_monitor: Array<{ id: string; name: string; no_absen: number; telat: number; izin: number; sakit: number }>;
     workload_monitor: Array<{ id: string; name: string; task_count: number; total_weight: number; average_weight: number }>;
-};
-
-type DashboardNotification = {
-    id: number;
-    type: string;
-    title: string;
-    message: string;
-    description?: string;
-    unread: boolean;
 };
 
 const emptySummary: SummaryData = {
@@ -46,7 +37,6 @@ const emptySummary: SummaryData = {
 
 export default function SupervisorSummaryDashboard() {
     const [summary, setSummary] = useState<SummaryData>(emptySummary);
-    const [notifications, setNotifications] = useState<DashboardNotification[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -71,44 +61,7 @@ export default function SupervisorSummaryDashboard() {
         };
 
         fetchSummary();
-        fetchNotifications();
     }, []);
-
-    const fetchNotifications = async () => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            const response = await fetch('/api/notifications', {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: 'application/json',
-                },
-            });
-            if (response.ok) {
-                const payload = await response.json();
-                setNotifications(payload.notifications || []);
-            }
-        } catch (error) {
-            console.error('Gagal mengambil notifikasi', error);
-        }
-    };
-
-    const markAllRead = async () => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            const response = await fetch('/api/notifications/read-all', {
-                method: 'PATCH',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: 'application/json',
-                },
-            });
-            if (response.ok) {
-                setNotifications((current) => current.map((notification) => ({ ...notification, unread: false })));
-            }
-        } catch (error) {
-            console.error('Gagal menandai notifikasi', error);
-        }
-    };
 
     return (
         <div className="h-full bg-gray-50 flex overflow-hidden">
@@ -166,7 +119,7 @@ export default function SupervisorSummaryDashboard() {
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 2xl:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-4 gap-4">
                             <DashboardPanel title="Beban Penugasan Tim" accent="border-primary">
                                 <p className="text-[11px] font-semibold text-red-500 mb-4">
                                     Monitoring bobot pekerjaan berdasarkan tingkat kesulitan tugas yang diberikan hari ini.
@@ -271,38 +224,6 @@ export default function SupervisorSummaryDashboard() {
                 )}
             </section>
 
-            <aside className="w-96 bg-white border-l border-gray-100 px-8 py-10 overflow-y-auto">
-                <div className="flex items-center justify-between mb-10">
-                    <h2 className="text-2xl font-black text-gray-900">Notifikasi</h2>
-                    <button onClick={markAllRead} className="text-xs font-bold text-blue-600 hover:text-blue-700">
-                        Tandai Semua Dibaca
-                    </button>
-                </div>
-
-                <div className="space-y-6">
-                    {notifications.length === 0 && (
-                        <p className="text-sm text-gray-400">Belum ada notifikasi.</p>
-                    )}
-
-                    {notifications.map((notification) => (
-                        <div key={notification.id} className="flex gap-4">
-                            <div className="mt-1">
-                                <CheckCircle size={34} fill="currentColor" className="text-green-600" />
-                            </div>
-                            <div className="flex-1">
-                                <div className="flex items-center justify-between gap-3">
-                                    <h3 className="font-black text-gray-900">{notification.title}</h3>
-                                    {notification.unread ? <Circle size={11} className="fill-blue-600 text-blue-600" /> : <Bell size={14} className="text-gray-300" />}
-                                </div>
-                                <p className="mt-3 text-xs font-bold text-gray-700 leading-5">{notification.message}</p>
-                                {notification.description && (
-                                    <p className="mt-3 text-xs font-semibold text-gray-500 leading-5">{notification.description}</p>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </aside>
         </div>
     );
 }

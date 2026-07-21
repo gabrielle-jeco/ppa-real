@@ -7,6 +7,7 @@ import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
 import BulkTaskModal from '../general/BulkTaskModal';
 import TaskStartStatus from '../general/TaskStartStatus';
+import MobileDraggableSheet from '../general/MobileDraggableSheet';
 import { isTaskNotStarted } from '../utils/taskTiming';
 
 interface MobileCrewDetailProps {
@@ -100,10 +101,10 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             }
             else {
                 const data = await res.json().catch(() => ({}));
-                alert(data.message || (isEditingBatch ? 'Gagal memperbarui penugasan massal.' : 'Gagal membuat penugasan massal.'));
+                alert(data.message || (isEditingBatch ? 'Gagal memperbarui Bulk Assignment.' : 'Gagal membuat Bulk Assignment.'));
             }
         } catch (error) {
-            console.error("Gagal membuat penugasan massal", error);
+            console.error("Gagal membuat Bulk Assignment", error);
         }
     };
 
@@ -294,6 +295,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 onSubmit={handleBulkAddTask}
                 defaultDate={selectedDate.toLocaleDateString('en-CA')}
                 accent="blue"
+                mobileSheet
                 initialBatch={editingBatch}
                 submitLabel={editingBatch ? 'Simpan Perubahan' : 'Buat Penugasan'}
             />
@@ -326,7 +328,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             {/* CARD 1: Profile & History (Static) */}
             <div className="bg-white rounded-3xl p-5 shadow-sm mb-4 flex justify-between items-center shrink-0">
                 <p className="text-gray-600 font-medium text-sm">
-                    Peran sebagai <span className="underline decoration-gray-400">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : 'Crew'}</span> hari ini
+                    Role sebagai <span className="underline decoration-gray-400">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : 'Crew'}</span> hari ini
                 </p>
                 <div className="flex gap-2">
                     <button
@@ -370,7 +372,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                             : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                             }`}
                     >
-                        Massal
+                        Bulk Assignment
                     </button>
                 </div>
 
@@ -392,12 +394,10 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             </div>
 
             {/* CARD 3: Task List (Scrollable) */}
-            <div className="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.03)] flex-1 flex flex-col min-h-0 relative -mx-2 px-2 pt-2">
-
-                {/* Handle Bar Indicator */}
-                <div className="flex justify-center mb-4 pt-3 shrink-0">
-                    <div className="w-12 h-1.5 bg-blue-500/100 rounded-full"></div>
-                </div>
+            <MobileDraggableSheet
+                className="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.03)] flex-1 flex flex-col min-h-0 relative -mx-2 px-2 pt-2"
+                handleClassName="mb-4 pt-3 shrink-0"
+            >
 
                 {/* Scrollable List Container */}
                 <div className="overflow-y-auto flex-1 px-3 pb-20 space-y-3">
@@ -471,7 +471,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                         <button
                                             onClick={() => openBatchEditor(task.assignment_batch)}
                                             className="text-gray-400 hover:text-blue-600 p-1 transition"
-                                            title="Edit penugasan massal"
+                                            title="Edit Bulk Assignment"
                                         >
                                             <Edit3 size={16} />
                                         </button>
@@ -484,7 +484,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                     {/* Padding Bottom for safe scrolling */}
                     <div className="h-10"></div>
                 </div>
-            </div>
+            </MobileDraggableSheet>
         </MobileLayout>
     );
 };

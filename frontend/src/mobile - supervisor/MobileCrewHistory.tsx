@@ -8,6 +8,7 @@ import BulkTaskModal from '../general/BulkTaskModal';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
 import TaskStartStatus from '../general/TaskStartStatus';
+import MobileDraggableSheet from '../general/MobileDraggableSheet';
 import { isTaskNotStarted } from '../utils/taskTiming';
 
 interface MobileCrewHistoryProps {
@@ -174,15 +175,15 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
 
             if (!response.ok) {
                 const data = await response.json().catch(() => ({}));
-                alert(data.message || 'Gagal memperbarui penugasan massal.');
+                alert(data.message || 'Gagal memperbarui Bulk Assignment.');
                 return;
             }
 
             setEditingBatch(null);
             fetchData(true);
         } catch (error) {
-            console.error('Gagal memperbarui penugasan massal', error);
-            alert('Terjadi kesalahan saat memperbarui penugasan massal.');
+            console.error('Gagal memperbarui Bulk Assignment', error);
+            alert('Terjadi kesalahan saat memperbarui Bulk Assignment.');
         }
     };
 
@@ -325,6 +326,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 onSubmit={handleUpdateBatch}
                 defaultDate={selectedDate.toLocaleDateString('en-CA')}
                 accent="blue"
+                mobileSheet
                 initialBatch={editingBatch}
                 submitLabel="Simpan Perubahan"
             />
@@ -410,12 +412,10 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 </div>
 
                 {/* List Card - Matches MobileCrewDetail Structure */}
-                <div className="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.03)] flex-1 flex flex-col min-h-0 relative -mx-2 px-4 pt-4">
-
-                    {/* Handle Bar Wrapper */}
-                    <div className="flex justify-center mb-2 shrink-0">
-                        <div className="w-12 h-1.5 bg-blue-600 rounded-full"></div>
-                    </div>
+                <MobileDraggableSheet
+                    className="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.03)] flex-1 flex flex-col min-h-0 relative -mx-2 px-4 pt-4"
+                    handleClassName="mb-2 shrink-0"
+                >
 
                     {/* List Header & Dropdown */}
                     <div className="flex justify-between items-center mb-4 sticky top-0 bg-white py-1 z-10 w-full shrink-0">
@@ -533,7 +533,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                     <button
                                                         onClick={() => setEditingBatch(task.assignment_batch)}
                                                         className="text-gray-400 hover:text-blue-600 p-1 transition"
-                                                        title="Edit penugasan massal"
+                                                        title="Edit Bulk Assignment"
                                                     >
                                                         <Edit3 size={16} />
                                                     </button>
@@ -553,7 +553,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                         <div className="h-4"></div>
                     </div>
 
-                </div>
+                </MobileDraggableSheet>
             </div>
         </MobileLayout >
     );

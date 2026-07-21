@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Camera, Check, ChevronDown } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 import TaskStartStatus from '../general/TaskStartStatus';
+import MobileDraggableSheet from '../general/MobileDraggableSheet';
 import { markNotificationSeen, notifyOnce, notifyUpcomingTask } from '../utils/browserNotifications';
 
 interface MobileTaskListProps {
@@ -119,11 +120,10 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                 </div>
 
                 {/* 2. Task List */}
-                <div className="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.03)] flex-1 flex flex-col min-h-0 relative -mx-2 px-2 pt-2">
-                    {/* Handle Bar Indicator */}
-                    <div className="flex justify-center mb-4 pt-3 shrink-0">
-                        <div className="w-12 h-1.5 bg-blue-500/100 rounded-full"></div>
-                    </div>
+                <MobileDraggableSheet
+                    className="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.03)] flex-1 flex flex-col min-h-0 relative -mx-2 px-2 pt-2"
+                    handleClassName="mb-4 pt-3 shrink-0"
+                >
 
                     <div className="overflow-y-auto flex-1 px-3 pb-20 space-y-3">
                         {loading ? (
@@ -183,7 +183,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                         )}
                         <div className="h-10"></div>
                     </div>
-                </div>
+                </MobileDraggableSheet>
             </div>
         </CrewLayout>
     );
