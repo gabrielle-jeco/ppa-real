@@ -203,10 +203,10 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                 onTaskChange?.();
             } else {
                 const data = await res.json().catch(() => ({}));
-                alert(data.message || (isEditingBatch ? 'Gagal memperbarui penugasan massal.' : 'Gagal membuat penugasan massal.'));
+                alert(data.message || (isEditingBatch ? 'Gagal memperbarui Bulk Assignment.' : 'Gagal membuat Bulk Assignment.'));
             }
         } catch (error) {
-            console.error("Gagal membuat penugasan massal", error);
+            console.error("Gagal membuat Bulk Assignment", error);
         }
     };
 
@@ -364,7 +364,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
     const isCurrentSelectedMonth =
         selectedDate.getFullYear() === new Date().getFullYear() &&
         selectedDate.getMonth() === new Date().getMonth();
-    const activityMonitorTitle = `${selectedDate.toLocaleDateString('id-ID', { month: 'long' })} Monitoring Aktivitas${isCurrentSelectedMonth ? ' (Bulanan)' : ''}`;
+    const activityMonitorTitle = `${selectedDate.toLocaleDateString('id-ID', { month: 'long' })} (Monitor Aktivitas${isCurrentSelectedMonth ? ' Bulanan)' : ''}`;
 
     const getAttendancePeriodLabel = () => {
         const startDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
@@ -504,7 +504,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                         <h2 className="text-xl font-bold text-primary mb-1">{crew.name}</h2>
                         <p className="text-xs text-gray-500 mb-4">
-                            Peran sebagai <span className="underline decoration-primary">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : crew.role || 'Crew'}</span> <br />
+                            Role sebagai <span className="underline decoration-primary">{crew.current_workstation ? `Crew - ${crew.current_workstation}` : crew.role || 'Crew'}</span> <br />
                             Hari ini
                         </p>
                         <button
@@ -556,7 +556,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                         : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                         }`}
                                 >
-                                    Massal
+                                    Bulk Assignment
                                 </button>
                             </div>
                             <div className="flex items-center gap-2 mb-1">
@@ -729,7 +729,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                                     </button>
                                                 )}
                                                 {canEditBatchTask(task) && (
-                                                    <button onClick={() => openBatchEditor(task.assignment_batch)} className="text-gray-400 hover:text-primary p-1 opacity-50 group-hover:opacity-100 transition" title="Edit penugasan massal">
+                                                    <button onClick={() => openBatchEditor(task.assignment_batch)} className="text-gray-400 hover:text-primary p-1 opacity-50 group-hover:opacity-100 transition" title="Edit Bulk Assignment">
                                                         <Edit3 size={14} />
                                                     </button>
                                                 )}

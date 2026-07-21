@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Camera, Check, ChevronDown } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 import TaskStartStatus from '../general/TaskStartStatus';
+import MobileDraggableSheet from '../general/MobileDraggableSheet';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 
 interface MobileCrewHistoryProps {
@@ -181,10 +182,10 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                 </div>
 
                 {/* List Card */}
-                <div className="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.03)] flex-1 flex flex-col min-h-0 relative -mx-2 px-4 pt-4">
-                    <div className="flex justify-center mb-2 shrink-0">
-                        <div className="w-12 h-1.5 bg-blue-600 rounded-full"></div>
-                    </div>
+                <MobileDraggableSheet
+                    className="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.03)] flex-1 flex flex-col min-h-0 relative -mx-2 px-4 pt-4"
+                    handleClassName="mb-2 shrink-0"
+                >
 
                     <div className="flex justify-between items-center mb-4 sticky top-0 bg-white py-1 z-10 w-full shrink-0">
                         <h3 className="font-bold text-gray-800 text-sm">
@@ -283,7 +284,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                         )}
                         <div className="h-4"></div>
                     </div>
-                </div>
+                </MobileDraggableSheet>
             </div>
         </CrewLayout>
     );

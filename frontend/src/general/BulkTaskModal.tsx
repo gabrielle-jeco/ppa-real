@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Clock, X } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
+import useModalTransition from '../utils/useModalTransition';
 
 type CrewOption = { id: string; name: string };
 
@@ -14,6 +15,7 @@ interface BulkTaskModalProps {
     accent?: 'purple' | 'blue';
     initialBatch?: any;
     submitLabel?: string;
+    mobileSheet?: boolean;
 }
 
 const dayOptions = [
@@ -26,7 +28,7 @@ const dayOptions = [
     { value: 0, label: 'Min' },
 ];
 
-export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaultDate, accent = 'purple', initialBatch, submitLabel = 'Buat Penugasan' }: BulkTaskModalProps) {
+export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaultDate, accent = 'purple', initialBatch, submitLabel = 'Buat Penugasan', mobileSheet = false }: BulkTaskModalProps) {
     const initializedKeyRef = useRef<string | null>(null);
     const [crewOptions, setCrewOptions] = useState<CrewOption[]>(crews || []);
     const [selectedCrewIds, setSelectedCrewIds] = useState<string[]>([]);
@@ -41,6 +43,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
     const [weightLabel, setWeightLabel] = useState('mudah');
     const [note, setNote] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const { shouldRender, animateIn, contentRef } = useModalTransition(isOpen, { enabled: mobileSheet });
 
     const primaryClass = accent === 'blue' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-primary hover:bg-purple-700 shadow-purple-200';
     const focusClass = accent === 'blue' ? 'focus:ring-blue-500' : 'focus:ring-primary';
@@ -98,10 +101,10 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
             }
         };
 
-        fetchSupportData().catch((error) => console.error('Gagal mengambil data penugasan massal', error));
+        fetchSupportData().catch((error) => console.error('Gagal mengambil data Bulk Assignment', error));
     }, [isOpen, crews]);
 
-    if (!isOpen) return null;
+    if (!shouldRender) return null;
 
     const closeModal = (event?: React.SyntheticEvent) => {
         event?.preventDefault();
@@ -171,18 +174,29 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[30000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            className={`fixed inset-0 z-[30000] flex justify-center transition-colors duration-300 ${mobileSheet
+                ? `items-end p-0 sm:items-center sm:p-4 ${animateIn ? 'bg-black/50 backdrop-blur-sm' : 'bg-black/0 pointer-events-none'}`
+                : 'items-center bg-black/50 backdrop-blur-sm p-4'
+                }`}
             onClick={(event) => {
                 if (event.target === event.currentTarget) closeModal(event);
             }}
         >
-            <div className="bg-white rounded-3xl w-full max-w-3xl max-h-[92vh] overflow-y-auto p-6 shadow-2xl relative" onClick={(event) => event.stopPropagation()}>
+            <div
+                ref={contentRef}
+                className={`bg-white w-full max-w-3xl max-h-[92vh] overflow-y-auto p-6 shadow-2xl relative ${mobileSheet
+                    ? `rounded-t-3xl sm:rounded-3xl transition-all duration-300 ease-out transform ${animateIn ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-full opacity-0 sm:translate-y-10 sm:scale-95'}`
+                    : 'rounded-3xl'
+                    }`}
+                onClick={(event) => event.stopPropagation()}
+            >
+                {mobileSheet && <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 sm:hidden" />}
                 <button type="button" aria-label="Tutup modal" onClick={closeModal} className="absolute top-4 right-4 z-50 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-white text-gray-400 shadow-sm hover:bg-gray-100 hover:text-gray-600">
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-black text-gray-900 mb-1">{initialBatch ? 'Edit Penugasan Massal' : 'Penugasan Massal'}</h2>
-                <p className="text-xs text-gray-500 mb-5">{initialBatch ? 'Perbarui pengaturan penugasan massal yang belum berjalan.' : 'Buat pekerjaan untuk beberapa karyawan dan beberapa hari sekaligus.'}</p>
+                <h2 className="text-xl font-black text-gray-900 mb-1">{initialBatch ? 'Edit Bulk Assignment' : 'Bulk Assignment'}</h2>
+                <p className="text-xs text-gray-500 mb-5">{initialBatch ? 'Perbarui pengaturan Bulk Assignment yang belum berjalan.' : 'Buat pekerjaan untuk beberapa karyawan dan beberapa hari sekaligus.'}</p>
 
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                     <div className="space-y-4">
