@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, X } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
 
@@ -119,9 +120,12 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
         setWeightLabel('mudah');
     };
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4">
-            <div className="relative w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div
+                className="relative w-full max-w-sm overflow-y-auto overscroll-contain rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200"
+                style={{ maxHeight: 'calc(100vh - 2rem)' }}
+            >
                 {/* Close Button */}
                 <button
                     onClick={onClose}
@@ -244,6 +248,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
