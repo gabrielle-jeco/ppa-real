@@ -176,7 +176,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
         <div
             className={`fixed inset-0 z-[30000] flex justify-center transition-colors duration-300 ${mobileSheet
                 ? `items-end p-0 sm:items-center sm:p-4 ${animateIn ? 'bg-black/50 backdrop-blur-sm' : 'bg-black/0 pointer-events-none'}`
-                : 'items-center bg-black/50 backdrop-blur-sm p-4'
+                : 'items-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4'
                 }`}
             onClick={(event) => {
                 if (event.target === event.currentTarget) closeModal(event);
@@ -184,7 +184,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
         >
             <div
                 ref={contentRef}
-                className={`bg-white w-full max-w-3xl max-h-[92vh] overflow-y-auto p-6 shadow-2xl relative ${mobileSheet
+                className={`relative w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain bg-white p-6 shadow-2xl ${mobileSheet
                     ? `rounded-t-3xl sm:rounded-3xl transition-all duration-300 ease-out transform ${animateIn ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-full opacity-0 sm:translate-y-10 sm:scale-95'}`
                     : 'rounded-3xl'
                     }`}
