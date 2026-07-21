@@ -184,10 +184,11 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
         >
             <div
                 ref={contentRef}
-                className={`relative w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain bg-white p-6 shadow-2xl ${mobileSheet
+                className={`relative w-full max-w-3xl overflow-y-auto overscroll-contain bg-white p-6 shadow-2xl ${mobileSheet
                     ? `rounded-t-3xl sm:rounded-3xl transition-all duration-300 ease-out transform ${animateIn ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-full opacity-0 sm:translate-y-10 sm:scale-95'}`
                     : 'rounded-3xl'
                     }`}
+                style={{ maxHeight: mobileSheet ? '100dvh' : 'calc(100vh - 2rem)' }}
                 onClick={(event) => event.stopPropagation()}
             >
                 {mobileSheet && <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 sm:hidden" />}
