@@ -106,7 +106,7 @@ const MobileCameraCapture: React.FC<MobileCameraCaptureProps> = ({ onCapture, on
             if (videoRef.current) {
                 videoRef.current.srcObject = newStream;
             }
-        } catch (err) {
+        } catch {
             setError("Gagal membuka ulang kamera.");
         }
     };

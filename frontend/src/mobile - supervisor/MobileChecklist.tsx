@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Camera, Check, ChevronDown } from 'lucide-react';
 import MobileLayout from './MobileLayout';
-import MobileTaskPreview from './MobileTaskPreview';
 import MobileSupervisorTaskDetail from './MobileSupervisorTaskDetail';
 import TaskStartStatus from '../general/TaskStartStatus';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
@@ -218,9 +217,6 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
 
                         {myTasks.map(task => {
                             const isApproved = task.status === 'approved';
-                            const isPastDue = new Date(task.due_at) < new Date();
-                            const isReadOnly = isApproved || isPastDue;
-
                             return (
                                 <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between group border border-transparent hover:border-gray-200 transition">
                                     <div className="flex items-start gap-3 flex-1">

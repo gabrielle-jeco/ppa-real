@@ -25,9 +25,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
     const [workStations, setWorkStations] = useState<any[]>([]);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
-    const minTaskTime = date === minTaskDate
-        ? new Date().toTimeString().slice(0, 5)
-        : undefined;
+    const isTodayTask = date === minTaskDate;
 
     React.useEffect(() => {
         const modalKey = initialTask?.id ? `edit:${initialTask.id}` : `create:${defaultDate || ''}`;
@@ -173,7 +171,12 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                             <input
                                 type="date"
                                 value={date}
-                                onChange={(e) => setDate(e.target.value)}
+                                onChange={(e) => {
+                                    setDate(e.target.value);
+                                    if (!initialTask && e.target.value === minTaskDate) {
+                                        setStartTime(new Date().toTimeString().slice(0, 5));
+                                    }
+                                }}
                                 min={minTaskDate}
                                 max={maxTaskDate}
                                 className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
@@ -192,8 +195,8 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                                 type="time"
                                 value={startTime}
                                 onChange={(e) => setStartTime(e.target.value)}
-                                min={minTaskTime}
-                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
+                                disabled={isTodayTask}
+                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:text-gray-500"
                                 required
                             />
                         </div>
@@ -203,7 +206,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                                 type="time"
                                 value={dueTime}
                                 onChange={(e) => setDueTime(e.target.value)}
-                                min={date === minTaskDate ? startTime || minTaskTime : startTime}
+                                min={startTime}
                                 className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
                                 required
                             />

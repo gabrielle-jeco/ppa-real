@@ -67,7 +67,6 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
     };
 
     const handleSubmit = async () => {
-        // Validate
         if (Object.keys(scores).length < criteria.length) {
             alert("Mohon isi nilai semua kategori.");
             return;
@@ -78,7 +77,6 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
             const token = localStorage.getItem('auth_token');
             const totalScore = Object.values(scores).reduce((a, b) => a + b, 0) / criteria.length * 20;
 
-            // Use passed targetDate
             const dateStr = targetDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
 
             const res = await fetch('/api/evaluations', {

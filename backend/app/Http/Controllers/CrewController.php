@@ -23,6 +23,12 @@ class CrewController extends Controller
 
     public function myStats(Request $request)
     {
+        $request->validate([
+            'user_id' => 'nullable|string|max:255',
+            'month' => 'nullable|integer|between:1,12',
+            'year' => 'nullable|integer|between:2000,2100',
+        ]);
+
         $authUser = Auth::user();
         $targetUserId = $request->query('user_id', $authUser->username);
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Image as ImageIcon, History } from 'lucide-react';
+import { Camera, Image as ImageIcon } from 'lucide-react';
 
 interface MobileUploadModalProps {
     isOpen: boolean;

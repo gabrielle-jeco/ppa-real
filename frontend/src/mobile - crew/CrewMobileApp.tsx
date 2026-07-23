@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import CrewLayout from './CrewLayout';
 import CrewDashboardMobile from './CrewDashboardMobile';
 import MobileTaskList from './MobileTaskList';
 import MobileTaskExecution from './MobileTaskExecution';
 import MobileCrewHistory from './MobileCrewHistory';
 import MobileCrewEvaluation from './MobileCrewEvaluation';
 import MobileTaskGuide from './MobileTaskGuide';
-import MobileEvidenceListModal from './MobileEvidenceListModal';
 
 
 interface CrewMobileAppProps {
@@ -48,8 +46,8 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
                         force_log: isFreshLogin
                     })
                 });
-            } catch (e) {
-                console.error("Failed to log initial activity", e);
+            } catch (error) {
+                console.error("Gagal mencatat aktivitas awal", error);
             }
         };
         logInitialActivity();
@@ -143,7 +141,7 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
             try {
                 const parsed = JSON.parse(error.message);
                 if (parsed.message) errorMessage = parsed.message;
-            } catch (e) {
+            } catch {
                 if (error.message) errorMessage = error.message;
             }
             alert(errorMessage);

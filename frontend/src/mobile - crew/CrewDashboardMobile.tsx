@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Users, BookOpen, CheckCircle, Calendar, Star, ChevronDown, LogOut } from 'lucide-react';
+import { MapPin, Users, Calendar, Star, ChevronDown, LogOut } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 
 interface CrewDashboardProps {

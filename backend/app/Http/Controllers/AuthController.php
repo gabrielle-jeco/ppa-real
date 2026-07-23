@@ -18,11 +18,12 @@ class AuthController extends Controller
      */
     public function login(Request $request, YoabsenAuthService $yoabsenAuth, YojadwalPresenceService $presenceService)
     {
-        $request->validate([
-            'username' => 'required',
-            'password' => 'required',
-            'location_id' => 'nullable|string'
+        $credentials = $request->validate([
+            'username' => 'required|string|max:100',
+            'password' => 'required|string|max:255',
+            'location_id' => 'nullable|string|max:255',
         ]);
+        $request->merge(['username' => trim($credentials['username'])]);
 
         $user = User::where('username', $request->username)->first();
         if (!$user) {
@@ -56,7 +57,7 @@ class AuthController extends Controller
         if (!$user->active) {
             Auth::logout();
             throw ValidationException::withMessages([
-                'username' => ['Account is inactive.'],
+                'username' => ['Akun tidak aktif.'],
             ]);
         }
 
@@ -70,7 +71,7 @@ class AuthController extends Controller
                 if ($request->has('location_id') && $request->location_id != $user->location_id) {
                     Auth::logout();
                     throw ValidationException::withMessages([
-                        'location_id' => ['Access denied: You are locked to a different location.'],
+                        'location_id' => ['Akses ditolak: akun terkunci pada lokasi lain.'],
                     ]);
                 }
             }
@@ -86,7 +87,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'message' => 'Login successful',
+            'message' => 'Berhasil masuk.',
             'access_token' => $token,
             'token_type' => 'Bearer',
             'expires_at' => $expiresAt?->toIso8601String(),
@@ -99,8 +100,9 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
-        return response()->json(['message' => 'Logged out successfully']);
+        $request->user()->currentAccessToken()?->delete();
+
+        return response()->json(['message' => 'Berhasil keluar.']);
     }
 
     /**

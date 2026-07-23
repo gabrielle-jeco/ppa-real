@@ -17,10 +17,11 @@ class EvaluationController extends Controller
         try {
             $request->validate([
                 'user_id' => 'required|exists:users,username',
-                'scores' => 'required|array',
-                'total_score' => 'required|numeric',
-                'date' => 'required|date',
-                'notes' => 'nullable|string'
+                'scores' => 'required|array|min:1|max:100',
+                'scores.*' => 'required|numeric|min:1|max:100',
+                'total_score' => 'required|numeric|min:0|max:100',
+                'date' => 'required|date_format:Y-m-d',
+                'notes' => 'nullable|string|max:5000'
             ]);
 
             $evaluator = Auth::user();
@@ -85,6 +86,10 @@ class EvaluationController extends Controller
 
     public function checkPeriod(Request $request, $supervisorId)
     {
+        $request->validate([
+            'date' => 'nullable|date_format:Y-m-d',
+        ]);
+
         $dateStr = $request->query('date', now()->format('Y-m-d'));
         $date = Carbon::parse($dateStr);
         $currentPeriod = now()->startOfMonth();

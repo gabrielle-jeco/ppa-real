@@ -1,3 +1,5 @@
+import { getTaskApprovalDeadline } from './taskTiming';
+
 const hasNotificationSupport = () => typeof window !== 'undefined' && 'Notification' in window;
 const webPushPublicKey = import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY;
 
@@ -95,7 +97,9 @@ export function notifyApprovalGrace(task: any) {
 
     const dueAt = new Date(task.due_at);
     const now = Date.now();
-    const approvalEndsAt = addApprovalGraceDay(dueAt).getTime();
+    const approvalDeadline = getTaskApprovalDeadline(task);
+    if (!approvalDeadline) return;
+    const approvalEndsAt = approvalDeadline.getTime();
 
     if (now <= dueAt.getTime() || now > approvalEndsAt) return;
 
@@ -107,10 +111,4 @@ export function notifyApprovalGrace(task: any) {
             tag: `approval-grace-${task.task_id}`,
         }
     );
-}
-
-function addApprovalGraceDay(date: Date) {
-    const result = new Date(date);
-    result.setHours(result.getHours() + 24);
-    return result;
 }

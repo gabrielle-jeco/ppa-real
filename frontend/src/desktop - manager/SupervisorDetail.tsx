@@ -20,6 +20,62 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
     const [reviewStatus, setReviewStatus] = useState<any>(null);
     const [previewTask, setPreviewTask] = useState<any>(null);
 
+    const dateStr = selectedDate.toLocaleDateString('en-CA');
+
+    async function fetchStats() {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const month = selectedDate.getMonth() + 1;
+            const year = selectedDate.getFullYear();
+            const day = selectedDate.getDate();
+            const res = await fetch(`/api/manager/supervisors/${supervisor.id}/stats?month=${month}&year=${year}&day=${day}`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+            });
+
+            if (res.ok) {
+                setStats(await res.json());
+            }
+        } catch (error) {
+            console.error('Fetch supervisor stats failed', error);
+        }
+    }
+
+    async function fetchCrewTasks() {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch(`/api/manager/supervisors/${supervisor.id}/crews?date=${dateStr}`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                const crews = data.crews || [];
+                setCrewRows(crews);
+
+                if (!selectedCrewId && crews.length > 0) {
+                    setSelectedCrewId(crews[0].id);
+                }
+            }
+        } catch (error) {
+            console.error('Fetch supervisor crew tasks failed', error);
+        }
+    }
+
+    async function fetchReviewStatus() {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch(`/api/evaluations/check/${supervisor.id}?date=${dateStr}`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+            });
+
+            if (res.ok) {
+                setReviewStatus(await res.json());
+            }
+        } catch (error) {
+            console.error('Fetch manager review status failed', error);
+        }
+    }
+
     useEffect(() => {
         if (!supervisor?.id) return;
 
@@ -39,62 +95,6 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
         fetchReviewStatus();
         setPreviewTask(null);
     }, [selectedDate, supervisor?.id]);
-
-    const dateStr = selectedDate.toLocaleDateString('en-CA');
-
-    const fetchStats = async () => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            const month = selectedDate.getMonth() + 1;
-            const year = selectedDate.getFullYear();
-            const day = selectedDate.getDate();
-            const res = await fetch(`/api/manager/supervisors/${supervisor.id}/stats?month=${month}&year=${year}&day=${day}`, {
-                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-            });
-
-            if (res.ok) {
-                setStats(await res.json());
-            }
-        } catch (error) {
-            console.error('Fetch supervisor stats failed', error);
-        }
-    };
-
-    const fetchCrewTasks = async () => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/manager/supervisors/${supervisor.id}/crews?date=${dateStr}`, {
-                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                const crews = data.crews || [];
-                setCrewRows(crews);
-
-                if (!selectedCrewId && crews.length > 0) {
-                    setSelectedCrewId(crews[0].id);
-                }
-            }
-        } catch (error) {
-            console.error('Fetch supervisor crew tasks failed', error);
-        }
-    };
-
-    const fetchReviewStatus = async () => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/evaluations/check/${supervisor.id}?date=${dateStr}`, {
-                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-            });
-
-            if (res.ok) {
-                setReviewStatus(await res.json());
-            }
-        } catch (error) {
-            console.error('Fetch manager review status failed', error);
-        }
-    };
 
     const getCalendarDays = () => {
         const year = selectedDate.getFullYear();

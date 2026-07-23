@@ -11,10 +11,10 @@ class PushSubscriptionController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'endpoint' => 'required|string',
-            'keys.p256dh' => 'required|string',
-            'keys.auth' => 'required|string',
-            'contentEncoding' => 'nullable|string',
+            'endpoint' => 'required|url|max:2048',
+            'keys.p256dh' => 'required|string|max:512',
+            'keys.auth' => 'required|string|max:255',
+            'contentEncoding' => 'nullable|string|in:aes128gcm,aesgcm',
         ]);
 
         $subscription = PushSubscription::updateOrCreate(
@@ -29,6 +29,6 @@ class PushSubscriptionController extends Controller
             ]
         );
 
-        return response()->json(['message' => 'Subscription saved', 'id' => $subscription->id]);
+        return response()->json(['message' => 'Langganan notifikasi berhasil disimpan.', 'id' => $subscription->id]);
     }
 }

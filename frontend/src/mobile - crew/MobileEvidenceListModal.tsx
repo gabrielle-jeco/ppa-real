@@ -16,15 +16,13 @@ export default function MobileEvidenceListModal({
     isOpen,
     onClose,
     task,
-    onSelectImage,
-    onDelete,
-    readOnly = false
+    onSelectImage
 }: MobileEvidenceListModalProps) {
     const [animateIn, setAnimateIn] = useState(false);
 
     useEffect(() => {
-        if (isOpen) setAnimateIn(true);
-        else setAnimateIn(false);
+        const frame = window.requestAnimationFrame(() => setAnimateIn(isOpen));
+        return () => window.cancelAnimationFrame(frame);
     }, [isOpen]);
 
     if (!isOpen && !animateIn) return null;
@@ -94,9 +92,9 @@ export default function MobileEvidenceListModal({
             >
                 {/* Header */}
                 <div className="flex justify-between items-center mb-6">
-                    <div className="min-w-0 pr-3">
+                    <div>
                         <h2 className="text-xl font-bold text-gray-800">Daftar Bukti</h2>
-                        <p className="text-sm text-gray-500 mt-0.5 truncate">{task?.title || 'Pekerjaan'}</p>
+                        <p className="text-sm text-gray-500 mt-0.5">{task?.title || 'Pekerjaan'}</p>
                         <TaskStartStatus
                             task={task}
                             scheduleClassName="text-xs text-gray-400 mt-1"

@@ -27,9 +27,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
     const { shouldRender, animateIn, contentRef } = useModalTransition(isOpen);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
-    const minTaskTime = date === minTaskDate
-        ? new Date().toTimeString().slice(0, 5)
-        : undefined;
+    const isTodayTask = date === minTaskDate;
 
     useEffect(() => {
         const modalKey = initialTask?.id ? `edit:${initialTask.id}` : `create:${defaultDate || ''}`;
@@ -153,7 +151,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Judul</label>
                         <input
                             type="text"
-                            placeholder="e.g. Cek Kebersihan"
+                            placeholder="Contoh: Cek Kebersihan"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-5 py-4 text-gray-800 font-medium transition-all"
@@ -188,7 +186,12 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                                 <input
                                     type="date"
                                     value={date}
-                                    onChange={(e) => setDate(e.target.value)}
+                                    onChange={(e) => {
+                                        setDate(e.target.value);
+                                        if (!initialTask && e.target.value === minTaskDate) {
+                                            setStartTime(new Date().toTimeString().slice(0, 5));
+                                        }
+                                    }}
                                     min={minTaskDate}
                                     max={maxTaskDate}
                                     className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
@@ -205,8 +208,8 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                                     type="time"
                                     value={startTime}
                                     onChange={(e) => setStartTime(e.target.value)}
-                                    min={minTaskTime}
-                                    className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
+                                    disabled={isTodayTask}
+                                    className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all disabled:cursor-not-allowed disabled:text-gray-500"
                                     required
                                 />
                             </div>
@@ -220,7 +223,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                                 type="time"
                                 value={dueTime}
                                 onChange={(e) => setDueTime(e.target.value)}
-                                min={date === minTaskDate ? startTime || minTaskTime : startTime}
+                                min={startTime}
                                 className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
                                 required
                             />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Check, ChevronDown } from 'lucide-react';
+import { Camera, Check } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
@@ -14,7 +14,7 @@ interface MobileTaskListProps {
 }
 
 export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrigger, selectedRole }: MobileTaskListProps) {
-    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [selectedDate] = useState(new Date());
     const [tasks, setTasks] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [guideRequired, setGuideRequired] = useState(false);

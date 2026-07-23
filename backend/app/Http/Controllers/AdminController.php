@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 
@@ -54,7 +55,12 @@ class AdminController extends Controller
                 'users' => $this->canPermission('users_locations') ? User::count() : 0,
                 'active_users' => $this->canPermission('users_locations') ? User::where('active', true)->count() : 0,
                 'locations' => $this->canPermission('locations') ? Location::count() : 0,
-                'reporting_lines' => $this->canPermission('reporting_lines') ? ReportingLine::where('status', 'active')->count() : 0,
+                'reporting_lines' => $this->canPermission('reporting_lines')
+                    ? ReportingLine::withoutGlobalScope('effective_backup_period')
+                        ->where('relation_type', 'permanent')
+                        ->where('status', 'active')
+                        ->count()
+                    : 0,
                 'work_stations' => $workStations->count(),
                 'user_locations' => $this->canPermission('app_roles') ? UserLocation::count() : 0,
                 'regionals' => $this->canPermission('regionals') ? Regional::count() : 0,
@@ -134,11 +140,14 @@ class AdminController extends Controller
                 'locations:initial,name',
                 'userLocations:user_id,job_level',
                 'leaderLines' => fn($q) => $q
+                    ->where('relation_type', 'permanent')
                     ->where('status', 'active')
                     ->with('leader:username,name')
                     ->select(['id', 'leader_id', 'subordinate_id', 'status']),
             ])
-            ->withCount('subordinateLines')
+            ->withCount([
+                'subordinateLines' => fn($q) => $q->where('relation_type', 'permanent'),
+            ])
             ->orderBy('name');
 
         if ($request->has('search') && $request->search !== '') {
@@ -259,7 +268,9 @@ class AdminController extends Controller
     {
         $this->authorizePermission('reporting_lines');
         
-        $query = ReportingLine::with(['leader.jobLevel', 'subordinate.jobLevel'])
+        $query = ReportingLine::withoutGlobalScope('effective_backup_period')
+            ->where('relation_type', 'permanent')
+            ->with(['leader.jobLevel', 'subordinate.jobLevel'])
             ->whereHas('leader.userLocations')
             ->whereHas('subordinate.userLocations')
             ->orderBy('leader_id')
@@ -328,24 +339,37 @@ class AdminController extends Controller
             'username' => ['required', 'string', 'max:255', 'unique:users,username'],
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['nullable', 'string', 'min:6'],
+            'password' => ['nullable', 'string', 'min:8', 'max:255'],
             'job_level_id' => ['required', $this->visibleJobLevelRule()],
             'role_id' => ['nullable', 'exists:roles,id'],
             'active' => ['boolean'],
+            'is_back_office' => ['boolean'],
             'initial_store' => ['nullable', 'exists:locations,initial'],
             'location_ids' => ['array'],
             'location_ids.*' => ['exists:locations,initial'],
         ]);
 
+        $roleId = $this->canPermission('role_management')
+            ? ($data['role_id'] ?? $this->defaultAccountRoleId())
+            : $this->defaultAccountRoleId();
+        $accountRole = Role::find($roleId);
+
+        if ($accountRole?->isCmsRole() && empty($data['password'])) {
+            throw ValidationException::withMessages([
+                'password' => ['Password wajib diisi minimal 8 karakter untuk akun yang dapat mengakses CMS.'],
+            ]);
+        }
+
         $user = User::create([
             'username' => $data['username'],
             'name' => $data['name'],
             'email' => $data['email'] ?? null,
-            'password' => Hash::make($data['password'] ?? 'password'),
+            'password' => Hash::make($data['password'] ?? Str::random(40)),
             'job_level_id' => $data['job_level_id'],
-            'role_id' => $this->canPermission('role_management') ? ($data['role_id'] ?? $this->defaultAccountRoleId()) : $this->defaultAccountRoleId(),
+            'role_id' => $roleId,
             'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? true,
+            'is_back_office' => $data['is_back_office'] ?? false,
         ]);
 
         $this->syncUserLocations($user, $data['location_ids'] ?? []);
@@ -409,13 +433,13 @@ class AdminController extends Controller
         $location = Location::where('initial', $initial)->firstOrFail();
         if (UserLocation::where('location_id', $location->initial)->exists()) {
             throw ValidationException::withMessages([
-                'location' => ['This location is still assigned to one or more users. Deactivate it instead.'],
+                'location' => ['Lokasi masih digunakan oleh satu atau beberapa user. Nonaktifkan lokasi sebagai gantinya.'],
             ]);
         }
 
         $location->delete();
 
-        return response()->json(['message' => 'Location deleted.']);
+        return response()->json(['message' => 'Lokasi berhasil dihapus.']);
     }
 
 
@@ -429,22 +453,35 @@ class AdminController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'password' => ['nullable', 'string', 'min:6'],
+            'password' => ['nullable', 'string', 'min:8', 'max:255'],
             'job_level_id' => ['required', $this->visibleJobLevelRule()],
             'role_id' => ['nullable', 'exists:roles,id'],
             'active' => ['boolean'],
+            'is_back_office' => ['boolean'],
             'initial_store' => ['nullable', 'exists:locations,initial'],
             'location_ids' => ['array'],
             'location_ids.*' => ['exists:locations,initial'],
         ]);
 
+        $roleId = $this->canPermission('role_management')
+            ? ($data['role_id'] ?? $this->defaultAccountRoleId())
+            : $user->role_id;
+        $targetRole = Role::find($roleId);
+
+        if ($targetRole?->isCmsRole() && !$user->accountRole?->isCmsRole() && empty($data['password'])) {
+            throw ValidationException::withMessages([
+                'password' => ['Password wajib diisi minimal 8 karakter saat memberikan akses CMS.'],
+            ]);
+        }
+
         $user->fill([
             'name' => $data['name'],
             'email' => $data['email'] ?? null,
             'job_level_id' => $data['job_level_id'],
-            'role_id' => $this->canPermission('role_management') ? ($data['role_id'] ?? $this->defaultAccountRoleId()) : $user->role_id,
+            'role_id' => $roleId,
             'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? false,
+            'is_back_office' => $data['is_back_office'] ?? false,
         ]);
 
         if (!empty($data['password'])) {
@@ -469,13 +506,17 @@ class AdminController extends Controller
 
         $this->validateReportingLineHierarchy($data['leader_id'], $data['subordinate_id']);
 
-        $line = ReportingLine::updateOrCreate(
+        $line = ReportingLine::withoutGlobalScope('effective_backup_period')->updateOrCreate(
             [
                 'leader_id' => $data['leader_id'],
                 'subordinate_id' => $data['subordinate_id'],
+                'relation_type' => 'permanent',
             ],
             [
                 'status' => $data['status'],
+                'backup_request_id' => null,
+                'effective_from' => null,
+                'effective_until' => null,
             ]
         );
 
@@ -485,6 +526,7 @@ class AdminController extends Controller
     public function updateReportingLine(Request $request, ReportingLine $reportingLine)
     {
         $this->authorizePermission('reporting_lines');
+        abort_if($reportingLine->relation_type !== 'permanent', 404);
 
         $data = $request->validate([
             'leader_id' => ['required', 'exists:users,username', 'different:subordinate_id'],
@@ -494,7 +536,13 @@ class AdminController extends Controller
 
         $this->validateReportingLineHierarchy($data['leader_id'], $data['subordinate_id']);
 
-        $reportingLine->update($data);
+        $reportingLine->update([
+            ...$data,
+            'relation_type' => 'permanent',
+            'backup_request_id' => null,
+            'effective_from' => null,
+            'effective_until' => null,
+        ]);
 
         return response()->json($this->formatReportingLine($reportingLine->fresh(['leader', 'subordinate'])));
     }
@@ -502,6 +550,7 @@ class AdminController extends Controller
     public function destroyReportingLine(ReportingLine $reportingLine)
     {
         $this->authorizePermission('reporting_lines');
+        abort_if($reportingLine->relation_type !== 'permanent', 404);
 
         $reportingLine->delete();
 
@@ -770,7 +819,7 @@ class AdminController extends Controller
 
         $appRole->delete();
 
-        return response()->json(['message' => 'App role deleted.']);
+        return response()->json(['message' => 'Role aplikasi berhasil dihapus.']);
     }
 
     public function storeRole(Request $request)
@@ -809,7 +858,7 @@ class AdminController extends Controller
 
         if (in_array(strtolower($role->name), ['admin', 'user'], true)) {
             throw ValidationException::withMessages([
-                'role' => ['Default roles cannot be deleted.'],
+                'role' => ['Role bawaan tidak dapat dihapus.'],
             ]);
         }
 
@@ -826,14 +875,14 @@ class AdminController extends Controller
 
     private function authorizeSuperadmin(): void
     {
-        abort_if(Auth::user()?->role_type !== 'superadmin', 403, 'Unauthorized');
+        abort_if(Auth::user()?->role_type !== 'superadmin', 403, 'Tidak memiliki akses.');
     }
 
     private function authorizePermission(string $permission): void
     {
         $this->authorizeSuperadmin();
 
-        abort_if(!$this->canPermission($permission), 403, 'Unauthorized');
+        abort_if(!$this->canPermission($permission), 403, 'Tidak memiliki akses.');
     }
 
     private function canPermission(string $permission): bool
@@ -884,6 +933,7 @@ class AdminController extends Controller
             'role_type' => $user->role_type,
             'manager_type' => $user->manager_type,
             'active' => (bool) $user->active,
+            'is_back_office' => (bool) $user->is_back_office,
             'locations' => $user->locations->map(fn(Location $location) => [
                 'initial' => $location->initial,
                 'name' => $location->name,

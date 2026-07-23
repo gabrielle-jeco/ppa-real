@@ -11,17 +11,16 @@ type MobileView = 'DASHBOARD' | 'EMPLOYEE_LIST' | 'CREW_DETAIL' | 'HISTORY' | 'E
 const SupervisorMobileApp: React.FC = () => {
     const [currentView, setCurrentView] = useState<MobileView>('DASHBOARD');
     const [selectedCrew, setSelectedCrew] = useState<any>(null);
-    const [supervisor, setSupervisor] = useState<any>(null);
-    const [currentUser, setCurrentUser] = useState<any>(null);
-
-    // Fetch Supervisor Info on Mount
-    useEffect(() => {
+    const [currentUser] = useState<any>(() => {
         const userData = localStorage.getItem('user_data');
-        if (userData) {
-            setCurrentUser(JSON.parse(userData));
+        if (!userData) return null;
+
+        try {
+            return JSON.parse(userData);
+        } catch {
+            return null;
         }
-        fetchSupervisorInfo();
-    }, []);
+    });
 
     useEffect(() => {
         const handleBrowserBack = (event: PopStateEvent) => {
@@ -40,21 +39,6 @@ const SupervisorMobileApp: React.FC = () => {
         window.addEventListener('popstate', handleBrowserBack);
         return () => window.removeEventListener('popstate', handleBrowserBack);
     }, []);
-
-    const fetchSupervisorInfo = async () => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            const res = await fetch('/api/supervisor/crews', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setSupervisor(data.supervisor);
-            }
-        } catch (error) {
-            console.error("Failed to fetch supervisor info", error);
-        }
-    };
 
     const handleNavigate = (view: MobileView, data?: any, pushHistory = true) => {
         const nextCrew = ['CREW_DETAIL', 'HISTORY', 'EVALUATION'].includes(view)

@@ -49,6 +49,12 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
     const focusClass = accent === 'blue' ? 'focus:ring-blue-500' : 'focus:ring-primary';
     const minDate = toDateInputValue(new Date());
     const maxDate = toDateInputValue(getTaskWindowEndDate());
+    const startsToday = startDate === minDate;
+    const includesFutureDates = endDate > minDate;
+    const locksStartTime = startsToday && !includesFutureDates;
+    const startTimeLabel = startsToday && includesFutureDates
+        ? 'Jam mulai tanggal berikutnya'
+        : 'Jam mulai';
 
     useEffect(() => {
         const modalKey = initialBatch?.id ? `edit:${initialBatch.id}` : `create:${defaultDate || ''}`;
@@ -137,19 +143,23 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
         const endDateObject = new Date(`${endDate}T00:00:00`);
         const now = new Date();
         let effectiveStartTime = startTime;
-        let startAt = new Date(`${startDate}T${effectiveStartTime}:00`);
-        const dueAt = new Date(`${startDate}T${dueTime}:00`);
+        const hasFutureSchedule = endDateObject > new Date(`${toDateInputValue(now)}T00:00:00`);
 
-        if (!initialBatch && startDate === toDateInputValue(now) && startAt < now) {
+        if (!initialBatch && startsToday && !hasFutureSchedule) {
             effectiveStartTime = now.toTimeString().slice(0, 5);
-            startAt = new Date(`${startDate}T${effectiveStartTime}:00`);
             setStartTime(effectiveStartTime);
         }
+
+        const scheduledStartAt = new Date(`${startDate}T${effectiveStartTime}:00`);
+        const dueAt = new Date(`${startDate}T${dueTime}:00`);
 
         if (selectedCrewIds.length === 0) return alert('Pilih minimal satu karyawan.');
         if (isBeforeToday(startDateObject) || isAfterTaskWindow(endDateObject)) return alert('Tanggal pekerjaan di luar periode penugasan.');
         if (endDateObject < startDateObject) return alert('Tanggal selesai tidak boleh lebih awal dari tanggal mulai.');
-        if (dueAt < startAt) return alert('Jam tenggat tidak boleh lebih awal dari jam mulai.');
+        if (startsToday && dueAt < now) return alert('Tenggat pekerjaan hari ini sudah terlewati.');
+        if ((!startsToday || hasFutureSchedule) && dueAt < scheduledStartAt) {
+            return alert('Jam tenggat tidak boleh lebih awal dari jam mulai.');
+        }
 
         setSubmitting(true);
         try {
@@ -212,7 +222,12 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal mulai</label>
                                 <div className="relative">
-                                    <input type="date" value={startDate} min={minDate} max={maxDate} onChange={(e) => setStartDate(e.target.value)} className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} required />
+                                    <input type="date" value={startDate} min={minDate} max={maxDate} onChange={(e) => {
+                                        setStartDate(e.target.value);
+                                        if (!initialBatch && e.target.value === minDate) {
+                                            setStartTime(new Date().toTimeString().slice(0, 5));
+                                        }
+                                    }} className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} required />
                                 </div>
                             </div>
                             <div>
@@ -225,11 +240,16 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam mulai</label>
+                                <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">{startTimeLabel}</label>
                                 <div className="relative">
-                                    <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} required />
+                                    <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} disabled={locksStartTime} className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none disabled:cursor-not-allowed disabled:text-gray-500`} required />
                                     <Clock size={16} className="absolute right-4 top-4 text-gray-400" />
                                 </div>
+                                {startsToday && includesFutureDates && (
+                                    <p className="mt-1 text-[10px] leading-4 text-gray-400">
+                                        Pekerjaan hari ini dimulai saat disimpan. Jam ini berlaku untuk tanggal berikutnya.
+                                    </p>
+                                )}
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tenggat</label>

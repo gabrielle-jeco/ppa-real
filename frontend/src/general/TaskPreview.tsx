@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import TaskStartStatus from './TaskStartStatus';
 
@@ -9,13 +9,9 @@ interface TaskPreviewProps {
     readOnly?: boolean;
 }
 
-export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = false }: TaskPreviewProps) {
+export default function TaskPreview({ task, onClose }: TaskPreviewProps) {
     const [activeTab, setActiveTab] = useState<'before' | 'after'>('before');
     const [selectedIndex, setSelectedIndex] = useState(0);
-
-    useEffect(() => {
-        setSelectedIndex(0);
-    }, [activeTab, task?.evidences?.length]);
 
     if (!task) return null;
 
@@ -54,15 +50,15 @@ export default function TaskPreview({ task, onClose, onDeleteProof, readOnly = f
 
             {/* Tabs */}
             <div className="flex gap-2 mb-4">
-                <button onClick={() => setActiveTab('before')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'before' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Sebelum Bekerja</button>
-                <button onClick={() => setActiveTab('after')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'after' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Sesudah Bekerja</button>
+                <button onClick={() => { setActiveTab('before'); setSelectedIndex(0); }} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'before' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Sebelum Bekerja</button>
+                <button onClick={() => { setActiveTab('after'); setSelectedIndex(0); }} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'after' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Sesudah Bekerja</button>
             </div>
 
             {/* Main Preview (Gray Box) */}
             <div className="flex-1 bg-gray-200 rounded-2xl mb-4 flex items-center justify-center relative overflow-hidden shadow-inner group">
                 {currentImage ? (
                     <>
-                        <img src={currentImage} alt="Proof" className="w-full h-full object-contain" />
+                        <img src={currentImage} alt="Bukti" className="w-full h-full object-contain" />
 
                         {/* Navigation Arrows for Multiple Images */}
                         {currentEvidences.length > 1 && (
