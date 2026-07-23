@@ -13,7 +13,7 @@ class ActivityController extends Controller
     public function logStationChange(Request $request)
     {
         $request->validate([
-            'work_station_name' => 'required|string',
+            'work_station_name' => 'required|string|max:255',
             'is_initial_login' => 'boolean|nullable',
             'force_log' => 'boolean|nullable'
         ]);
@@ -51,7 +51,7 @@ class ActivityController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Workstation changed successfully',
+            'message' => 'Perubahan work station berhasil dicatat.',
             'activity_log' => $log,
             'work_station' => $workStation
         ], 201);
@@ -65,6 +65,11 @@ class ActivityController extends Controller
 
     public function getLogs(Request $request)
     {
+        $request->validate([
+            'user_id' => 'nullable|string|max:255',
+            'date' => 'nullable|date_format:Y-m-d',
+        ]);
+
         $authUser = Auth::user();
         $targetUserId = $request->query('user_id', $authUser->username);
 

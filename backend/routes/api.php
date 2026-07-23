@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::post('/login', [App\Http\Controllers\AuthController::class, 'login']);
+Route::post('/login', [App\Http\Controllers\AuthController::class, 'login'])->middleware('throttle:login');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [App\Http\Controllers\AuthController::class, 'me']);
@@ -38,8 +38,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/tasks/{id}', [App\Http\Controllers\TaskController::class, 'update']);
     Route::delete('/tasks/{id}', [App\Http\Controllers\TaskController::class, 'destroy']);
     Route::patch('/tasks/{id}/status', [App\Http\Controllers\TaskController::class, 'updateStatus']);
-    Route::delete('/tasks/{id}/evidence', [App\Http\Controllers\TaskController::class, 'removeEvidence']);
-
     Route::post('/tasks/{id}/evidence', [App\Http\Controllers\TaskController::class, 'uploadEvidence']);
 
     // Evaluation Routes
@@ -103,5 +101,9 @@ Route::middleware(['auth:sanctum'])->prefix('supervisor')->group(function () {
     Route::get('/dashboard-summary', [App\Http\Controllers\SupervisorController::class, 'dashboardSummary']);
     Route::get('/stats', [App\Http\Controllers\SupervisorController::class, 'myStats']);
     Route::get('/crew/{id}/eval-stats', [App\Http\Controllers\SupervisorController::class, 'getCrewEvalStats']);
+    Route::get('/backup-options', [App\Http\Controllers\SupervisorBackupController::class, 'options']);
+    Route::get('/backups', [App\Http\Controllers\SupervisorBackupController::class, 'index']);
+    Route::post('/backups', [App\Http\Controllers\SupervisorBackupController::class, 'store']);
+    Route::patch('/backups/{backupRequest}/respond', [App\Http\Controllers\SupervisorBackupController::class, 'respond']);
 });
 

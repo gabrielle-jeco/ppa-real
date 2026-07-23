@@ -9,7 +9,7 @@ import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAft
 import { notifyApprovalGrace } from '../utils/browserNotifications';
 import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
-import { isTaskNotStarted } from '../utils/taskTiming';
+import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
 
 interface MobileCrewHistoryProps {
     crew: any;
@@ -39,12 +39,9 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     // Real Data State
     const [tasks, setTasks] = useState<any[]>([]); // For Task History
     const [activityLogs, setActivityLogs] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-
-    const fetchData = async (silent = false) => {
+    const fetchData = async () => {
         if (!crew?.id) return;
 
-        if (!silent) setLoading(true);
         try {
             const dateStr = selectedDate.toLocaleDateString('en-CA');
             const token = localStorage.getItem('auth_token') || '';
@@ -63,8 +60,6 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
             if (activityRes.ok) setActivityLogs(await activityRes.json());
         } catch (error) {
             console.error("Gagal mengambil data riwayat", error);
-        } finally {
-            if (!silent) setLoading(false);
         }
     };
 
@@ -76,7 +71,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     useEffect(() => {
         if (!crew?.id) return;
 
-        const timer = window.setInterval(() => fetchData(true), 15000);
+        const timer = window.setInterval(fetchData, 15000);
         return () => window.clearInterval(timer);
     }, [selectedDate, viewMode, crew?.id]);
 
@@ -125,7 +120,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            fetchData(true);
+            fetchData();
         } catch (error) {
             console.error("Gagal menghapus tugas", error);
         }
@@ -152,7 +147,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
             }
 
             setEditingTask(null);
-            fetchData(true);
+            fetchData();
         } catch (error) {
             console.error('Gagal memperbarui tugas', error);
             alert('Terjadi kesalahan saat memperbarui tugas.');
@@ -180,7 +175,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
             }
 
             setEditingBatch(null);
-            fetchData(true);
+            fetchData();
         } catch (error) {
             console.error('Gagal memperbarui Bulk Assignment', error);
             alert('Terjadi kesalahan saat memperbarui Bulk Assignment.');
@@ -242,13 +237,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
         && (task.evidences || []).length === 0
         && !isTaskPastDue(task)
     );
-    const canApproveTask = (task: any) => addApprovalGraceDay(new Date(task.due_at)).getTime() >= Date.now();
-
-    const addApprovalGraceDay = (date: Date) => {
-        const result = new Date(date);
-        result.setHours(result.getHours() + 24);
-        return result;
-    };
+    const canApproveTask = (task: any) => (getTaskApprovalDeadline(task)?.getTime() ?? 0) >= Date.now();
 
     // Calendar Logic
     const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Check, Trash2, Camera, Edit3 } from 'lucide-react';
+import { Check, Trash2, Camera, Edit3 } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileAddTaskModal from './MobileAddTaskModal';
 import MobileTaskPreview from './MobileTaskPreview';
@@ -8,7 +8,7 @@ import { notifyApprovalGrace } from '../utils/browserNotifications';
 import BulkTaskModal from '../general/BulkTaskModal';
 import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
-import { isTaskNotStarted } from '../utils/taskTiming';
+import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
 
 interface MobileCrewDetailProps {
     crew: any;
@@ -232,13 +232,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             date.getMonth() === today.getMonth() &&
             date.getFullYear() === today.getFullYear();
     };
-    const canApproveTask = (task: any) => addApprovalGraceDay(new Date(task.due_at)).getTime() >= Date.now();
-
-    const addApprovalGraceDay = (date: Date) => {
-        const result = new Date(date);
-        result.setHours(result.getHours() + 24);
-        return result;
-    };
+    const canApproveTask = (task: any) => (getTaskApprovalDeadline(task)?.getTime() ?? 0) >= Date.now();
 
     const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
     const canEditTask = (task: any) => (
@@ -410,8 +404,6 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                     {tasks.map(task => {
                         const isApproved = task.status === 'approved';
                         const isPastDue = isTaskPastDue(task);
-                        const isReadOnly = isApproved || isPastDue;
-
                         return (
                             <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between group border border-transparent hover:border-gray-200 transition">
                                 <div className="flex items-start gap-3 flex-1">

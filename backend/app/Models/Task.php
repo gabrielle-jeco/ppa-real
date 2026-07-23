@@ -21,6 +21,7 @@ class Task extends Model
         'description',
         'start_at',
         'due_at',
+        'approval_deadline_at',
         'weight_label',
         'weight_value',
         'status',
@@ -29,6 +30,7 @@ class Task extends Model
     protected $casts = [
         'start_at' => 'datetime',
         'due_at' => 'datetime',
+        'approval_deadline_at' => 'datetime',
     ];
 
     protected $appends = ['task_id', 'manager_id', 'note'];

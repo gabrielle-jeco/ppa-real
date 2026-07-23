@@ -80,7 +80,7 @@ class SupervisorController extends Controller
                 'role' => 'Supervisor',
                 'location' => $user->locations->first() ? $user->locations->first()->name : 'Lokasi tidak diketahui',
             ],
-            'location_name' => $user->locations->first() ? $user->locations->first()->name : 'All Locations',
+            'location_name' => $user->locations->first() ? $user->locations->first()->name : 'Semua Lokasi',
             'location_avg_progress' => round($crews->where('has_tasks', true)->avg('task_progress') ?? 0, 1),
             'crews' => $crews,
         ]);
@@ -88,7 +88,16 @@ class SupervisorController extends Controller
 
     public function myStats(Request $request, ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
+        $request->validate([
+            'month' => 'nullable|integer|between:1,12',
+            'year' => 'nullable|integer|between:2000,2100',
+        ]);
+
         $user = Auth::user();
+        if ($user->role_type !== 'supervisor') {
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
+        }
+
         $month = $request->query('month', Carbon::now()->month);
         $year = $request->query('year', Carbon::now()->year);
 
@@ -107,6 +116,10 @@ class SupervisorController extends Controller
 
     public function dashboardSummary(Request $request, ScoringService $scoringService)
     {
+        $request->validate([
+            'date' => 'nullable|date_format:Y-m-d',
+        ]);
+
         $user = Auth::user();
 
         if ($user->role_type !== 'supervisor') {
@@ -119,8 +132,6 @@ class SupervisorController extends Controller
             $targetDate = Carbon::today();
         }
 
-        $startOfDay = $targetDate->copy()->startOfDay();
-        $endOfDay = $targetDate->copy()->endOfDay();
         $startOfMonth = $targetDate->copy()->startOfMonth();
         $endOfMonth = $targetDate->copy()->endOfMonth();
 
@@ -265,6 +276,11 @@ class SupervisorController extends Controller
 
     public function getCrewEvalStats($id, Request $request, ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
+        $request->validate([
+            'month' => 'nullable|integer|between:1,12',
+            'year' => 'nullable|integer|between:2000,2100',
+        ]);
+
         $user = Auth::user();
         if ($user->role_type !== 'supervisor' && $user->role_type !== 'manager') {
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);

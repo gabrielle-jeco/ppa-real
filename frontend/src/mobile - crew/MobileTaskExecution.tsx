@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Camera, X, Image as ImageIcon } from 'lucide-react';
 import MobileEvidenceListModal from './MobileEvidenceListModal';
 import MobileCrewTaskPreview from './MobileCrewTaskPreview';
@@ -22,7 +22,6 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
     const isNonTodayView = Boolean(viewDate && viewDate !== new Date().toLocaleDateString('en-CA'));
     const isReadOnly = readOnly || task.status === 'approved' || isPastDue || isBeforeStart || isNonTodayView;
 
-    const [animateIn, setAnimateIn] = useState(false);
 
     // View States
     const [showHistory, setShowHistory] = useState(false); // Acts as "Preview Mode"
@@ -54,10 +53,6 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
 
     // Camera State
     const [showCamera, setShowCamera] = useState(false);
-
-    useEffect(() => {
-        setAnimateIn(true);
-    }, []);
 
     const handleSlotClick = (type: 'before' | 'after') => {
         if (type === 'before' && !canUploadBefore) return;

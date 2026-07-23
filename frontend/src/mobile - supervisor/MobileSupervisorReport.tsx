@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Star } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 
@@ -10,7 +10,6 @@ interface MobileSupervisorReportProps {
 export default function MobileSupervisorReport({ onBack }: MobileSupervisorReportProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [stats, setStats] = useState<any>(null);
-    const [loading, setLoading] = useState(false);
 
     const today = new Date();
     const currentYear = today.getFullYear();
@@ -48,7 +47,6 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
 
         for (let i = 1; i <= daysInMonth; i++) {
             const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), i);
-            const isSelected = i === selectedDate.getDate();
             const isFuture = isFutureDate(date);
             const isToday = date.getDate() === today.getDate() &&
                 date.getMonth() === today.getMonth() &&
@@ -72,7 +70,6 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
 
     useEffect(() => {
         const fetchStats = async () => {
-            setLoading(true);
             try {
                 const month = selectedDate.getMonth() + 1;
                 const year = selectedDate.getFullYear();
@@ -85,8 +82,6 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
                 }
             } catch (error) {
                 console.error("Gagal mengambil statistik laporan supervisor", error);
-            } finally {
-                setLoading(false);
             }
         };
         fetchStats();

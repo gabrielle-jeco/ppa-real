@@ -28,8 +28,8 @@ export const toTimeFieldValue = (value: unknown, fallback = '') => {
 
 export const getTaskWindowEndDate = (baseDate = new Date()) => {
     const base = startOfDay(baseDate);
-    const cutoffMonth = base.getDate() <= 21 ? base.getMonth() : base.getMonth() + 1;
-    return new Date(base.getFullYear(), cutoffMonth, 21);
+    base.setDate(base.getDate() + 6);
+    return base;
 };
 
 export const isAfterTaskWindow = (date: Date, baseDate = new Date()) => (

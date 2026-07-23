@@ -8,7 +8,7 @@ import SubmissionHistory from './SubmissionHistory';
 import TaskStartStatus from '../general/TaskStartStatus';
 import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 import { canAssignTaskOnDate, clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
-import { isTaskNotStarted } from '../utils/taskTiming';
+import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
 
 interface CrewDetailProps {
@@ -33,49 +33,10 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [activityLogs, setActivityLogs] = useState<any[]>([]);
     const [evalStats, setEvalStats] = useState<any>(null);
-
-    useEffect(() => {
-        if (crew?.id) {
-            fetchTasks();
-            fetchEvaluationStatus();
-            fetchActivityLogs();
-            setRightPanelMode('ACTIVITY');
-            setViewMode('TASKS');
-        }
-    }, [crew?.id]);
-
-    useEffect(() => {
-        fetchTasks();
-        fetchEvaluationStatus();
-        fetchActivityLogs();
-    }, [selectedDate]);
-
-    useEffect(() => {
-        if (!crew?.id) return;
-
-        const timer = window.setInterval(() => {
-            fetchTasks();
-            if (rightPanelMode === 'ACTIVITY') {
-                fetchActivityLogs();
-            }
-        }, 15000);
-
-        return () => window.clearInterval(timer);
-    }, [crew?.id, selectedDate, rightPanelMode]);
-
-    useEffect(() => {
-        tasks.forEach(notifyApprovalGrace);
-    }, [tasks]);
-
-    // Fetch eval stats when crew or month changes
-    useEffect(() => {
-        if (crew?.id) {
-            fetchEvalStats();
-        }
-    }, [crew?.id, selectedDate]);
+    const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
 
     // Fetch Crew's Tasks
-    const fetchTasks = async () => {
+    async function fetchTasks() {
         try {
             const token = localStorage.getItem('auth_token');
             const dateStr = selectedDate.toLocaleDateString('en-CA');
@@ -89,11 +50,9 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         } catch (error) {
             console.error("Gagal mengambil tugas", error);
         }
-    };
+    }
 
-
-
-    const fetchEvaluationStatus = async () => {
+    async function fetchEvaluationStatus() {
         try {
             const token = localStorage.getItem('auth_token');
             const dateStr = selectedDate.toLocaleDateString('en-CA');
@@ -107,10 +66,10 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         } catch (error) {
             console.error("Gagal memeriksa evaluasi", error);
         }
-    };
+    }
 
     // Fetch Activity Logs for this crew on selected date
-    const fetchActivityLogs = async () => {
+    async function fetchActivityLogs() {
         try {
             const token = localStorage.getItem('auth_token');
             const dateStr = selectedDate.toLocaleDateString('en-CA');
@@ -124,10 +83,10 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         } catch (error) {
             console.error("Gagal mengambil log aktivitas", error);
         }
-    };
+    }
 
     // Fetch Crew Eval Stats (Activity Monitor, Personality, Yearly Score)
-    const fetchEvalStats = async () => {
+    async function fetchEvalStats() {
         try {
             const token = localStorage.getItem('auth_token');
             const m = selectedDate.getMonth() + 1;
@@ -183,7 +142,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         } catch (error) {
             console.error("Gagal menambahkan tugas", error);
         }
-    };
+    }
 
     const handleBulkAddTask = async (taskData: any) => {
         try {
@@ -208,7 +167,51 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         } catch (error) {
             console.error("Gagal membuat Bulk Assignment", error);
         }
-    };
+    }
+
+    useEffect(() => {
+        if (crew?.id) {
+            fetchTasks();
+            fetchEvaluationStatus();
+            fetchActivityLogs();
+            setRightPanelMode('ACTIVITY');
+            setViewMode('TASKS');
+        }
+    }, [crew?.id]);
+
+    useEffect(() => {
+        fetchTasks();
+        fetchEvaluationStatus();
+        fetchActivityLogs();
+    }, [selectedDate]);
+
+    useEffect(() => {
+        if (!crew?.id) return;
+
+        const timer = window.setInterval(() => {
+            fetchTasks();
+            if (rightPanelMode === 'ACTIVITY') {
+                fetchActivityLogs();
+            }
+        }, 15000);
+
+        return () => window.clearInterval(timer);
+    }, [crew?.id, selectedDate, rightPanelMode]);
+
+    useEffect(() => {
+        tasks.forEach(notifyApprovalGrace);
+    }, [tasks]);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setCurrentTimestamp(Date.now()), 60000);
+        return () => window.clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        if (crew?.id) {
+            fetchEvalStats();
+        }
+    }, [crew?.id, selectedDate]);
 
     const handleUpdateTask = async (taskData: any) => {
         if (!editingTask) return;
@@ -327,13 +330,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
     };
 
     const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
-    const canApproveTask = (task: any) => addApprovalGraceDay(new Date(task.due_at)).getTime() >= Date.now();
-
-    const addApprovalGraceDay = (date: Date) => {
-        const result = new Date(date);
-        result.setHours(result.getHours() + 24);
-        return result;
-    };
+    const canApproveTask = (task: any) => (getTaskApprovalDeadline(task)?.getTime() ?? 0) >= currentTimestamp;
 
     const canEditTask = (task: any) => (
         (task.assignment_type || 'individual') === 'individual'

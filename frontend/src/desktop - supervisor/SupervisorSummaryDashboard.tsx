@@ -178,14 +178,14 @@ export default function SupervisorSummaryDashboard() {
                                     {summary.pending_approvals.length === 0 ? (
                                         <p className="text-sm text-gray-400">Tidak ada pekerjaan yang menunggu persetujuan.</p>
                                     ) : summary.pending_approvals.map((task, index) => (
-                                        <div key={task.id} className="text-base font-black text-gray-800 leading-snug">
-                                            <p>{index + 1}. {task.crew_name} - {task.title}</p>
-                                            <TaskStartStatus
-                                                task={task}
-                                                scheduleClassName="mt-1 text-[11px] font-semibold text-gray-400"
-                                                statusClassName="text-[11px] font-bold text-amber-500"
-                                            />
-                                        </div>
+                                            <div key={task.id} className="text-base font-black text-gray-800 leading-snug">
+                                                <p>{index + 1}. {task.crew_name} - {task.title}</p>
+                                                <TaskStartStatus
+                                                    task={task}
+                                                    scheduleClassName="mt-1 text-[11px] font-semibold text-gray-400"
+                                                    statusClassName="text-[11px] font-bold text-amber-500"
+                                                />
+                                            </div>
                                     ))}
                                 </div>
                             </DashboardPanel>

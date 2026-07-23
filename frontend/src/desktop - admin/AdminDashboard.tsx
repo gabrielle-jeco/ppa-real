@@ -68,6 +68,7 @@ type CmsUser = {
     job_level_position_code?: string | null;
     role_type?: string;
     active: boolean;
+    is_back_office: boolean;
     locations: Array<{ initial: string; name: string }>;
     leader?: { username: string; name: string } | null;
     subordinates_count: number;
@@ -152,6 +153,7 @@ const emptyUserForm = {
     role_id: '',
     job_level_id: '',
     active: true,
+    is_back_office: false,
     location_ids: [] as string[],
 };
 
@@ -185,6 +187,12 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState('');
+
+    useEffect(() => {
+        if (!message) return;
+        const timeout = window.setTimeout(() => setMessage(''), 5000);
+        return () => window.clearTimeout(timeout);
+    }, [message]);
     
     const [usersData, setUsersData] = useState<CmsUser[]>([]);
     const [usersPage, setUsersPage] = useState(1);
@@ -462,6 +470,7 @@ export default function AdminDashboard() {
             role_id: user.role_id ? String(user.role_id) : '',
             job_level_id: user.job_level_id ? String(user.job_level_id) : '',
             active: user.active,
+            is_back_office: user.is_back_office,
             location_ids: user.locations.map((location) => location.initial),
         });
         setIsUserFormOpen(true);
@@ -1108,8 +1117,11 @@ export default function AdminDashboard() {
             </section>
 
             {message && (
-                <div className="mb-5 rounded-2xl bg-purple-50 border border-purple-100 text-primary px-4 py-3 text-sm font-semibold">
-                    {message}
+                <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl border border-purple-100 bg-purple-50 px-4 py-3 text-sm font-semibold text-primary">
+                    <span>{message}</span>
+                    <button type="button" onClick={() => setMessage('')} className="rounded-lg p-1 transition hover:bg-purple-100" aria-label="Tutup pemberitahuan">
+                        <X size={16} />
+                    </button>
                 </div>
             )}
 
@@ -1125,14 +1137,14 @@ export default function AdminDashboard() {
             </div>
 
             {activeTab === 'users' && canAccess('users_locations') && (
-                <div className={`grid gap-6 transition-all duration-300 ${
+                <div className={`grid h-[clamp(360px,calc(100dvh-24rem),680px)] items-stretch gap-6 transition-all duration-300 ${
                     isUserFormOpen && isRoleFormOpen
                         ? 'grid-cols-[1fr_0.75fr_0.75fr]'
                         : (isUserFormOpen || isRoleFormOpen)
                             ? 'grid-cols-[1.2fr_0.8fr]'
                             : 'grid-cols-1'
                 }`}>
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <h2 className="font-black text-gray-900 whitespace-nowrap">Master User</h2>
                             <div className="w-64">
@@ -1163,7 +1175,7 @@ export default function AdminDashboard() {
                                 </button>
                             )}
                         </div>
-                        <div className="divide-y divide-gray-100 max-h-[560px] overflow-y-auto">
+                        <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overscroll-contain">
                             {usersData.length === 0 ? (
                                 <div className="p-8 text-center text-gray-400 text-sm">User tidak ditemukan.</div>
                             ) : usersData.map((user) => (
@@ -1191,7 +1203,7 @@ export default function AdminDashboard() {
                     </div>
 
                     {isUserFormOpen && (
-                        <form onSubmit={saveUser} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                        <form onSubmit={saveUser} className="h-full min-h-0 space-y-4 overflow-y-auto overscroll-contain rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data User</p>
@@ -1217,7 +1229,7 @@ export default function AdminDashboard() {
                                 />
                             </Field>
                             <Field label="Password">
-                                <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="input" placeholder={selectedUsername ? 'Kosongkan jika tidak ingin mengganti password' : 'Default: password'} />
+                                <input type="password" minLength={8} value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="input" placeholder={selectedUsername ? 'Kosongkan jika tidak ingin mengganti password' : 'Opsional untuk user YoJadwal; wajib untuk akun CMS'} />
                             </Field>
                             {canAccess('role_management') && (
                                 <Field label="Role Akun">
@@ -1240,6 +1252,10 @@ export default function AdminDashboard() {
                             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
                                 <input type="checkbox" checked={userForm.active} onChange={(e) => setUserForm({ ...userForm, active: e.target.checked })} />
                                 User aktif
+                            </label>
+                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                                <input type="checkbox" checked={userForm.is_back_office} onChange={(e) => setUserForm({ ...userForm, is_back_office: e.target.checked })} />
+                                Back Office
                             </label>
                             <Field label="Lokasi">
                                 <CustomMultiSelect
@@ -1264,7 +1280,7 @@ export default function AdminDashboard() {
                     )}
 
                     {isRoleFormOpen && (
-                        <form onSubmit={saveRole} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-5">
+                        <form onSubmit={saveRole} className="h-full min-h-0 space-y-5 overflow-y-auto overscroll-contain rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Role Akun</p>
@@ -1408,8 +1424,8 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'appRoles' && canAccess('app_roles') && (
-                <div className={`grid gap-6 transition-all duration-300 ${isAppRoleFormOpen ? 'grid-cols-[1.2fr_0.8fr]' : 'grid-cols-1'}`}>
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className={`grid h-[clamp(360px,calc(100dvh-24rem),680px)] items-stretch gap-6 transition-all duration-300 ${isAppRoleFormOpen ? 'grid-cols-[1.2fr_0.8fr]' : 'grid-cols-1'}`}>
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <div>
                                 <h2 className="font-black text-gray-900">Role Aplikasi per Lokasi</h2>
@@ -1439,7 +1455,7 @@ export default function AdminDashboard() {
                                 Sinkron dari User
                             </button>
                         </div>
-                        <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
+                        <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overscroll-contain">
                             {userLocationsData.length === 0 ? (
                                 <div className="p-8 text-center text-gray-400 text-sm">Assignment tidak ditemukan.</div>
                             ) : userLocationsData.map((assignment) => (
@@ -1469,7 +1485,7 @@ export default function AdminDashboard() {
                     </div>
 
                     {isAppRoleFormOpen && (
-                        <form onSubmit={saveAppRole} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-5">
+                        <form onSubmit={saveAppRole} className="h-full min-h-0 space-y-5 overflow-y-auto overscroll-contain rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Role Aplikasi</p>
@@ -1643,8 +1659,8 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'guides' && canAccess('work_stations') && (
-                <div className={`grid gap-6 transition-all duration-300 ${isGuideFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                <div className={`grid h-[clamp(360px,calc(100dvh-24rem),680px)] items-stretch gap-6 transition-all duration-300 ${isGuideFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <div>
                                 <h2 className="font-black text-gray-900 whitespace-nowrap">Master Work Station</h2>
@@ -1661,7 +1677,7 @@ export default function AdminDashboard() {
                             </div>
                             <button onClick={() => { setGuideForm({ id: '', name: '', guideText: '', active: true }); setIsGuideFormOpen(true); }} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">Work Station Baru</button>
                         </div>
-                        <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
+                        <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overscroll-contain">
                             {data.work_stations.filter(station => station.name.toLowerCase().includes(guidesSearch.toLowerCase())).map((station) => (
                                 <button key={station.id} onClick={() => selectGuide(station)} className={`w-full px-6 py-4 text-left hover:bg-purple-50 ${guideForm.id === String(station.id) ? 'bg-purple-50' : ''}`}>
                                     <div className="flex items-center justify-between gap-4">
@@ -1679,7 +1695,7 @@ export default function AdminDashboard() {
                     </div>
 
                     {isGuideFormOpen && (
-                        <form onSubmit={saveGuide} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                        <form onSubmit={saveGuide} className="h-full min-h-0 space-y-4 overflow-y-auto overscroll-contain rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Work Station</p>
@@ -1724,8 +1740,8 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'evaluations' && canAccess('evaluation_masters') && (
-                <div className={`grid gap-6 transition-all duration-300 ${isEvaluationFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                <div className={`grid h-[clamp(360px,calc(100dvh-24rem),680px)] items-stretch gap-6 transition-all duration-300 ${isEvaluationFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <div>
                                 <h2 className="font-black text-gray-900">Master Evaluasi</h2>
@@ -1733,7 +1749,7 @@ export default function AdminDashboard() {
                             </div>
                             <button onClick={resetEvaluationForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">Evaluasi Baru</button>
                         </div>
-                        <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
+                        <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overscroll-contain">
                             {data.evaluation_masters.length === 0 ? (
                                 <div className="p-8 text-center text-gray-400 text-sm">Item evaluasi tidak ditemukan.</div>
                             ) : data.evaluation_masters.map((item) => (
@@ -1753,7 +1769,7 @@ export default function AdminDashboard() {
                     </div>
 
                     {isEvaluationFormOpen && (
-                        <form onSubmit={saveEvaluationMaster} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                        <form onSubmit={saveEvaluationMaster} className="h-full min-h-0 space-y-4 overflow-y-auto overscroll-contain rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Evaluasi</p>
@@ -1850,8 +1866,8 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'locations' && canAccess('locations') && (
-                <div className={`grid gap-6 transition-all duration-300 ${isLocationFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                <div className={`grid h-[clamp(360px,calc(100dvh-24rem),680px)] items-stretch gap-6 transition-all duration-300 ${isLocationFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <h2 className="font-black text-gray-900 whitespace-nowrap">Master Lokasi</h2>
                             <div className="flex-1 max-w-sm relative">
@@ -1865,7 +1881,7 @@ export default function AdminDashboard() {
                             </div>
                             <button onClick={resetLocationForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">Lokasi Baru</button>
                         </div>
-                        <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
+                        <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overscroll-contain">
                             {locationsData.length === 0 ? (
                                 <div className="p-8 text-center text-gray-400 text-sm">Lokasi tidak ditemukan.</div>
                             ) : locationsData.map((location) => (
@@ -1890,7 +1906,7 @@ export default function AdminDashboard() {
                     </div>
 
                     {isLocationFormOpen && (
-                        <form onSubmit={saveLocation} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                        <form onSubmit={saveLocation} className="h-full min-h-0 space-y-4 overflow-y-auto overscroll-contain rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Lokasi</p>
@@ -1942,8 +1958,8 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'regionals' && canAccess('regionals') && (
-                <div className={`grid gap-6 transition-all duration-300 ${isRegionalFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                <div className={`grid h-[clamp(360px,calc(100dvh-24rem),680px)] items-stretch gap-6 transition-all duration-300 ${isRegionalFormOpen ? 'grid-cols-[1fr_1fr]' : 'grid-cols-1'}`}>
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <h2 className="font-black text-gray-900 whitespace-nowrap">Master Regional</h2>
                             <div className="flex-1 max-w-sm relative">
@@ -1957,7 +1973,7 @@ export default function AdminDashboard() {
                             </div>
                             <button onClick={resetRegionalForm} className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-100 whitespace-nowrap">Regional Baru</button>
                         </div>
-                        <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
+                        <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overscroll-contain">
                             {regionalsData.length === 0 ? (
                                 <div className="p-8 text-center text-gray-400 text-sm">Regional tidak ditemukan.</div>
                             ) : regionalsData.map((regional) => (
@@ -1975,7 +1991,7 @@ export default function AdminDashboard() {
                     </div>
 
                     {isRegionalFormOpen && (
-                        <form onSubmit={saveRegional} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
+                        <form onSubmit={saveRegional} className="h-full min-h-0 space-y-4 overflow-y-auto overscroll-contain rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Data Regional</p>
@@ -2062,7 +2078,7 @@ function PaginationControls({ page, totalPages, onPageChange }: { page: number; 
 
     return (
         <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto pb-1">
                 <button
                     disabled={safePage <= 1}
                     onClick={() => goToPage(safePage - 1)}
@@ -2071,7 +2087,7 @@ function PaginationControls({ page, totalPages, onPageChange }: { page: number; 
                     Sebelumnya
                 </button>
 
-                <div className="flex items-center gap-1">
+                <div className="flex flex-shrink-0 items-center gap-1">
                     {pageItems.map((item) => typeof item === 'number' ? (
                         <button
                             key={item}

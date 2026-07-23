@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -21,6 +20,12 @@ class User extends Authenticatable
         'role_id',
         'initial_store',
         'active',
+        'is_back_office',
+    ];
+
+    protected $casts = [
+        'active' => 'boolean',
+        'is_back_office' => 'boolean',
     ];
 
     protected $hidden = [

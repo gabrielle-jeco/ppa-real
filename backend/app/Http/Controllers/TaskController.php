@@ -12,13 +12,11 @@ use App\Models\WorkStation;
 use App\Services\UserNotificationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class TaskController extends Controller
 {
-    private const APPROVAL_GRACE_HOURS = 24;
     private const TASK_WEIGHTS = [
         'mudah' => 2,
         'menengah' => 6,
@@ -27,6 +25,11 @@ class TaskController extends Controller
 
     public function index(Request $request, $supervisorId)
     {
+        $request->validate([
+            'date' => 'nullable|date_format:Y-m-d',
+            'role' => 'nullable|string|max:255',
+        ]);
+
         $user = Auth::user();
         $targetDate = $request->has('date')
             ? Carbon::parse($request->date)
@@ -110,11 +113,11 @@ class TaskController extends Controller
                 'nullable',
                 Rule::exists('work_stations', 'id')->where('active', true),
             ],
-            'title' => 'required|string',
+            'title' => 'required|string|max:255',
             'due_at' => 'required|date',
             'start_at' => 'nullable|date',
             'weight_label' => ['nullable', Rule::in(array_keys(self::TASK_WEIGHTS))],
-            'note' => 'nullable|string',
+            'note' => 'nullable|string|max:5000',
         ]);
 
         $employer = Auth::user();
@@ -147,15 +150,18 @@ class TaskController extends Controller
 
         if (!$request->filled('work_station_id')) {
             throw ValidationException::withMessages([
-                'work_station_id' => ['Task category is required for crew tasks.'],
+                'work_station_id' => ['Kategori pekerjaan wajib dipilih untuk tugas crew.'],
             ]);
         }
 
-        $startAt = $request->filled('start_at') ? Carbon::parse($request->start_at) : Carbon::now();
         $dueAt = Carbon::parse($request->due_at);
+        $isTodayTask = $dueAt->isSameDay(Carbon::today());
+        $startAt = $isTodayTask
+            ? Carbon::now()
+            : ($request->filled('start_at') ? Carbon::parse($request->start_at) : Carbon::now());
         $minimumStart = Carbon::now()->startOfMinute();
 
-        if ($startAt->lt($minimumStart)) {
+        if (!$isTodayTask && $startAt->lt($minimumStart)) {
             throw ValidationException::withMessages([
                 'start_at' => ['Jam mulai pekerjaan tidak boleh berada di masa lalu.'],
             ]);
@@ -175,7 +181,7 @@ class TaskController extends Controller
 
         if ($this->isOutsideTaskWindow($dueAt)) {
             throw ValidationException::withMessages([
-                'due_at' => ['Tanggal pekerjaan hanya dapat dibuat sampai tanggal 21 pada periode penugasan saat ini.'],
+                'due_at' => ['Tanggal pekerjaan hanya dapat dibuat dalam tujuh hari berjalan.'],
             ]);
         }
 
@@ -190,6 +196,7 @@ class TaskController extends Controller
             'description' => $request->note,
             'start_at' => $startAt,
             'due_at' => $dueAt,
+            'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
             'weight_label' => $weightLabel,
             'weight_value' => self::TASK_WEIGHTS[$weightLabel],
             'status' => 'pending',
@@ -215,17 +222,17 @@ class TaskController extends Controller
     public function bulkStore(Request $request)
     {
         $request->validate([
-            'crew_ids' => 'required|array|min:1',
+            'crew_ids' => 'required|array|min:1|max:200',
             'crew_ids.*' => 'required|exists:users,username',
             'work_station_id' => [
                 'nullable',
                 Rule::exists('work_stations', 'id')->where('active', true),
             ],
-            'title' => 'required|string',
-            'note' => 'nullable|string',
+            'title' => 'required|string|max:255',
+            'note' => 'nullable|string|max:5000',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
-            'repeat_days' => 'nullable|array',
+            'repeat_days' => 'nullable|array|max:7',
             'repeat_days.*' => 'integer|min:0|max:6',
             'start_time' => 'required|date_format:H:i',
             'due_time' => 'required|date_format:H:i',
@@ -256,7 +263,7 @@ class TaskController extends Controller
         $startDate = Carbon::parse($request->start_date)->startOfDay();
         $endDate = Carbon::parse($request->end_date)->startOfDay();
         if ($this->isOutsideTaskWindow($endDate)) {
-            return response()->json(['message' => 'Tanggal penugasan hanya dapat dibuat sampai tanggal 21 pada periode saat ini.'], 422);
+            return response()->json(['message' => 'Tanggal penugasan hanya dapat dibuat dalam tujuh hari berjalan.'], 422);
         }
 
         $dates = [];
@@ -266,7 +273,9 @@ class TaskController extends Controller
                 continue;
             }
 
-            $startAt = Carbon::parse($date->toDateString() . ' ' . $request->start_time);
+            $startAt = $date->isSameDay(Carbon::today())
+                ? Carbon::now()
+                : Carbon::parse($date->toDateString() . ' ' . $request->start_time);
             $dueAt = Carbon::parse($date->toDateString() . ' ' . $request->due_time);
 
             if ($dueAt->lt($startAt)) {
@@ -318,6 +327,7 @@ class TaskController extends Controller
                         'description' => $request->note,
                         'start_at' => $startAt,
                         'due_at' => $dueAt,
+                        'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
                         'weight_label' => $weightLabel,
                         'weight_value' => self::TASK_WEIGHTS[$weightLabel],
                         'status' => 'pending',
@@ -362,16 +372,17 @@ class TaskController extends Controller
                 'nullable',
                 Rule::exists('work_stations', 'id')->where('active', true),
             ],
-            'title' => 'sometimes|required|string',
+            'title' => 'sometimes|required|string|max:255',
             'due_at' => 'sometimes|required|date',
             'start_at' => 'nullable|date',
             'weight_label' => ['nullable', Rule::in(array_keys(self::TASK_WEIGHTS))],
-            'note' => 'nullable|string',
+            'note' => 'nullable|string|max:5000',
         ]);
 
+        $employer = Auth::user();
         $task = Task::with('evidences')->findOrFail($id);
 
-        if ($task->employer_id !== Auth::user()->username) {
+        if ($task->employer_id !== $employer->username) {
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
@@ -379,12 +390,15 @@ class TaskController extends Controller
             return response()->json(['message' => 'Tugas yang sudah berjalan atau disetujui tidak dapat diedit.'], 400);
         }
 
-        $startAt = $request->filled('start_at')
-            ? Carbon::parse($request->start_at)
-            : ($task->start_at ?: Carbon::parse($task->created_at));
         $dueAt = $request->filled('due_at') ? Carbon::parse($request->due_at) : Carbon::parse($task->due_at);
+        $isTodayTask = $dueAt->isSameDay(Carbon::today());
+        $startAt = $isTodayTask
+            ? ($task->start_at ?: Carbon::now())
+            : ($request->filled('start_at')
+                ? Carbon::parse($request->start_at)
+                : ($task->start_at ?: Carbon::parse($task->created_at)));
 
-        if ($request->filled('start_at') && $startAt->lt(Carbon::now()->startOfMinute())) {
+        if (!$isTodayTask && $request->filled('start_at') && $startAt->lt(Carbon::now()->startOfMinute())) {
             return response()->json(['message' => 'Jam mulai pekerjaan tidak boleh berada di masa lalu.'], 422);
         }
 
@@ -399,7 +413,7 @@ class TaskController extends Controller
         }
 
         if ($this->isOutsideTaskWindow($dueAt)) {
-            return response()->json(['message' => 'Tanggal pekerjaan hanya dapat dibuat sampai tanggal 21 pada periode penugasan saat ini.'], 422);
+            return response()->json(['message' => 'Tanggal pekerjaan hanya dapat dibuat dalam tujuh hari berjalan.'], 422);
         }
 
         $weightLabel = $this->normalizeWeightLabel($request->input('weight_label', $task->weight_label));
@@ -410,6 +424,7 @@ class TaskController extends Controller
             'description' => $request->input('note', $task->description),
             'start_at' => $startAt,
             'due_at' => $dueAt,
+            'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
             'weight_label' => $weightLabel,
             'weight_value' => self::TASK_WEIGHTS[$weightLabel],
         ])->save();
@@ -433,17 +448,17 @@ class TaskController extends Controller
     public function updateBatch(Request $request, $id)
     {
         $request->validate([
-            'crew_ids' => 'required|array|min:1',
+            'crew_ids' => 'required|array|min:1|max:200',
             'crew_ids.*' => 'required|exists:users,username',
             'work_station_id' => [
                 'nullable',
                 Rule::exists('work_stations', 'id')->where('active', true),
             ],
-            'title' => 'required|string',
-            'note' => 'nullable|string',
+            'title' => 'required|string|max:255',
+            'note' => 'nullable|string|max:5000',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
-            'repeat_days' => 'nullable|array',
+            'repeat_days' => 'nullable|array|max:7',
             'repeat_days.*' => 'integer|min:0|max:6',
             'start_time' => 'required|date_format:H:i',
             'due_time' => 'required|date_format:H:i',
@@ -490,7 +505,7 @@ class TaskController extends Controller
         $endDate = Carbon::parse($request->end_date)->startOfDay();
 
         if ($this->isOutsideTaskWindow($endDate)) {
-            return response()->json(['message' => 'Tanggal penugasan hanya dapat dibuat sampai tanggal 21 pada periode saat ini.'], 422);
+            return response()->json(['message' => 'Tanggal penugasan hanya dapat dibuat dalam tujuh hari berjalan.'], 422);
         }
 
         $dates = [];
@@ -499,7 +514,9 @@ class TaskController extends Controller
                 continue;
             }
 
-            $startAt = Carbon::parse($date->toDateString() . ' ' . $request->start_time);
+            $startAt = $date->isSameDay(Carbon::today())
+                ? Carbon::now()
+                : Carbon::parse($date->toDateString() . ' ' . $request->start_time);
             $dueAt = Carbon::parse($date->toDateString() . ' ' . $request->due_time);
 
             if ($dueAt->lt($startAt)) {
@@ -568,6 +585,7 @@ class TaskController extends Controller
                         'description' => $request->note,
                         'start_at' => $startAt,
                         'due_at' => $dueAt,
+                        'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
                         'weight_label' => $weightLabel,
                         'weight_value' => self::TASK_WEIGHTS[$weightLabel],
                         'status' => 'pending',
@@ -692,7 +710,7 @@ class TaskController extends Controller
     {
         $request->validate([
             'status' => 'required|in:approved,rejected,pending',
-            'action_date' => 'nullable|date',
+            'action_date' => 'nullable|date_format:Y-m-d',
         ]);
 
         $task = Task::findOrFail($id);
@@ -741,10 +759,10 @@ class TaskController extends Controller
     {
         $request->validate([
             'before' => 'nullable|array|max:1',
-            'before.*' => 'nullable|image|max:10240',
+            'before.*' => 'nullable|file|image|mimes:jpg,jpeg,png,webp|mimetypes:image/jpeg,image/png,image/webp|max:10240',
             'after' => 'nullable|array|max:3',
-            'after.*' => 'nullable|image|max:10240',
-            'action_date' => 'nullable|date',
+            'after.*' => 'nullable|file|image|mimes:jpg,jpeg,png,webp|mimetypes:image/jpeg,image/png,image/webp|max:10240',
+            'action_date' => 'nullable|date_format:Y-m-d',
         ]);
 
         $task = Task::with('evidences')->findOrFail($id);
@@ -761,8 +779,8 @@ class TaskController extends Controller
             return response()->json(['message' => 'Pekerjaan belum memasuki jam mulai.'], 423);
         }
 
-        if ($task->employee_id !== Auth::user()->username && $task->employer_id !== Auth::user()->username) {
-            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
+        if ($task->employee_id !== Auth::user()->username) {
+            return response()->json(['message' => 'Tidak memiliki akses. Hanya penerima tugas yang dapat mengunggah bukti.'], 403);
         }
 
         if ($response = $this->rejectNonTodayActionDate($request, $task)) {
@@ -860,46 +878,6 @@ class TaskController extends Controller
             return response()->json(['message' => 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.'], 500);
         }
     }
-    public function removeEvidence(Request $request, $id)
-    {
-        $request->validate([
-            'evidence_id' => 'required|integer|exists:task_evidences,id'
-        ]);
-
-        $task = Task::with('evidences')->findOrFail($id);
-
-        if ($task->status === 'approved') {
-            return response()->json(['message' => 'Bukti pekerjaan yang sudah disetujui tidak dapat dihapus. Batalkan persetujuan terlebih dahulu.'], 400);
-        }
-
-        if ($this->isTaskLocked($task)) {
-            return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan bukti tidak dapat diubah lagi.'], 400);
-        }
-
-        if ($task->employee_id !== Auth::user()->username && $task->employer_id !== Auth::user()->username) {
-            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
-        }
-
-        $evidence = $task->evidences()->find($request->input('evidence_id'));
-        if (!$evidence) {
-            return response()->json(['message' => 'Bukti tidak ditemukan untuk tugas ini.'], 404);
-        }
-
-        if ($evidence->type !== 'before') {
-            return response()->json([
-                'message' => 'Hanya bukti sebelum bekerja yang dapat dihapus atau diganti. Bukti sesudah bekerja dikunci untuk penilaian.'
-            ], 400);
-        }
-
-        if (Storage::disk('public')->exists($evidence->file_path)) {
-            Storage::disk('public')->delete($evidence->file_path);
-        }
-
-        $evidence->delete();
-
-        return response()->json(['message' => 'Bukti berhasil dihapus.', 'task' => $task->load('evidences')]);
-    }
-
     public function readGuide(Request $request)
     {
         $request->validate([
@@ -1020,11 +998,13 @@ class TaskController extends Controller
 
     private function isApprovalLocked(Task $task): bool
     {
-        $dueAt = $task->due_at instanceof Carbon
-            ? $task->due_at
-            : Carbon::parse($task->due_at);
+        $deadline = $task->approval_deadline_at
+            ? ($task->approval_deadline_at instanceof Carbon
+                ? $task->approval_deadline_at
+                : Carbon::parse($task->approval_deadline_at))
+            : $this->approvalDeadlineFor($task->createdBy, Carbon::parse($task->due_at));
 
-        return $dueAt->copy()->addHours(self::APPROVAL_GRACE_HOURS)->isPast();
+        return $deadline->isPast();
     }
 
     private function isTaskNotStarted(Task $task): bool
@@ -1045,11 +1025,17 @@ class TaskController extends Controller
 
     private function isOutsideTaskWindow(Carbon $date): bool
     {
-        $today = Carbon::today();
-        $cutoff = $today->copy()->day <= 21
-            ? $today->copy()->day(21)->endOfDay()
-            : $today->copy()->addMonthNoOverflow()->day(21)->endOfDay();
+        $cutoff = Carbon::today()->addDays(6)->endOfDay();
 
         return $date->copy()->endOfDay()->gt($cutoff);
+    }
+
+    private function approvalDeadlineFor(?User $supervisor, Carbon $dueAt): Carbon
+    {
+        $deadline = $dueAt->copy()->endOfDay();
+
+        return $supervisor?->is_back_office
+            ? $deadline->addDay()
+            : $deadline;
     }
 }

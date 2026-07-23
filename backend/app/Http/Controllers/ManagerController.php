@@ -13,10 +13,14 @@ class ManagerController extends Controller
 {
     public function getSupervisors(Request $request, ScoringService $scoringService)
     {
+        $request->validate([
+            'location_id' => 'nullable|string|max:255',
+        ]);
+
         $user = Auth::user();
 
         if ($user->role_type !== 'manager') {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
         $supervisorsCollection = $user->subordinateLines()->with(['subordinate.locations'])->get()
@@ -29,11 +33,11 @@ class ManagerController extends Controller
             return ['id' => $loc->initial, 'name' => $loc->name];
         });
 
-        $filterLocationName = 'All Locations';
+        $filterLocationName = 'Semua Lokasi';
 
         if ($user->manager_type === 'SM') {
             $smLocationId = $user->locations->first() ? $user->locations->first()->initial : null;
-            $filterLocationName = $user->locations->first() ? $user->locations->first()->name : 'Unknown Location';
+            $filterLocationName = $user->locations->first() ? $user->locations->first()->name : 'Lokasi tidak diketahui';
 
             if ($smLocationId) {
                 $supervisorsCollection = $supervisorsCollection->filter(function ($spv) use ($smLocationId) {
@@ -47,7 +51,7 @@ class ManagerController extends Controller
                 });
 
                 $loc = $user->locations->firstWhere('initial', $request->location_id);
-                $filterLocationName = $loc ? $loc->name : 'Unknown Location';
+                $filterLocationName = $loc ? $loc->name : 'Lokasi tidak diketahui';
             }
         }
 
@@ -85,20 +89,26 @@ class ManagerController extends Controller
 
     public function getSupervisorStats($id, Request $request, \App\Services\ScoringService $scoringService, YojadwalPresenceService $presenceService)
     {
+        $request->validate([
+            'month' => 'nullable|integer|between:1,12',
+            'year' => 'nullable|integer|between:2000,2100',
+            'day' => 'nullable|integer|between:1,31',
+        ]);
+
         $manager = Auth::user();
 
         if ($manager->role_type !== 'manager') {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
         $isSubordinate = $manager->subordinateLines()->where('subordinate_id', $id)->where('status', 'active')->exists();
         if (!$isSubordinate) {
-            return response()->json(['message' => 'Unauthorized or Supervisor not found'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses atau supervisor tidak ditemukan.'], 403);
         }
 
         $supervisor = User::where('username', $id)->first();
         if (!$supervisor) {
-            return response()->json(['message' => 'Supervisor not found'], 404);
+            return response()->json(['message' => 'Supervisor tidak ditemukan.'], 404);
         }
 
         $month = $request->query('month', Carbon::now()->month);
@@ -124,10 +134,14 @@ class ManagerController extends Controller
 
     public function getSupervisorCrewTasks($id, Request $request, ScoringService $scoringService)
     {
+        $request->validate([
+            'date' => 'nullable|date_format:Y-m-d',
+        ]);
+
         $manager = Auth::user();
 
         if ($manager->role_type !== 'manager') {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
         $isSubordinate = $manager->subordinateLines()
@@ -136,12 +150,12 @@ class ManagerController extends Controller
             ->exists();
 
         if (!$isSubordinate) {
-            return response()->json(['message' => 'Unauthorized or Supervisor not found'], 403);
+            return response()->json(['message' => 'Tidak memiliki akses atau supervisor tidak ditemukan.'], 403);
         }
 
         $supervisor = User::where('username', $id)->first();
         if (!$supervisor) {
-            return response()->json(['message' => 'Supervisor not found'], 404);
+            return response()->json(['message' => 'Supervisor tidak ditemukan.'], 404);
         }
 
         $targetDate = $request->has('date')

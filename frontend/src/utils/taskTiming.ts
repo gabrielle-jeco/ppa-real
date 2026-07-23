@@ -1,5 +1,7 @@
 export type TaskWithStartTime = {
     start_at?: string | null;
+    due_at?: string | null;
+    approval_deadline_at?: string | null;
 };
 
 export const getTaskStartDate = (task: TaskWithStartTime | null | undefined) => {
@@ -38,4 +40,18 @@ export const formatTaskStart = (
         hour: '2-digit',
         minute: '2-digit',
     });
+};
+
+export const getTaskApprovalDeadline = (task: TaskWithStartTime | null | undefined) => {
+    const value = task?.approval_deadline_at || task?.due_at;
+    if (!value) return null;
+
+    const deadline = new Date(value);
+    if (Number.isNaN(deadline.getTime())) return null;
+
+    if (!task?.approval_deadline_at) {
+        deadline.setHours(23, 59, 59, 999);
+    }
+
+    return deadline;
 };

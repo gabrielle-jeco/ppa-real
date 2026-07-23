@@ -16,17 +16,17 @@ interface MobileTaskPreviewProps {
     readOnly?: boolean;
 }
 
-export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, onTabChange, initialIndex = 0, onDeleteProof, onUpdateStatus, showHistoryLabel = false, readOnly = false }: MobileTaskPreviewProps) {
+export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, onTabChange, initialIndex = 0, showHistoryLabel = false, readOnly = false }: MobileTaskPreviewProps) {
     const [animateIn, setAnimateIn] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
 
     useEffect(() => {
-        if (isOpen) {
-            setAnimateIn(true);
-            setSelectedIndex(initialIndex);
-        } else {
-            setAnimateIn(false);
-        }
+        const frame = window.requestAnimationFrame(() => {
+            setAnimateIn(isOpen);
+            if (isOpen) setSelectedIndex(initialIndex);
+        });
+
+        return () => window.cancelAnimationFrame(frame);
     }, [isOpen, initialIndex]);
 
     const handleClose = () => {
@@ -133,7 +133,9 @@ export default function MobileTaskPreview({ task, isOpen, onClose, activeTab, on
                             <div className="flex items-center gap-3 text-white/80 text-xs">
                                 <span className="flex items-center gap-1">
                                     <Calendar size={12} />
-                                    {new Date(currentEvidence?.created_at || task.due_at || Date.now()).toLocaleString('id-ID')}
+                                    {currentEvidence?.created_at || task.due_at
+                                        ? new Date(currentEvidence?.created_at || task.due_at).toLocaleString('id-ID')
+                                        : '-'}
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <User size={12} />

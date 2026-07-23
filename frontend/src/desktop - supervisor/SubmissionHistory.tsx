@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import TaskStartStatus from '../general/TaskStartStatus';
 
 interface SubmissionHistoryProps {

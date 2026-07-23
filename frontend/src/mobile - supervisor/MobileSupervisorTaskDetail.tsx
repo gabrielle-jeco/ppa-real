@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Camera, X, Image as ImageIcon } from 'lucide-react';
 import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
 import MobileCrewTaskPreview from '../mobile - crew/MobileCrewTaskPreview';
@@ -22,7 +22,6 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
     const isBeforeStart = isTaskNotStarted(task);
     const isReadOnly = readOnly || isApproved || isPastDue || isBeforeStart;
 
-    const [animateIn, setAnimateIn] = useState(false);
 
     // View States
     const [showEvidenceList, setShowEvidenceList] = useState(isReadOnly);
@@ -52,10 +51,6 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
 
     // Preview State
     const [activeTab, setActiveTab] = useState<'before' | 'after'>('before');
-
-    useEffect(() => {
-        setAnimateIn(true);
-    }, []);
 
     const handleSlotClick = (type: 'before' | 'after') => {
         if (isReadOnly) return;
@@ -104,7 +99,7 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
             try {
                 const parsed = JSON.parse(error.message);
                 if (parsed.message) errorMessage = parsed.message;
-            } catch (e) {
+        } catch {
                 if (error.message) errorMessage = error.message;
             }
             alert(errorMessage);

@@ -81,17 +81,15 @@ class SendScheduledTaskNotifications extends Command
 
     private function sendApprovalReminders(UserNotificationService $notifications, Carbon $now): void
     {
-        $approvalDueFrom = $now->copy()->subHours(24);
-        $approvalDueUntil = $now->copy()->subHours(22);
-
         Task::query()
             ->whereIn('status', ['pending', 'rejected'])
-            ->whereBetween('due_at', [$approvalDueFrom, $approvalDueUntil])
+            ->whereNotNull('approval_deadline_at')
+            ->whereBetween('approval_deadline_at', [$now, $now->copy()->addHours(2)])
             ->whereHas('evidences')
             ->orderBy('id')
             ->chunkById(200, function ($tasks) use ($notifications) {
                 foreach ($tasks as $task) {
-                    $approvalEndsAt = $task->due_at->copy()->addHours(24);
+                    $approvalEndsAt = $task->approval_deadline_at;
                     $notifications->createAndPush(
                         $task->employer_id,
                         'approval_deadline_reminder',
