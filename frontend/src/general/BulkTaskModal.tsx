@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Check, Clock, X } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
 import useModalTransition from '../utils/useModalTransition';
+import { featureFlags } from '../utils/featureFlags';
 
 type CrewOption = { id: string; name: string };
 
@@ -172,7 +173,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
                 repeat_days: repeatDays,
                 start_time: effectiveStartTime,
                 due_time: dueTime,
-                weight_label: weightLabel,
+                ...(featureFlags.taskWeight ? { weight_label: weightLabel } : {}),
                 note,
             });
             reset();
@@ -185,7 +186,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
     return createPortal(
         <div
             className={`fixed inset-0 z-[30000] flex justify-center transition-colors duration-300 ${mobileSheet
-                ? `items-end p-0 sm:items-center sm:p-4 ${animateIn ? 'bg-black/50 backdrop-blur-sm' : 'bg-black/0 pointer-events-none'}`
+                ? `items-end p-0 sm:items-center sm:p-4 ${animateIn ? 'bg-black/45' : 'bg-black/0 pointer-events-none'}`
                 : 'items-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4'
                 }`}
             onClick={(event) => {
@@ -194,8 +195,8 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
         >
             <div
                 ref={contentRef}
-                className={`relative w-full max-w-3xl overflow-y-auto overscroll-contain bg-white p-6 shadow-2xl ${mobileSheet
-                    ? `rounded-t-3xl sm:rounded-3xl transition-all duration-300 ease-out transform ${animateIn ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-full opacity-0 sm:translate-y-10 sm:scale-95'}`
+                className={`relative w-full max-w-3xl overflow-y-auto overscroll-contain bg-white p-6 ${mobileSheet ? 'shadow-[0_-12px_30px_rgba(15,23,42,0.16)] sm:shadow-2xl' : 'shadow-2xl'} ${mobileSheet
+                    ? `rounded-t-3xl sm:rounded-3xl transform-gpu transition-[transform,opacity] duration-200 ease-out will-change-transform ${animateIn ? 'translate-y-0 opacity-100 sm:scale-100' : 'translate-y-full opacity-0 sm:translate-y-8 sm:scale-[0.98]'}`
                     : 'rounded-3xl'
                     }`}
                 style={{ maxHeight: mobileSheet ? '100dvh' : 'calc(100vh - 2rem)' }}
@@ -260,12 +261,16 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
                             </div>
                         </div>
 
-                        <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Bobot pekerjaan</label>
-                        <select className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} value={weightLabel} onChange={(e) => setWeightLabel(e.target.value)} required>
-                            <option value="mudah">Mudah (2)</option>
-                            <option value="menengah">Menengah (6)</option>
-                            <option value="sulit">Sulit (10)</option>
-                        </select>
+                        {featureFlags.taskWeight && (
+                            <>
+                                <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Bobot pekerjaan</label>
+                                <select className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} value={weightLabel} onChange={(e) => setWeightLabel(e.target.value)} required>
+                                    <option value="mudah">Mudah (2)</option>
+                                    <option value="menengah">Menengah (6)</option>
+                                    <option value="sulit">Sulit (10)</option>
+                                </select>
+                            </>
+                        )}
 
                         <textarea className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none resize-none`} rows={4} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Deskripsi pekerjaan" />
                     </div>

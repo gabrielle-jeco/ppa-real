@@ -10,6 +10,7 @@ import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalenda
 import { canAssignTaskOnDate, clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
+import { featureFlags } from '../utils/featureFlags';
 
 interface CrewDetailProps {
     crew: any;
@@ -531,7 +532,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
 
                         <div className="mb-0">
                             <h4 className="font-bold text-gray-800 text-sm mb-3">Tugas</h4>
-                            <div className="relative mb-3 grid grid-cols-[1fr_auto] gap-2">
+                            <div className={`relative mb-3 grid gap-2 ${featureFlags.bulkAssignment ? 'grid-cols-[1fr_auto]' : 'grid-cols-1'}`}>
                                 <button
                                     onClick={() => setIsTaskModalOpen(true)}
                                     disabled={!canAssignOnSelectedDate}
@@ -545,16 +546,18 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                         <span className="bg-gray-100 group-hover:bg-purple-100 text-gray-500 group-hover:text-primary rounded-full w-5 h-5 flex items-center justify-center text-lg leading-none pb-0.5">+</span>
                                     )}
                                 </button>
-                                <button
-                                    onClick={openBulkTaskModal}
-                                    disabled={!canAssignOnSelectedDate}
-                                    className={`h-12 px-4 rounded-lg text-xs font-bold shadow-sm transition ${canAssignOnSelectedDate
-                                        ? 'bg-primary text-white hover:bg-purple-700'
-                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        }`}
-                                >
-                                    Bulk Assignment
-                                </button>
+                                {featureFlags.bulkAssignment && (
+                                    <button
+                                        onClick={openBulkTaskModal}
+                                        disabled={!canAssignOnSelectedDate}
+                                        className={`h-12 px-4 rounded-lg text-xs font-bold shadow-sm transition ${canAssignOnSelectedDate
+                                            ? 'bg-primary text-white hover:bg-purple-700'
+                                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                            }`}
+                                    >
+                                        Bulk Assignment
+                                    </button>
+                                )}
                             </div>
                             <div className="flex items-center gap-2 mb-1">
                                 <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
@@ -705,10 +708,12 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                                     statusClassName="text-[10px] text-amber-500 font-semibold mt-1"
                                                 />
                                                 <p className="text-[10px] text-gray-400 mt-1">Tenggat: {new Date(task.due_at).toLocaleString('id-ID')}</p>
-                                                <p className="text-[10px] text-gray-400 mt-1 capitalize">
-                                                    Bobot: {task.weight_label || 'mudah'} ({task.weight_value || 2})
-                                                    {task.assignment_type && task.assignment_type !== 'individual' ? ` - ${task.assignment_type}` : ''}
-                                                </p>
+                                                {featureFlags.taskWeight && (
+                                                    <p className="text-[10px] text-gray-400 mt-1 capitalize">
+                                                        Bobot: {task.weight_label || 'mudah'} ({task.weight_value || 2})
+                                                        {task.assignment_type && task.assignment_type !== 'individual' ? ` - ${task.assignment_type}` : ''}
+                                                    </p>
+                                                )}
                                                 {task.note && <p className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words mt-0.5">{task.note}</p>}
                                             </div>
                                             <div className="flex flex-col gap-2 items-center">
@@ -725,7 +730,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                                         <Edit3 size={14} />
                                                     </button>
                                                 )}
-                                                {canEditBatchTask(task) && (
+                                                {featureFlags.bulkAssignment && canEditBatchTask(task) && (
                                                     <button onClick={() => openBatchEditor(task.assignment_batch)} className="text-gray-400 hover:text-primary p-1 opacity-50 group-hover:opacity-100 transition" title="Edit Bulk Assignment">
                                                         <Edit3 size={14} />
                                                     </button>

@@ -176,17 +176,16 @@ class SupervisorController extends Controller
 
         $workloadMonitor = $subordinates->map(function ($crew) use ($tasks) {
             $crewTasks = $tasks->where('employee_id', $crew->username);
-            $totalWeight = (int) $crewTasks->sum(fn ($task) => (int) ($task->weight_value ?: 2));
 
             return [
                 'id' => $crew->username,
                 'name' => $crew->full_name,
                 'task_count' => $crewTasks->count(),
-                'total_weight' => $totalWeight,
-                'average_weight' => $crewTasks->count() > 0 ? round($totalWeight / $crewTasks->count(), 1) : 0,
+                'total_weight' => 0,
+                'average_weight' => 0,
             ];
         })
-            ->sortByDesc('total_weight')
+            ->sortByDesc('task_count')
             ->values();
 
         $pendingApprovals = $tasks

@@ -33,11 +33,11 @@ services:
       YOJADWAL_PASSWORD_FIELD: password
       YOJADWAL_SUCCESS_FIELD: success
       YOJADWAL_ALLOW_LOCAL_SUPERADMIN_FALLBACK: "true"
-      YODAILY_USER_MONITORING_PASSWORD: "${YODAILY_USER_MONITORING_PASSWORD:-}"
-      WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-}"
-      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-mailto:admin@yodaily.local}"
-      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
-      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"
+      YODAILY_USER_MONITORING_PASSWORD: "${YODAILY_USER_MONITORING_PASSWORD:-admin1234}"
+      WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-true}"
+      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-https://yodaily.yogya.co.id}"
+      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-BFaZ-aI2jbDJKARmhM62K3QmGi8JDKtfprQYizvvG0NwC2UR02YUbY9cZrjZlVp0QaaGu5KNKea_hKsmgQs_wx0}"
+      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-RyLhG5C1i9SbXQI5K7MrLYBhBMTM1pRCIIcjwn7bg-Y}"
       TZ: Asia/Jakarta
     depends_on:
       - db
@@ -64,10 +64,10 @@ services:
       DB_DATABASE: performance_app
       DB_USERNAME: sail
       DB_PASSWORD: password
-      WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-}"
-      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-mailto:admin@yodaily.local}"
-      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
-      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"
+      WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-true}"
+      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-https://yodaily.yogya.co.id}"
+      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-BFaZ-aI2jbDJKARmhM62K3QmGi8JDKtfprQYizvvG0NwC2UR02YUbY9cZrjZlVp0QaaGu5KNKea_hKsmgQs_wx0}"
+      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-RyLhG5C1i9SbXQI5K7MrLYBhBMTM1pRCIIcjwn7bg-Y}"
       TZ: Asia/Jakarta
     depends_on:
       - backend
@@ -80,7 +80,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
+        VITE_WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-BFaZ-aI2jbDJKARmhM62K3QmGi8JDKtfprQYizvvG0NwC2UR02YUbY9cZrjZlVp0QaaGu5KNKea_hKsmgQs_wx0}"
+        VITE_ENABLE_BULK_ASSIGNMENT: "${VITE_ENABLE_BULK_ASSIGNMENT:-false}"
+        VITE_ENABLE_TASK_WEIGHT: "${VITE_ENABLE_TASK_WEIGHT:-false}"
     container_name: perf-app-frontend
     restart: unless-stopped
     ports:

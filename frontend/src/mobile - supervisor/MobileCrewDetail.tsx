@@ -9,6 +9,7 @@ import BulkTaskModal from '../general/BulkTaskModal';
 import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
 import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
+import { featureFlags } from '../utils/featureFlags';
 
 interface MobileCrewDetailProps {
     crew: any;
@@ -344,7 +345,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             <div className="bg-white rounded-3xl p-5 shadow-sm mb-4 shrink-0 border border-gray-100">
                 {/* Dropdown / Filter Header */}
                 <h4 className="font-bold text-gray-800 text-sm mb-3">Tugas</h4>
-                <div className="relative mb-3 grid grid-cols-[1fr_auto] gap-2">
+                <div className={`relative mb-3 grid gap-2 ${featureFlags.bulkAssignment ? 'grid-cols-[1fr_auto]' : 'grid-cols-1'}`}>
                     <button
                         onClick={() => setIsTaskModalOpen(true)}
                         disabled={!isToday(selectedDate)}
@@ -358,16 +359,18 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                             <span className="bg-gray-100 group-hover:bg-blue-100 text-gray-500 group-hover:text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-xl leading-none pb-0.5 transition-colors">+</span>
                         )}
                     </button>
-                    <button
-                        onClick={openBulkTaskModal}
-                        disabled={!isToday(selectedDate)}
-                        className={`h-12 px-4 rounded-xl text-xs font-bold shadow-sm transition ${isToday(selectedDate)
-                            ? 'bg-blue-600 text-white active:scale-95'
-                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            }`}
-                    >
-                        Bulk Assignment
-                    </button>
+                    {featureFlags.bulkAssignment && (
+                        <button
+                            onClick={openBulkTaskModal}
+                            disabled={!isToday(selectedDate)}
+                            className={`h-12 px-4 rounded-xl text-xs font-bold shadow-sm transition ${isToday(selectedDate)
+                                ? 'bg-blue-600 text-white active:scale-95'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                }`}
+                        >
+                            Bulk Assignment
+                        </button>
+                    )}
                 </div>
 
                 {/* Progress Bar (Matched to Crew) */}
@@ -429,7 +432,9 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                             statusClassName="text-[10px] text-amber-500 font-semibold mb-0.5"
                                         />
                                         <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                        <p className="text-[10px] text-gray-400 mb-0.5 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
+                                        {featureFlags.taskWeight && (
+                                            <p className="text-[10px] text-gray-400 mb-0.5 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
+                                        )}
                                         {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                     </div>
                                 </div>
@@ -459,7 +464,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                             <Edit3 size={16} />
                                         </button>
                                     )}
-                                    {canEditBatchTask(task) && (
+                                    {featureFlags.bulkAssignment && canEditBatchTask(task) && (
                                         <button
                                             onClick={() => openBatchEditor(task.assignment_batch)}
                                             className="text-gray-400 hover:text-blue-600 p-1 transition"

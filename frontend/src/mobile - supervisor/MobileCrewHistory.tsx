@@ -10,6 +10,7 @@ import { notifyApprovalGrace } from '../utils/browserNotifications';
 import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
 import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
+import { featureFlags } from '../utils/featureFlags';
 
 interface MobileCrewHistoryProps {
     crew: any;
@@ -489,7 +490,9 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                         statusClassName="text-[10px] text-amber-500 font-semibold mb-0.5"
                                                     />
                                                     <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                                    <p className="text-[10px] text-gray-400 mb-0.5 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
+                                                    {featureFlags.taskWeight && (
+                                                        <p className="text-[10px] text-gray-400 mb-0.5 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
+                                                    )}
                                                     {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
                                                 </div>
                                             </div>
@@ -518,7 +521,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                         <Edit3 size={16} />
                                                     </button>
                                                 )}
-                                                {canEditBatchTask(task) && (
+                                                {featureFlags.bulkAssignment && canEditBatchTask(task) && (
                                                     <button
                                                         onClick={() => setEditingBatch(task.assignment_batch)}
                                                         className="text-gray-400 hover:text-blue-600 p-1 transition"

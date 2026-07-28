@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import TaskStartStatus from '../general/TaskStartStatus';
 import type { ReactNode } from 'react';
 import { ChevronDown, ClipboardList, UserX, Star, CalendarDays } from 'lucide-react';
+import { featureFlags } from '../utils/featureFlags';
 
 type SummaryData = {
     date: string;
@@ -119,32 +120,34 @@ export default function SupervisorSummaryDashboard() {
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-4 gap-4">
-                            <DashboardPanel title="Beban Penugasan Tim" accent="border-primary">
-                                <p className="text-[11px] font-semibold text-red-500 mb-4">
-                                    Monitoring bobot pekerjaan berdasarkan tingkat kesulitan tugas yang diberikan hari ini.
-                                </p>
-                                <table className="w-full text-left">
-                                    <thead>
-                                        <tr className="bg-gray-200 text-gray-800">
-                                            <th className="px-4 py-2 text-sm">Nama</th>
-                                            <th className="px-2 py-2 text-center text-sm">Tugas</th>
-                                            <th className="px-2 py-2 text-right text-sm">Bobot</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {summary.workload_monitor.length === 0 ? (
-                                            <tr><td className="px-4 py-6 text-sm text-gray-400" colSpan={3}>Belum ada data bobot.</td></tr>
-                                        ) : summary.workload_monitor.slice(0, 5).map((crew, index) => (
-                                            <tr key={crew.id} className="font-bold text-gray-800">
-                                                <td className="px-1 py-2">{index + 1}. {crew.name}</td>
-                                                <td className="px-2 py-2 text-center">{crew.task_count}</td>
-                                                <td className="px-2 py-2 text-right">{crew.total_weight}</td>
+                        <div className={`grid grid-cols-1 xl:grid-cols-2 gap-4 ${featureFlags.taskWeight ? '2xl:grid-cols-4' : '2xl:grid-cols-3'}`}>
+                            {featureFlags.taskWeight && (
+                                <DashboardPanel title="Beban Penugasan Tim" accent="border-primary">
+                                    <p className="text-[11px] font-semibold text-red-500 mb-4">
+                                        Monitoring bobot pekerjaan berdasarkan tingkat kesulitan tugas yang diberikan hari ini.
+                                    </p>
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="bg-gray-200 text-gray-800">
+                                                <th className="px-4 py-2 text-sm">Nama</th>
+                                                <th className="px-2 py-2 text-center text-sm">Tugas</th>
+                                                <th className="px-2 py-2 text-right text-sm">Bobot</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </DashboardPanel>
+                                        </thead>
+                                        <tbody>
+                                            {summary.workload_monitor.length === 0 ? (
+                                                <tr><td className="px-4 py-6 text-sm text-gray-400" colSpan={3}>Belum ada data bobot.</td></tr>
+                                            ) : summary.workload_monitor.slice(0, 5).map((crew, index) => (
+                                                <tr key={crew.id} className="font-bold text-gray-800">
+                                                    <td className="px-1 py-2">{index + 1}. {crew.name}</td>
+                                                    <td className="px-2 py-2 text-center">{crew.task_count}</td>
+                                                    <td className="px-2 py-2 text-right">{crew.total_weight}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </DashboardPanel>
+                            )}
 
                             <DashboardPanel title="Performa Terbaik Tim" accent="border-primary">
                                 <p className="text-[11px] font-semibold text-red-500 mb-4">

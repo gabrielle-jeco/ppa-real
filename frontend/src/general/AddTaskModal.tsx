@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, X } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
+import { featureFlags } from '../utils/featureFlags';
 
 interface AddTaskModalProps {
     isOpen: boolean;
@@ -103,7 +104,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
             title,
             start_at: startAt,
             due_at: dueAt,
-            weight_label: weightLabel,
+            ...(featureFlags.taskWeight ? { weight_label: weightLabel } : {}),
             note,
             ...(requireCategory ? { work_station_id: workStationId } : {}),
         });
@@ -213,19 +214,21 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">Bobot</label>
-                        <select
-                            value={weightLabel}
-                            onChange={(e) => setWeightLabel(e.target.value)}
-                            className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
-                            required
-                        >
-                            <option value="mudah">Mudah (2)</option>
-                            <option value="menengah">Menengah (6)</option>
-                            <option value="sulit">Sulit (10)</option>
-                        </select>
-                    </div>
+                    {featureFlags.taskWeight && (
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">Bobot</label>
+                            <select
+                                value={weightLabel}
+                                onChange={(e) => setWeightLabel(e.target.value)}
+                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
+                                required
+                            >
+                                <option value="mudah">Mudah (2)</option>
+                                <option value="menengah">Menengah (6)</option>
+                                <option value="sulit">Sulit (10)</option>
+                            </select>
+                        </div>
+                    )}
 
                     {/* Note Input */}
                     <div>

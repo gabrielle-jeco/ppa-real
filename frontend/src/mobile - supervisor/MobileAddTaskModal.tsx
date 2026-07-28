@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Check } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
 import useModalTransition from '../utils/useModalTransition';
+import { featureFlags } from '../utils/featureFlags';
 
 interface MobileAddTaskModalProps {
     isOpen: boolean;
@@ -112,7 +113,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
             title,
             start_at: startAt,
             due_at: dueAt,
-            weight_label: weightLabel,
+            ...(featureFlags.taskWeight ? { weight_label: weightLabel } : {}),
             note,
             ...(requireCategory ? { work_station_id: workStationId } : {}),
         });
@@ -125,11 +126,11 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
     };
 
     return createPortal(
-        <div className={`fixed inset-0 z-[30000] flex items-end justify-center sm:items-center p-0 sm:p-4 transition-colors duration-300 ${animateIn ? 'bg-black/50 backdrop-blur-[2px]' : 'bg-black/0 pointer-events-none'}`}>
+        <div className={`fixed inset-0 z-[30000] flex items-end justify-center sm:items-center p-0 sm:p-4 transition-colors duration-200 ease-out ${animateIn ? 'bg-black/45' : 'bg-black/0 pointer-events-none'}`}>
             {/* Modal/Sheet Content */}
             <div
                 ref={contentRef}
-                className={`bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative transition-all duration-300 ease-out transform ${animateIn ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-full opacity-0 sm:translate-y-10 sm:scale-95'
+                className={`bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-[0_-12px_30px_rgba(15,23,42,0.16)] sm:shadow-2xl relative max-h-[92dvh] overflow-y-auto overscroll-contain transform-gpu transition-[transform,opacity] duration-200 ease-out will-change-transform ${animateIn ? 'translate-y-0 opacity-100 sm:scale-100' : 'translate-y-full opacity-0 sm:translate-y-8 sm:scale-[0.98]'
                     }`}
                 onClick={(e) => e.stopPropagation()}
             >
@@ -216,7 +217,7 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className={featureFlags.taskWeight ? 'grid grid-cols-2 gap-4' : ''}>
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tenggat</label>
                             <input
@@ -228,19 +229,21 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                                 required
                             />
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Bobot</label>
-                            <select
-                                value={weightLabel}
-                                onChange={(e) => setWeightLabel(e.target.value)}
-                                className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
-                                required
-                            >
-                                <option value="mudah">Mudah (2)</option>
-                                <option value="menengah">Menengah (6)</option>
-                                <option value="sulit">Sulit (10)</option>
-                            </select>
-                        </div>
+                        {featureFlags.taskWeight && (
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Bobot</label>
+                                <select
+                                    value={weightLabel}
+                                    onChange={(e) => setWeightLabel(e.target.value)}
+                                    className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
+                                    required
+                                >
+                                    <option value="mudah">Mudah (2)</option>
+                                    <option value="menengah">Menengah (6)</option>
+                                    <option value="sulit">Sulit (10)</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     {/* Note Input */}
