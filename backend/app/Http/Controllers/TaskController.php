@@ -197,8 +197,7 @@ class TaskController extends Controller
             'start_at' => $startAt,
             'due_at' => $dueAt,
             'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
-            'weight_label' => $weightLabel,
-            'weight_value' => self::TASK_WEIGHTS[$weightLabel],
+            ...$this->taskWeightAttributes($weightLabel),
             'status' => 'pending',
         ]);
 
@@ -309,8 +308,7 @@ class TaskController extends Controller
                 'start_time' => $request->start_time,
                 'due_time' => $request->due_time,
                 'repeat_days' => $repeatDays->all(),
-                'weight_label' => $weightLabel,
-                'weight_value' => self::TASK_WEIGHTS[$weightLabel],
+                ...$this->taskWeightAttributes($weightLabel),
                 'crew_ids' => $validCrewIds->values()->all(),
             ]);
 
@@ -328,8 +326,7 @@ class TaskController extends Controller
                         'start_at' => $startAt,
                         'due_at' => $dueAt,
                         'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
-                        'weight_label' => $weightLabel,
-                        'weight_value' => self::TASK_WEIGHTS[$weightLabel],
+                        ...$this->taskWeightAttributes($weightLabel),
                         'status' => 'pending',
                     ]));
                 }
@@ -425,8 +422,7 @@ class TaskController extends Controller
             'start_at' => $startAt,
             'due_at' => $dueAt,
             'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
-            'weight_label' => $weightLabel,
-            'weight_value' => self::TASK_WEIGHTS[$weightLabel],
+            ...$this->taskWeightAttributes($weightLabel),
         ])->save();
 
         app(UserNotificationService::class)->createAndPush(
@@ -563,8 +559,7 @@ class TaskController extends Controller
                 'start_time' => $request->start_time,
                 'due_time' => $request->due_time,
                 'repeat_days' => $repeatDays->all(),
-                'weight_label' => $weightLabel,
-                'weight_value' => self::TASK_WEIGHTS[$weightLabel],
+                ...$this->taskWeightAttributes($weightLabel),
                 'crew_ids' => $validCrewIds->values()->all(),
             ]);
 
@@ -586,8 +581,7 @@ class TaskController extends Controller
                         'start_at' => $startAt,
                         'due_at' => $dueAt,
                         'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
-                        'weight_label' => $weightLabel,
-                        'weight_value' => self::TASK_WEIGHTS[$weightLabel],
+                        ...$this->taskWeightAttributes($weightLabel),
                         'status' => 'pending',
                     ]));
                 }
@@ -1016,11 +1010,27 @@ class TaskController extends Controller
         return ($task->start_at instanceof Carbon ? $task->start_at : Carbon::parse($task->start_at))->isFuture();
     }
 
-    private function normalizeWeightLabel(?string $label): string
+    private function normalizeWeightLabel(?string $label): ?string
     {
-        $normalized = strtolower(trim((string) ($label ?: 'mudah')));
+        $normalized = strtolower(trim((string) $label));
+        if ($normalized === '') {
+            return null;
+        }
 
-        return array_key_exists($normalized, self::TASK_WEIGHTS) ? $normalized : 'mudah';
+        return array_key_exists($normalized, self::TASK_WEIGHTS) ? $normalized : null;
+    }
+
+    private function weightValueFor(?string $label): ?int
+    {
+        return $label ? self::TASK_WEIGHTS[$label] : null;
+    }
+
+    private function taskWeightAttributes(?string $label): array
+    {
+        return $label ? [
+            'weight_label' => $label,
+            'weight_value' => $this->weightValueFor($label),
+        ] : [];
     }
 
     private function isOutsideTaskWindow(Carbon $date): bool
