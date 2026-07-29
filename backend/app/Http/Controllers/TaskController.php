@@ -855,7 +855,7 @@ class TaskController extends Controller
                     $task->employer_id,
                     'approval_needed',
                     'Persetujuan',
-                    'Anda ada ' . $pendingApprovalCount . ' pekerjaan yang membutuhkan persetujuan saat ini.',
+                    'Anda memiliki ' . $pendingApprovalCount . ' pekerjaan yang membutuhkan persetujuan saat ini.',
                     'Pekerjaan telah dilakukan oleh bawahan Anda.',
                     [
                         'task_id' => $task->id,

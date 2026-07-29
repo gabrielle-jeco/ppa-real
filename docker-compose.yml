@@ -9,6 +9,7 @@ services:
     ports:
       - "8082:80"
     working_dir: /var/www
+    entrypoint: ["/bin/sh", "/var/www/docker/entrypoint.sh"]
     volumes:
       - ./backend:/var/www
       - backend-vendor:/var/www/vendor
@@ -19,6 +20,7 @@ services:
       DB_DATABASE: performance_app
       DB_USERNAME: sail
       DB_PASSWORD: password
+      CACHE_DRIVER: database
       PHP_MEMORY_LIMIT: 1024M
       SANCTUM_EXPIRATION: 1440
       YOJADWAL_ENABLED: "true"
@@ -52,8 +54,14 @@ services:
     container_name: perf-app-scheduler
     restart: unless-stopped
     working_dir: /var/www
-    entrypoint: ["php", "artisan", "schedule:work"]
-    command: ["--no-interaction"]
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - |
+        echo "memory_limit=1024M" > /usr/local/etc/php/conf.d/zz-yodaily-memory.ini
+        mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/framework/views storage/logs bootstrap/cache
+        chown -R www-data:www-data storage bootstrap/cache || true
+        chmod -R ug+rwX storage bootstrap/cache || true
+        php artisan schedule:work --no-interaction
     volumes:
       - ./backend:/var/www
       - backend-vendor:/var/www/vendor
@@ -64,6 +72,8 @@ services:
       DB_DATABASE: performance_app
       DB_USERNAME: sail
       DB_PASSWORD: password
+      CACHE_DRIVER: database
+      PHP_MEMORY_LIMIT: 1024M
       WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-true}"
       WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-https://yodaily.yogya.co.id}"
       WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-BFaZ-aI2jbDJKARmhM62K3QmGi8JDKtfprQYizvvG0NwC2UR02YUbY9cZrjZlVp0QaaGu5KNKea_hKsmgQs_wx0}"
