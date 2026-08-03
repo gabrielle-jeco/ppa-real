@@ -20,6 +20,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [App\Http\Controllers\AuthController::class, 'me']);
     Route::post('/logout', [App\Http\Controllers\AuthController::class, 'logout']);
     Route::post('/push-subscriptions', [App\Http\Controllers\PushSubscriptionController::class, 'store']);
+    Route::post('/presence/heartbeat', [App\Http\Controllers\UserPresenceController::class, 'heartbeat']);
     Route::get('/notifications', [App\Http\Controllers\UserNotificationController::class, 'index']);
     Route::patch('/notifications/read-all', [App\Http\Controllers\UserNotificationController::class, 'markAllRead']);
     Route::patch('/notifications/{notification}/read', [App\Http\Controllers\UserNotificationController::class, 'markRead']);
@@ -56,6 +57,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // CMS / Superadmin Routes
     Route::prefix('cms')->group(function () {
         Route::get('/overview', [App\Http\Controllers\AdminController::class, 'overview']);
+        Route::get('/user-activity/online', [App\Http\Controllers\AdminController::class, 'getOnlineUsers']);
+        Route::get('/user-activity/recent-logins', [App\Http\Controllers\AdminController::class, 'getRecentLogins']);
         Route::post('/users', [App\Http\Controllers\AdminController::class, 'storeUser']);
         Route::patch('/users/{username}', [App\Http\Controllers\AdminController::class, 'updateUser']);
         Route::get('/job-levels', [App\Http\Controllers\AdminController::class, 'getJobLevels']);

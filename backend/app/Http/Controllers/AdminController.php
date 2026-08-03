@@ -14,7 +14,10 @@ use App\Models\Role;
 use App\Models\Task;
 use App\Models\User;
 use App\Models\UserLocation;
+use App\Models\UserLoginEvent;
+use App\Models\UserPresence;
 use App\Models\WorkStation;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -36,12 +39,13 @@ class AdminController extends Controller
         'regionals' => 'Master Regional',
         'evaluation_masters' => 'Master Evaluasi',
         'role_management' => 'Role Akun',
+        'user_activity' => 'Aktivitas User',
     ];
 
     public function overview()
     {
         $this->authorizeSuperadmin();
-        $canUseLocations = $this->canAnyPermission(['users_locations', 'app_roles', 'reporting_lines', 'locations']);
+        $canUseLocations = $this->canAnyPermission(['users_locations', 'app_roles', 'reporting_lines', 'locations', 'user_activity']);
 
         $workStations = $this->canPermission('work_stations') ? WorkStation::orderBy('name')->get()->map(fn(WorkStation $station) => [
             'id' => $station->id,
@@ -68,6 +72,7 @@ class AdminController extends Controller
                 'app_roles' => $this->canPermission('app_roles') ? AppRole::count() : 0,
                 'evaluation_masters' => $this->canPermission('evaluation_masters') ? EvaluationMaster::count() : 0,
                 'job_levels' => $this->canPermission('job_levels') ? JobLevel::where('visible_in_yodaily', true)->count() : 0,
+                'online_users' => $this->canPermission('user_activity') ? UserPresence::where('last_seen_at', '>=', now()->subMinutes(5))->distinct('user_id')->count('user_id') : 0,
             ],
             'roles' => $this->canPermission('role_management') ? Role::orderBy('name')->get()->map(fn(Role $role) => $this->formatRole($role)) : [],
             'cms_permissions' => $this->canPermission('role_management') ? collect(self::CMS_PERMISSIONS)->map(fn($label, $key) => ['key' => $key, 'label' => $label])->values() : [],
@@ -329,6 +334,60 @@ class AdminController extends Controller
         }
 
         return response()->json($query->paginate(50));
+    }
+
+    public function getOnlineUsers(Request $request)
+    {
+        $this->authorizePermission('user_activity');
+
+        $query = UserPresence::with([
+                'user.accountRole:id,name',
+                'user.jobLevel:id,position_code,name',
+                'user.locations:initial,name',
+                'user.userLocations:user_id,job_level',
+            ])
+            ->where('last_seen_at', '>=', now()->subMinutes(5))
+            ->whereHas('user')
+            ->orderByDesc('last_seen_at');
+
+        $this->applyActivityFilters($query, $request);
+
+        $paginator = $query->paginate(50);
+        $paginator->getCollection()->transform(fn(UserPresence $presence) => $this->formatPresence($presence));
+
+        return response()->json($paginator);
+    }
+
+    public function getRecentLogins(Request $request)
+    {
+        $this->authorizePermission('user_activity');
+
+        $days = (int) $request->query('days', 7);
+        $days = min(max($days, 1), 30);
+        $since = now()->subDays($days - 1)->startOfDay();
+
+        $query = UserLoginEvent::query()
+            ->select('user_id')
+            ->selectRaw('MAX(login_at) as latest_login_at')
+            ->selectRaw('MAX(id) as latest_event_id')
+            ->selectRaw('COUNT(*) as login_count')
+            ->where('login_at', '>=', $since)
+            ->whereHas('user')
+            ->groupBy('user_id')
+            ->orderByDesc('latest_login_at')
+            ->with([
+                'user.accountRole:id,name',
+                'user.jobLevel:id,position_code,name',
+                'user.locations:initial,name',
+                'user.userLocations:user_id,job_level',
+            ]);
+
+        $this->applyLoginFilters($query, $request);
+
+        $paginator = $query->paginate(50);
+        $paginator->getCollection()->transform(fn(UserLoginEvent $event) => $this->formatRecentLogin($event));
+
+        return response()->json($paginator);
     }
 
     public function storeUser(Request $request)
@@ -944,6 +1003,86 @@ class AdminController extends Controller
                 'name' => $leaderLine->leader->name,
             ] : null,
             'subordinates_count' => $user->subordinate_lines_count ?? $user->subordinateLines->count(),
+        ];
+    }
+
+    private function applyActivityFilters($query, Request $request): void
+    {
+        if ($request->filled('search')) {
+            $search = strtolower($request->query('search'));
+            $query->whereHas('user', function ($userQuery) use ($search) {
+                $userQuery->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(username) like ?', ["%{$search}%"]);
+            });
+        }
+
+        if ($request->filled('store')) {
+            $query->whereHas('user.locations', fn($locationQuery) => $locationQuery->where('locations.initial', $request->query('store')));
+        }
+
+        if ($request->filled('app_role')) {
+            $query->whereHas('user.userLocations', fn($roleQuery) => $roleQuery->where('job_level', $request->query('app_role')));
+        }
+
+        if ($request->filled('device_type')) {
+            $query->where('device_type', $request->query('device_type'));
+        }
+    }
+
+    private function applyLoginFilters($query, Request $request): void
+    {
+        $this->applyActivityFilters($query, $request);
+
+        if ($request->filled('login_source')) {
+            $query->where('login_source', $request->query('login_source'));
+        }
+    }
+
+    private function formatPresence(UserPresence $presence): array
+    {
+        $user = $presence->user;
+
+        return [
+            'id' => $presence->id,
+            'username' => $presence->user_id,
+            'name' => $user?->name ?? $presence->user_id,
+            'role_type' => $user?->role_type,
+            'account_role' => $user?->accountRole?->name,
+            'app_roles' => $user?->userLocations->pluck('job_level')->filter()->unique()->values() ?? [],
+            'locations' => $user?->locations->map(fn(Location $location) => [
+                'initial' => $location->initial,
+                'name' => $location->name,
+            ])->values() ?? [],
+            'device_type' => $presence->device_type,
+            'last_url' => $presence->last_url,
+            'last_seen_at' => $presence->last_seen_at?->toIso8601String(),
+            'last_seen_label' => $presence->last_seen_at ? $presence->last_seen_at->diffForHumans() : '-',
+            'ip_address' => $presence->ip_address,
+        ];
+    }
+
+    private function formatRecentLogin(UserLoginEvent $event): array
+    {
+        $user = $event->user;
+        $latestLogin = $event->latest_login_at ? Carbon::parse($event->latest_login_at) : null;
+        $latestEvent = UserLoginEvent::where('id', $event->latest_event_id)
+            ->first(['device_type', 'login_source']);
+
+        return [
+            'username' => $event->user_id,
+            'name' => $user?->name ?? $event->user_id,
+            'role_type' => $user?->role_type,
+            'account_role' => $user?->accountRole?->name,
+            'app_roles' => $user?->userLocations->pluck('job_level')->filter()->unique()->values() ?? [],
+            'locations' => $user?->locations->map(fn(Location $location) => [
+                'initial' => $location->initial,
+                'name' => $location->name,
+            ])->values() ?? [],
+            'latest_login_at' => $latestLogin?->toIso8601String(),
+            'latest_login_label' => $latestLogin ? $latestLogin->diffForHumans() : '-',
+            'device_type' => $latestEvent?->device_type,
+            'login_source' => $latestEvent?->login_source,
+            'login_count' => (int) $event->login_count,
         ];
     }
 

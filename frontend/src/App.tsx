@@ -18,6 +18,15 @@ function App() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [isVerifying, setIsVerifying] = useState(true);
 
+  const ensurePresenceDeviceKey = () => {
+    const existing = localStorage.getItem('presence_device_key');
+    if (existing) return existing;
+
+    const generated = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+    localStorage.setItem('presence_device_key', generated);
+    return generated;
+  };
+
   useEffect(() => {
     const storedUser = localStorage.getItem('user_data');
     const token = localStorage.getItem('auth_token');
@@ -100,6 +109,46 @@ function App() {
       window.removeEventListener('resize', handleResize);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const sendHeartbeat = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      try {
+        await fetch('/api/presence/heartbeat', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            device_key: ensurePresenceDeviceKey(),
+            last_url: window.location.pathname,
+            device_type: window.innerWidth < 768 ? 'mobile' : 'desktop',
+          }),
+        });
+      } catch (error) {
+        console.warn('Presence heartbeat failed', error);
+      }
+    };
+
+    sendHeartbeat();
+    const interval = window.setInterval(sendHeartbeat, 120 * 1000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') sendHeartbeat();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [user]);
 
   // Simplified Auth Flow for Phase 2 Verification
   const handleLoginSuccess = (userData: any) => {

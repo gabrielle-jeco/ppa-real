@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Models\UserLoginEvent;
 use App\Models\User;
 use App\Services\YoabsenAuthService;
 use App\Services\YojadwalPresenceService;
@@ -86,6 +87,17 @@ class AuthController extends Controller
             $this->syncCurrentMonthAttendance($presenceService, $user);
         }
 
+        UserLoginEvent::create([
+            'user_id' => $user->username,
+            'role_type' => $user->role_type,
+            'account_role' => $user->accountRole?->name,
+            'login_source' => $this->loginSource($user, $isMonitoringLogin),
+            'device_type' => $this->deviceType($request),
+            'login_at' => now(),
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+        ]);
+
         return response()->json([
             'message' => 'Berhasil masuk.',
             'access_token' => $token,
@@ -155,6 +167,24 @@ class AuthController extends Controller
                 'message' => $error->getMessage(),
             ]);
         }
+    }
+
+    private function loginSource(User $user, bool $isMonitoringLogin): string
+    {
+        if ($user->role_type === 'superadmin') {
+            return 'local_admin';
+        }
+
+        return $isMonitoringLogin ? 'monitoring' : 'yojadwal';
+    }
+
+    private function deviceType(Request $request): string
+    {
+        $agent = strtolower((string) $request->userAgent());
+
+        return str_contains($agent, 'mobile') || str_contains($agent, 'android') || str_contains($agent, 'iphone')
+            ? 'mobile'
+            : 'desktop';
     }
 
     private function syncYojadwalUserData(User $user, ?array $payload): void

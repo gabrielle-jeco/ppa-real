@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { BookOpenCheck, Check, ChevronDown, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
+import { Activity, BookOpenCheck, Check, ChevronDown, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
-type Tab = 'users' | 'jobLevels' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations';
+type Tab = 'users' | 'jobLevels' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations' | 'activity';
 
 const TAB_PERMISSIONS: Record<Tab, string> = {
     users: 'users_locations',
@@ -12,9 +12,10 @@ const TAB_PERMISSIONS: Record<Tab, string> = {
     locations: 'locations',
     regionals: 'regionals',
     evaluations: 'evaluation_masters',
+    activity: 'user_activity',
 };
 
-const TAB_ORDER: Tab[] = ['users', 'jobLevels', 'appRoles', 'hierarchy', 'guides', 'locations', 'regionals', 'evaluations'];
+const TAB_ORDER: Tab[] = ['users', 'jobLevels', 'appRoles', 'hierarchy', 'guides', 'locations', 'regionals', 'evaluations', 'activity'];
 
 type JobLevel = {
     id: number;
@@ -117,6 +118,25 @@ type EvaluationMaster = {
     active: boolean;
 };
 
+type UserActivityRow = {
+    id?: number;
+    username: string;
+    name: string;
+    role_type?: string | null;
+    account_role?: string | null;
+    app_roles?: string[];
+    locations?: Array<{ initial: string; name: string }>;
+    device_type?: string | null;
+    last_url?: string | null;
+    last_seen_at?: string | null;
+    last_seen_label?: string | null;
+    latest_login_at?: string | null;
+    latest_login_label?: string | null;
+    login_source?: string | null;
+    login_count?: number;
+    ip_address?: string | null;
+};
+
 type CmsData = {
     stats: {
         users: number;
@@ -130,6 +150,7 @@ type CmsData = {
         app_roles: number;
         evaluation_masters: number;
         job_levels: number;
+        online_users?: number;
     };
     roles: AccountRole[];
     app_roles: AppRole[];
@@ -229,6 +250,19 @@ export default function AdminDashboard() {
     const [selectedLeaderId, setSelectedLeaderId] = useState('');
     const [reportingLinesData, setReportingLinesData] = useState<ReportingLine[]>([]);
 
+    const [onlineUsersData, setOnlineUsersData] = useState<UserActivityRow[]>([]);
+    const [onlineUsersPage, setOnlineUsersPage] = useState(1);
+    const [onlineUsersTotalPages, setOnlineUsersTotalPages] = useState(1);
+    const [onlineUsersSearch, setOnlineUsersSearch] = useState('');
+    const [onlineUsersStoreFilter, setOnlineUsersStoreFilter] = useState('');
+
+    const [recentLoginsData, setRecentLoginsData] = useState<UserActivityRow[]>([]);
+    const [recentLoginsPage, setRecentLoginsPage] = useState(1);
+    const [recentLoginsTotalPages, setRecentLoginsTotalPages] = useState(1);
+    const [recentLoginsTotal, setRecentLoginsTotal] = useState(0);
+    const [recentLoginsSearch, setRecentLoginsSearch] = useState('');
+    const [recentLoginsStoreFilter, setRecentLoginsStoreFilter] = useState('');
+
     const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
     const [userForm, setUserForm] = useState(emptyUserForm);
     const [lineForm, setLineForm] = useState({ leader_id: '', subordinate_ids: [] as string[], status: 'active' as 'active' | 'inactive' });
@@ -290,7 +324,11 @@ export default function AdminDashboard() {
         }
         else if (activeTab === 'locations') fetchLocations();
         else if (activeTab === 'regionals') fetchRegionals();
-    }, [activeTab, usersPage, usersSearch, jobLevelsPage, jobLevelsSearch, jobLevelsVisibility, userLocationsPage, userLocationsSearch, locationsPage, locationsSearch, regionalsPage, regionalsSearch, selectedLeaderId, storeFilter, data?.stats, data?.current_account_role, currentPermissionsKey]);
+        else if (activeTab === 'activity') {
+            fetchOnlineUsers();
+            fetchRecentLogins();
+        }
+    }, [activeTab, usersPage, usersSearch, jobLevelsPage, jobLevelsSearch, jobLevelsVisibility, userLocationsPage, userLocationsSearch, locationsPage, locationsSearch, regionalsPage, regionalsSearch, selectedLeaderId, storeFilter, onlineUsersPage, onlineUsersSearch, onlineUsersStoreFilter, recentLoginsPage, recentLoginsSearch, recentLoginsStoreFilter, data?.stats, data?.current_account_role, currentPermissionsKey]);
 
     const fetchOverview = async () => {
         setLoading(true);
@@ -399,6 +437,33 @@ export default function AdminDashboard() {
             setReportingLinesData(res || []);
         } catch (error: any) {
             setMessage(error.message || 'Gagal memuat relasi atasan.');
+        }
+    };
+
+    const fetchOnlineUsers = async () => {
+        try {
+            const query = new URLSearchParams({ page: String(onlineUsersPage) });
+            if (onlineUsersSearch) query.append('search', onlineUsersSearch);
+            if (onlineUsersStoreFilter) query.append('store', onlineUsersStoreFilter);
+            const res = await requestJson(`/api/cms/user-activity/online?${query.toString()}`, 'GET');
+            setOnlineUsersData(res.data || []);
+            setOnlineUsersTotalPages(res.last_page || 1);
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal memuat user yang sedang aktif.');
+        }
+    };
+
+    const fetchRecentLogins = async () => {
+        try {
+            const query = new URLSearchParams({ page: String(recentLoginsPage), days: '7' });
+            if (recentLoginsSearch) query.append('search', recentLoginsSearch);
+            if (recentLoginsStoreFilter) query.append('store', recentLoginsStoreFilter);
+            const res = await requestJson(`/api/cms/user-activity/recent-logins?${query.toString()}`, 'GET');
+            setRecentLoginsData(res.data || []);
+            setRecentLoginsTotalPages(res.last_page || 1);
+            setRecentLoginsTotal(res.total || 0);
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal memuat login 7 hari terakhir.');
         }
     };
 
@@ -1134,7 +1199,92 @@ export default function AdminDashboard() {
                 {canAccess('locations') && <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Master Lokasi" onClick={() => setActiveTab('locations')} />}
                 {canAccess('regionals') && <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Master Regional" onClick={() => setActiveTab('regionals')} />}
                 {canAccess('evaluation_masters') && <TabButton active={activeTab === 'evaluations'} icon={<ShieldCheck size={16} />} label="Master Evaluasi" onClick={() => setActiveTab('evaluations')} />}
+                {canAccess('user_activity') && <TabButton active={activeTab === 'activity'} icon={<Activity size={16} />} label="Aktivitas User" onClick={() => setActiveTab('activity')} />}
             </div>
+
+            {activeTab === 'activity' && canAccess('user_activity') && (
+                <div className="grid h-[clamp(420px,calc(100dvh-24rem),700px)] grid-cols-2 gap-6">
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+                        <div className="space-y-4 border-b border-gray-100 px-6 py-4">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <h2 className="font-black text-gray-900">Sedang Online</h2>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-600">{data.stats.online_users || 0} online</span>
+                                    <button onClick={fetchOnlineUsers} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 hover:border-primary hover:text-primary">
+                                        Muat Ulang
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-[260px_1fr] gap-3">
+                                <CustomSelect
+                                    value={onlineUsersStoreFilter}
+                                    placeholder="Filter Toko"
+                                    options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
+                                    onChange={(value) => { setOnlineUsersStoreFilter(value); setOnlineUsersPage(1); }}
+                                    searchable
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Cari nama atau NIK..."
+                                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                    value={onlineUsersSearch}
+                                    onChange={(e) => { setOnlineUsersSearch(e.target.value); setOnlineUsersPage(1); }}
+                                />
+                            </div>
+                        </div>
+                        <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overscroll-contain">
+                            {onlineUsersData.length === 0 ? (
+                                <div className="p-8 text-center text-sm text-gray-400">Belum ada user yang terdeteksi sedang membuka aplikasi.</div>
+                            ) : onlineUsersData.map((row) => (
+                                <ActivityRow key={`${row.username}-${row.id || row.last_seen_at}`} row={row} mode="online" />
+                            ))}
+                        </div>
+                        <PaginationControls page={onlineUsersPage} totalPages={onlineUsersTotalPages} onPageChange={setOnlineUsersPage} />
+                    </div>
+
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+                        <div className="space-y-4 border-b border-gray-100 px-6 py-4">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <h2 className="font-black text-gray-900">Login 7 Hari Terakhir</h2>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-black text-primary">{recentLoginsTotal} login</span>
+                                    <button onClick={fetchRecentLogins} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 hover:border-primary hover:text-primary">
+                                        Muat Ulang
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-[260px_1fr] gap-3">
+                                <CustomSelect
+                                    value={recentLoginsStoreFilter}
+                                    placeholder="Filter Toko"
+                                    options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
+                                    onChange={(value) => { setRecentLoginsStoreFilter(value); setRecentLoginsPage(1); }}
+                                    searchable
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Cari nama atau NIK..."
+                                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                    value={recentLoginsSearch}
+                                    onChange={(e) => { setRecentLoginsSearch(e.target.value); setRecentLoginsPage(1); }}
+                                />
+                            </div>
+                        </div>
+                        <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overscroll-contain">
+                            {recentLoginsData.length === 0 ? (
+                                <div className="p-8 text-center text-sm text-gray-400">Belum ada user yang login dalam 7 hari terakhir.</div>
+                            ) : recentLoginsData.map((row) => (
+                                <ActivityRow key={row.username} row={row} mode="login" />
+                            ))}
+                        </div>
+                        <PaginationControls page={recentLoginsPage} totalPages={recentLoginsTotalPages} onPageChange={setRecentLoginsPage} />
+                    </div>
+                </div>
+            )}
 
             {activeTab === 'users' && canAccess('users_locations') && (
                 <div className={`grid h-[clamp(360px,calc(100dvh-24rem),680px)] items-stretch gap-6 transition-all duration-300 ${
@@ -2042,6 +2192,54 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
             <div className="mt-1">{children}</div>
         </label>
     );
+}
+
+function ActivityRow({ row, mode }: { row: UserActivityRow; mode: 'online' | 'login' }) {
+    const locations = row.locations?.map((location) => location.initial).join(', ') || '-';
+    const roles = row.app_roles?.join(', ') || row.role_type || '-';
+    const primaryTime = mode === 'online' ? row.last_seen_at : row.latest_login_at;
+    const timeLabel = mode === 'online' ? row.last_seen_label : row.latest_login_label;
+    const badgeText = mode === 'online'
+        ? (row.device_type || 'online')
+        : (row.device_type || row.login_source || 'login');
+    const loginCountLabel = `${row.login_count || 0} kali login`;
+
+    return (
+        <div className="px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <p className="truncate font-black text-gray-900">{row.name}</p>
+                    <p className="mt-1 text-xs text-gray-400">{row.username} - {roles}</p>
+                    <p className="mt-2 text-xs text-gray-500">Lokasi: {locations}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ${mode === 'online' ? 'bg-green-50 text-green-600' : 'bg-purple-50 text-primary'}`}>
+                        {badgeText}
+                    </span>
+                    <p className="mt-2 text-xs font-semibold text-gray-500">{formatActivityDate(primaryTime)}</p>
+                    <p className="mt-1 text-[11px] text-gray-400">{timeLabel || '-'}</p>
+                    {mode === 'login' && (
+                        <p className="mt-1 text-[11px] font-semibold text-primary">{loginCountLabel}</p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function formatActivityDate(value?: string | null) {
+    if (!value) return '-';
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+
+    return date.toLocaleString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
 }
 
 function PaginationControls({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (page: number) => void }) {
