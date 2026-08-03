@@ -38,6 +38,7 @@ class DatabaseSeeder extends Seeder
                     'regionals',
                     'evaluation_masters',
                     'role_management',
+                    'user_activity',
                 ],
             ]
         );

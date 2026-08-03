@@ -177,4 +177,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(UserNotification::class, 'recipient_id', 'username');
     }
+
+    public function presenceRecords()
+    {
+        return $this->hasMany(UserPresence::class, 'user_id', 'username');
+    }
+
+    public function loginEvents()
+    {
+        return $this->hasMany(UserLoginEvent::class, 'user_id', 'username');
+    }
 }
