@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Activity, BookOpenCheck, Check, ChevronDown, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
+import { Activity, BookOpenCheck, Check, ChevronDown, Download, FileSpreadsheet, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, Upload, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
 type Tab = 'users' | 'jobLevels' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations' | 'activity';
 
@@ -98,6 +98,26 @@ type ReportingLine = {
     subordinate_id: string;
     subordinate_name?: string;
     status: 'active' | 'inactive';
+};
+
+type ReportingImportIssue = {
+    row: number;
+    subordinate_id?: string;
+    leader_id?: string;
+    reason: string;
+};
+
+type ReportingImportPreview = {
+    summary: {
+        relations: number;
+        valid: number;
+        duplicates: number;
+        invalid: number;
+    };
+    valid_rows: ReportingImportIssue[];
+    duplicate_rows: ReportingImportIssue[];
+    invalid_rows: ReportingImportIssue[];
+    details_limited: boolean;
 };
 
 type WorkStation = {
@@ -292,6 +312,11 @@ export default function AdminDashboard() {
     const [isEvaluationFormOpen, setIsEvaluationFormOpen] = useState(false);
     const [isLocationFormOpen, setIsLocationFormOpen] = useState(false);
     const [isRegionalFormOpen, setIsRegionalFormOpen] = useState(false);
+    const [isReportingImportOpen, setIsReportingImportOpen] = useState(false);
+    const [reportingImportFile, setReportingImportFile] = useState<File | null>(null);
+    const [reportingImportPreview, setReportingImportPreview] = useState<ReportingImportPreview | null>(null);
+    const [reportingImportBusy, setReportingImportBusy] = useState(false);
+    const [reportingImportError, setReportingImportError] = useState('');
     const currentPermissionsKey = data?.current_permissions.join('|') || '';
     const isAdminAccount = data?.current_account_role?.toLowerCase() === 'admin';
     const canAccessPermission = (permission: string) => Boolean(isAdminAccount || data?.current_permissions.includes(permission));
@@ -524,6 +549,28 @@ export default function AdminDashboard() {
         return response.json().catch(() => null);
     };
 
+    const requestFormData = async (url: string, body: FormData) => {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/json',
+            },
+            body,
+        });
+
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            const firstErrors = payload?.errors && typeof payload.errors === 'object'
+                ? Object.values(payload.errors).find(Array.isArray) as string[] | undefined
+                : undefined;
+            throw new Error(firstErrors?.[0] || payload?.message || 'Gagal memproses spreadsheet.');
+        }
+
+        return response.json();
+    };
+
     const selectUser = (user: CmsUser) => {
         setSelectedUsername(user.username);
         setUserForm({
@@ -613,6 +660,81 @@ export default function AdminDashboard() {
             setMessage(error.message || 'Gagal menyimpan relasi atasan.');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const closeReportingImport = () => {
+        if (reportingImportBusy) return;
+        setIsReportingImportOpen(false);
+        setReportingImportFile(null);
+        setReportingImportPreview(null);
+        setReportingImportError('');
+    };
+
+    const downloadReportingTemplate = async () => {
+        setReportingImportError('');
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('/api/cms/reporting-lines/import-template', {
+                headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+            });
+            if (!response.ok) {
+                const payload = await response.json().catch(() => null);
+                throw new Error(payload?.message || 'Gagal mengunduh template.');
+            }
+
+            const blobUrl = URL.createObjectURL(await response.blob());
+            const anchor = document.createElement('a');
+            anchor.href = blobUrl;
+            anchor.download = 'template-import-relasi-atasan.xlsx';
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(blobUrl);
+        } catch (error: any) {
+            setReportingImportError(error.message || 'Gagal mengunduh template.');
+        }
+    };
+
+    const previewReportingImport = async () => {
+        if (!reportingImportFile) {
+            setReportingImportError('Pilih file XLSX terlebih dahulu.');
+            return;
+        }
+
+        setReportingImportBusy(true);
+        setReportingImportError('');
+        try {
+            const formData = new FormData();
+            formData.append('file', reportingImportFile);
+            setReportingImportPreview(await requestFormData('/api/cms/reporting-lines/import-preview', formData));
+        } catch (error: any) {
+            setReportingImportError(error.message || 'Gagal memeriksa spreadsheet.');
+            setReportingImportPreview(null);
+        } finally {
+            setReportingImportBusy(false);
+        }
+    };
+
+    const commitReportingImport = async () => {
+        if (!reportingImportFile || !reportingImportPreview) return;
+
+        setReportingImportBusy(true);
+        setReportingImportError('');
+        try {
+            const formData = new FormData();
+            formData.append('file', reportingImportFile);
+            const result = await requestFormData('/api/cms/reporting-lines/import', formData);
+            setMessage(result.message || 'Import relasi selesai.');
+            setIsReportingImportOpen(false);
+            setReportingImportFile(null);
+            setReportingImportPreview(null);
+            await fetchReportingLines();
+            await fetchOverview();
+        } catch (error: any) {
+            setReportingImportError(error.message || 'Gagal mengimport relasi.');
+        } finally {
+            setReportingImportBusy(false);
         }
     };
 
@@ -1157,6 +1279,12 @@ export default function AdminDashboard() {
         canAccess('locations') ? ['Lokasi', data.stats.locations] : null,
         canAccess('regionals') ? ['Regional', data.stats.regionals] : null,
     ].filter((item): item is [string, number] => Boolean(item));
+
+    const reportingImportRows = reportingImportPreview ? [
+        ...reportingImportPreview.valid_rows.map((row) => ({ ...row, importStatus: 'valid' as const, reason: 'Relasi siap diimport.' })),
+        ...reportingImportPreview.duplicate_rows.map((row) => ({ ...row, importStatus: 'duplicate' as const })),
+        ...reportingImportPreview.invalid_rows.map((row) => ({ ...row, importStatus: 'invalid' as const })),
+    ].sort((first, second) => first.row - second.row) : [];
 
     return (
         <div className="h-full overflow-y-auto px-8 py-8">
@@ -1710,9 +1838,18 @@ export default function AdminDashboard() {
             {activeTab === 'hierarchy' && canAccess('reporting_lines') && (
                 <div className="grid grid-cols-[0.9fr_1.1fr] gap-6">
                     <form onSubmit={saveReportingLine} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
-                        <div>
-                            <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Hierarchy</p>
-                            <h2 className="text-xl font-black text-gray-900">Atur Atasan</h2>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Hierarchy</p>
+                                <h2 className="text-xl font-black text-gray-900">Atur Atasan</h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => { setIsReportingImportOpen(true); setReportingImportFile(null); setReportingImportPreview(null); setReportingImportError(''); }}
+                                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-lg shadow-purple-100"
+                            >
+                                <Upload size={15} /> Import XLSX
+                            </button>
                         </div>
                         <Field label="Filter Toko">
                             <CustomSelect
@@ -1727,7 +1864,7 @@ export default function AdminDashboard() {
                             <CustomSelect
                                 value={lineForm.leader_id}
                                 placeholder="Pilih atasan"
-                                options={leadersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
+                                options={leadersData.map((user) => ({ value: user.username, label: `${user.username} - ${user.name} (${user.role_type})` }))}
                                 onChange={selectReportingLeader}
                                 searchable
                             />
@@ -1738,7 +1875,7 @@ export default function AdminDashboard() {
                                 placeholder="Pilih bawahan"
                                 options={reportingUsersData
                                     .filter((user) => user.username !== lineForm.leader_id)
-                                    .map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
+                                    .map((user) => ({ value: user.username, label: `${user.username} - ${user.name} (${user.role_type})` }))}
                                 onChange={(values) => setLineForm({ ...lineForm, subordinate_ids: values })}
                             />
                         </Field>
@@ -1766,7 +1903,7 @@ export default function AdminDashboard() {
                                 <CustomSelect
                                     value={selectedLeaderId}
                                     placeholder="Pilih atasan untuk melihat relasinya..."
-                                    options={leadersData.map((user) => ({ value: user.username, label: `${user.name} (${user.role_type})` }))}
+                                    options={leadersData.map((user) => ({ value: user.username, label: `${user.username} - ${user.name} (${user.role_type})` }))}
                                     onChange={(value) => setSelectedLeaderId(value)}
                                     searchable
                                 />
@@ -1786,11 +1923,12 @@ export default function AdminDashboard() {
                                 <div className="p-8 text-center text-gray-400 text-sm">Pilih atasan terlebih dahulu untuk melihat daftar bawahannya.</div>
                             ) : reportingLinesData.length === 0 ? (
                                 <div className="p-8 text-center text-gray-400 text-sm">Bawahan untuk atasan ini tidak ditemukan.</div>
-                            ) : reportingLinesData.filter(line => (line.subordinate_name || line.subordinate_id).toLowerCase().includes(hierarchySearch.toLowerCase())).map((line) => (
+                            ) : reportingLinesData.filter(line => `${line.subordinate_name || ''} ${line.subordinate_id}`.toLowerCase().includes(hierarchySearch.toLowerCase())).map((line) => (
                                 <div key={line.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition">
                                     <div>
                                         <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-0.5">Subordinate</p>
                                         <p className="font-black text-gray-900 text-lg">{line.subordinate_name || line.subordinate_id}</p>
+                                        <p className="mt-1 text-xs font-semibold text-gray-400">NIK: {line.subordinate_id}</p>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${line.status === 'active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
@@ -2168,6 +2306,97 @@ export default function AdminDashboard() {
                         </button>
                     </form>
                     )}
+                </div>
+            )}
+
+            {isReportingImportOpen && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center overflow-y-auto bg-gray-950/40 p-4 backdrop-blur-[2px]">
+                    <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-3xl border border-gray-100 bg-white p-6 shadow-2xl">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Relasi Atasan</p>
+                                <h2 className="mt-1 text-2xl font-black text-gray-900">Import Spreadsheet</h2>
+                                <p className="mt-2 text-sm text-gray-500">Satu baris berisi satu NIK bawahan dan maksimal sepuluh NIK atasan.</p>
+                            </div>
+                            <button type="button" disabled={reportingImportBusy} onClick={closeReportingImport} className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-40">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="mt-6 grid gap-4 sm:grid-cols-[auto_1fr]">
+                            <button type="button" onClick={downloadReportingTemplate} className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary px-4 py-3 text-sm font-bold text-primary hover:bg-purple-50">
+                                <Download size={17} /> Unduh Template
+                            </button>
+                            <label className="flex min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-3 hover:border-primary">
+                                <FileSpreadsheet size={20} className="shrink-0 text-primary" />
+                                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-600">{reportingImportFile?.name || 'Pilih file .xlsx'}</span>
+                                <input
+                                    type="file"
+                                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                    className="hidden"
+                                    onChange={(event) => {
+                                        setReportingImportFile(event.target.files?.[0] || null);
+                                        setReportingImportPreview(null);
+                                        setReportingImportError('');
+                                    }}
+                                />
+                            </label>
+                        </div>
+
+                        {reportingImportError && (
+                            <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+                                {reportingImportError}
+                            </div>
+                        )}
+
+                        {reportingImportPreview && (
+                            <div className="mt-5 space-y-4">
+                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                    {[
+                                        ['Pasangan', reportingImportPreview.summary.relations, 'text-gray-900'],
+                                        ['Valid', reportingImportPreview.summary.valid, 'text-green-600'],
+                                        ['Duplikat', reportingImportPreview.summary.duplicates, 'text-amber-600'],
+                                        ['Invalid', reportingImportPreview.summary.invalid, 'text-red-500'],
+                                    ].map(([label, value, color]) => (
+                                        <div key={String(label)} className="rounded-2xl bg-gray-50 p-3 text-center">
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
+                                            <p className={`mt-1 text-xl font-black ${color}`}>{value}</p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {reportingImportRows.length > 0 && (
+                                    <div className="max-h-56 overflow-y-auto rounded-2xl border border-gray-100">
+                                        {reportingImportRows.map((issue, index) => (
+                                            <div key={`${issue.row}-${issue.leader_id}-${index}`} className={`border-b px-4 py-3 last:border-0 ${issue.importStatus === 'valid' ? 'border-green-100 bg-green-50/50' : issue.importStatus === 'duplicate' ? 'border-amber-100 bg-amber-50/50' : 'border-red-100 bg-red-50/50'}`}>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <p className="text-xs font-black text-gray-700">Baris {issue.row}: {issue.subordinate_id || '-'} &rarr; {issue.leader_id || '-'}</p>
+                                                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${issue.importStatus === 'valid' ? 'bg-green-100 text-green-700' : issue.importStatus === 'duplicate' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
+                                                        {issue.importStatus === 'valid' ? 'Valid' : issue.importStatus === 'duplicate' ? 'Duplikat' : 'Invalid'}
+                                                    </span>
+                                                </div>
+                                                <p className="mt-1 text-xs text-gray-500">{issue.reason}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {reportingImportPreview.details_limited && <p className="text-xs text-gray-400">Detail dibatasi hingga 100 item per kategori.</p>}
+                            </div>
+                        )}
+
+                        <div className="mt-6 flex flex-wrap justify-end gap-3">
+                            <button type="button" disabled={reportingImportBusy} onClick={closeReportingImport} className="rounded-xl border border-gray-200 px-5 py-3 text-sm font-bold text-gray-600 disabled:opacity-40">Batal</button>
+                            {!reportingImportPreview ? (
+                                <button type="button" disabled={!reportingImportFile || reportingImportBusy} onClick={previewReportingImport} className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-100 disabled:opacity-40">
+                                    {reportingImportBusy ? 'Memeriksa...' : 'Periksa File'}
+                                </button>
+                            ) : (
+                                <button type="button" disabled={reportingImportPreview.summary.valid === 0 || reportingImportBusy} onClick={commitReportingImport} className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-100 disabled:opacity-40">
+                                    {reportingImportBusy ? 'Mengimport...' : `Import ${reportingImportPreview.summary.valid} Relasi`}
+                                </button>
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
 

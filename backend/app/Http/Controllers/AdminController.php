@@ -17,6 +17,7 @@ use App\Models\UserLocation;
 use App\Models\UserLoginEvent;
 use App\Models\UserPresence;
 use App\Models\WorkStation;
+use App\Services\ReportingLineSpreadsheetService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -614,6 +615,79 @@ class AdminController extends Controller
         $reportingLine->delete();
 
         return response()->json(['message' => 'Reporting line deleted.']);
+    }
+
+    public function downloadReportingLineImportTemplate(ReportingLineSpreadsheetService $spreadsheetService)
+    {
+        $this->authorizePermission('reporting_lines');
+
+        return response()->streamDownload(
+            fn() => $spreadsheetService->writeTemplate('php://output'),
+            'template-import-relasi-atasan.xlsx',
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+        );
+    }
+
+    public function previewReportingLineImport(Request $request, ReportingLineSpreadsheetService $spreadsheetService)
+    {
+        $this->authorizePermission('reporting_lines');
+        $request->validate([
+            'file' => ['required', 'file', 'max:' . ReportingLineSpreadsheetService::MAX_FILE_KILOBYTES],
+        ]);
+
+        $analysis = $this->reportingLineImportAnalysis($spreadsheetService->parse($request->file('file')));
+        unset($analysis['valid']);
+
+        return response()->json($analysis);
+    }
+
+    public function importReportingLines(Request $request, ReportingLineSpreadsheetService $spreadsheetService)
+    {
+        $this->authorizePermission('reporting_lines');
+        $request->validate([
+            'file' => ['required', 'file', 'max:' . ReportingLineSpreadsheetService::MAX_FILE_KILOBYTES],
+        ]);
+
+        $analysis = $this->reportingLineImportAnalysis($spreadsheetService->parse($request->file('file')), false);
+        $newRows = collect($analysis['valid'])->where('action', 'create')->map(fn(array $row) => [
+            'leader_id' => $row['leader_id'],
+            'subordinate_id' => $row['subordinate_id'],
+            'status' => 'active',
+            'relation_type' => 'permanent',
+            'backup_request_id' => null,
+            'effective_from' => null,
+            'effective_until' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ])->values();
+        $reactivateIds = collect($analysis['valid'])->where('action', 'reactivate')->pluck('reporting_line_id')->filter()->values();
+
+        [$created, $reactivated] = DB::transaction(function () use ($newRows, $reactivateIds) {
+            $created = 0;
+            foreach ($newRows->chunk(500) as $chunk) {
+                $created += DB::table('reporting_lines')->insertOrIgnore($chunk->all());
+            }
+
+            $reactivated = 0;
+            foreach ($reactivateIds->chunk(1000) as $chunk) {
+                $reactivated += ReportingLine::withoutGlobalScope('effective_backup_period')
+                    ->whereIn('id', $chunk->all())
+                    ->where('relation_type', 'permanent')
+                    ->update(['status' => 'active', 'updated_at' => now()]);
+            }
+
+            return [$created, $reactivated];
+        });
+
+        return response()->json([
+            'message' => ($created + $reactivated) . ' relasi berhasil diimport.',
+            'summary' => [
+                'created' => $created,
+                'reactivated' => $reactivated,
+                'duplicates' => $analysis['summary']['duplicates'],
+                'invalid' => $analysis['summary']['invalid'],
+            ],
+        ]);
     }
 
     public function storeWorkStation(Request $request)
@@ -1272,27 +1346,131 @@ class AdminController extends Controller
 
         if (!$leader || !$subordinate) return;
 
-        $levels = [
-            'employee' => 1,
-            'supervisor' => 2,
-            'manager' => 3,
-            'superadmin' => 4,
-        ];
-
-        $leaderRank = $levels[$leader->role_type] ?? 0;
-        if ($leader->role_type === 'manager' && $leader->manager_type === 'RM') {
-            $leaderRank = 3.5;
-        }
-
-        $subRank = $levels[$subordinate->role_type] ?? 0;
-        if ($subordinate->role_type === 'manager' && $subordinate->manager_type === 'RM') {
-            $subRank = 3.5;
-        }
+        $leaderRank = $this->reportingLineRank($leader);
+        $subRank = $this->reportingLineRank($subordinate);
 
         if ($leaderRank <= $subRank) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'leader_id' => ['Leader must have a higher role level than the subordinate (e.g. Supervisor leads Employee, Manager leads Supervisor).']
             ]);
         }
+    }
+
+    private function reportingLineImportAnalysis(array $parsed, bool $limitDetails = true): array
+    {
+        $relations = collect($parsed['relations'] ?? []);
+        $ids = $relations->flatMap(fn(array $row) => [$row['leader_id'], $row['subordinate_id']])->unique()->values();
+
+        $users = collect();
+        foreach ($ids->chunk(5000) as $chunk) {
+            $users = $users->merge(User::with(['accountRole', 'userLocations', 'locations'])
+                ->whereIn('username', $chunk->all())
+                ->get());
+        }
+        $users = $users->keyBy('username');
+
+        $leaderIds = $relations->pluck('leader_id')->unique()->values();
+        $subordinateIds = $relations->pluck('subordinate_id')->unique()->values();
+        $existing = collect();
+        foreach ($leaderIds->chunk(5000) as $leaderChunk) {
+            foreach ($subordinateIds->chunk(5000) as $subordinateChunk) {
+                $existing = $existing->merge(ReportingLine::withoutGlobalScope('effective_backup_period')
+                    ->whereIn('leader_id', $leaderChunk->all())
+                    ->whereIn('subordinate_id', $subordinateChunk->all())
+                    ->get(['id', 'leader_id', 'subordinate_id', 'status', 'relation_type']));
+            }
+        }
+        $existing = $existing->keyBy(fn(ReportingLine $line) => $line->leader_id . '|' . $line->subordinate_id);
+
+        $valid = [];
+        $duplicates = [];
+        $invalid = $parsed['errors'] ?? [];
+        $seen = [];
+
+        foreach ($relations as $relation) {
+            $key = $relation['leader_id'] . '|' . $relation['subordinate_id'];
+            $context = [
+                'row' => $relation['row'],
+                'subordinate_id' => $relation['subordinate_id'],
+                'leader_id' => $relation['leader_id'],
+            ];
+
+            if (isset($seen[$key])) {
+                $duplicates[] = [...$context, 'reason' => 'Relasi berulang di dalam spreadsheet.'];
+                continue;
+            }
+            $seen[$key] = true;
+
+            $leader = $users->get($relation['leader_id']);
+            $subordinate = $users->get($relation['subordinate_id']);
+            if (!$leader || !$subordinate) {
+                $missing = [];
+                if (!$subordinate) {
+                    $missing[] = "NIK bawahan {$relation['subordinate_id']} tidak ditemukan";
+                }
+                if (!$leader) {
+                    $missing[] = "NIK atasan {$relation['leader_id']} tidak ditemukan";
+                }
+                $invalid[] = [...$context, 'reason' => implode('; ', $missing) . '.'];
+                continue;
+            }
+
+            if ($leader->username === $subordinate->username) {
+                $invalid[] = [...$context, 'reason' => 'Atasan dan bawahan tidak boleh merupakan user yang sama.'];
+                continue;
+            }
+
+            if ($this->reportingLineRank($leader) <= $this->reportingLineRank($subordinate)) {
+                $invalid[] = [...$context, 'reason' => 'Level aplikasi atasan harus lebih tinggi daripada bawahan.'];
+                continue;
+            }
+
+            $existingLine = $existing->get($key);
+            if ($existingLine?->relation_type === 'permanent') {
+                if ($existingLine->status === 'active') {
+                    $duplicates[] = [...$context, 'reason' => 'Relasi permanen sudah aktif.'];
+                    continue;
+                }
+
+                $valid[] = [...$context, 'action' => 'reactivate', 'reporting_line_id' => $existingLine->id];
+                continue;
+            }
+
+            if ($existingLine) {
+                $invalid[] = [...$context, 'reason' => 'Pasangan NIK sedang digunakan oleh relasi backup sementara.'];
+                continue;
+            }
+
+            $valid[] = [...$context, 'action' => 'create', 'reporting_line_id' => null];
+        }
+
+        $detailLimit = $limitDetails ? 100 : PHP_INT_MAX;
+
+        return [
+            'summary' => [
+                'relations' => $relations->count(),
+                'valid' => count($valid),
+                'duplicates' => count($duplicates),
+                'invalid' => count($invalid),
+            ],
+            'valid_rows' => array_slice($valid, 0, $detailLimit),
+            'duplicate_rows' => array_slice($duplicates, 0, $detailLimit),
+            'invalid_rows' => array_slice($invalid, 0, $detailLimit),
+            'details_limited' => $limitDetails && (count($valid) > $detailLimit || count($duplicates) > $detailLimit || count($invalid) > $detailLimit),
+            'valid' => $valid,
+        ];
+    }
+
+    private function reportingLineRank(User $user): float
+    {
+        $rank = match ($user->role_type) {
+            'employee' => 1,
+            'supervisor' => 2,
+            'manager' => 3,
+            'superadmin' => 4,
+            default => 0,
+        };
+
+        return $user->role_type === 'manager' && $user->manager_type === 'RM' ? 3.5 : $rank;
     }
 }
