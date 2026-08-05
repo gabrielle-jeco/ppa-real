@@ -27,11 +27,36 @@ prepare_laravel_writable_dirs() {
   chmod -R ug+rwX /var/www/storage /var/www/bootstrap/cache || true
 }
 
+sync_composer_vendor() {
+  [ -f /var/www/composer.lock ] || return 0
+
+  CURRENT_LOCK=$(sha256sum /var/www/composer.lock | cut -d ' ' -f 1)
+  BUNDLED_LOCK=$(cat /opt/yodaily-vendor.lock 2>/dev/null || true)
+  INSTALLED_LOCK=$(cat /var/www/vendor/.yodaily-composer-lock 2>/dev/null || true)
+
+  if [ "$CURRENT_LOCK" = "$INSTALLED_LOCK" ] && [ -f /var/www/vendor/autoload.php ]; then
+    return 0
+  fi
+
+  if [ -d /opt/yodaily-vendor ] && [ "$CURRENT_LOCK" = "$BUNDLED_LOCK" ]; then
+    echo "Synchronizing Composer dependencies from rebuilt image..."
+    mkdir -p /var/www/vendor
+    cp -a /opt/yodaily-vendor/. /var/www/vendor/
+    echo "$CURRENT_LOCK" > /var/www/vendor/.yodaily-composer-lock
+    return 0
+  fi
+
+  echo "composer.lock differs from the image; installing runtime dependencies..."
+  composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+  echo "$CURRENT_LOCK" > /var/www/vendor/.yodaily-composer-lock
+}
+
 PHP_MEMORY_LIMIT="${PHP_MEMORY_LIMIT:-1024M}"
 echo "memory_limit=${PHP_MEMORY_LIMIT}" > /usr/local/etc/php/conf.d/zz-yodaily-memory.ini
 echo "PHP memory_limit set to ${PHP_MEMORY_LIMIT}"
 
 prepare_laravel_writable_dirs
+sync_composer_vendor
 
 php artisan config:clear || true
 php artisan cache:clear || true

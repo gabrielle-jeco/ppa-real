@@ -88,6 +88,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/leaders', [App\Http\Controllers\AdminController::class, 'getLeaders']);
         Route::get('/reporting-users', [App\Http\Controllers\AdminController::class, 'getReportingUsers']);
         Route::get('/reporting-lines', [App\Http\Controllers\AdminController::class, 'getReportingLines']);
+        Route::get('/reporting-lines/import-template', [App\Http\Controllers\AdminController::class, 'downloadReportingLineImportTemplate'])
+            ->middleware('throttle:30,1');
+        Route::post('/reporting-lines/import-preview', [App\Http\Controllers\AdminController::class, 'previewReportingLineImport'])
+            ->middleware('throttle:10,1');
+        Route::post('/reporting-lines/import', [App\Http\Controllers\AdminController::class, 'importReportingLines'])
+            ->middleware('throttle:5,1');
 
         Route::post('/reporting-lines', [App\Http\Controllers\AdminController::class, 'storeReportingLine']);
         Route::patch('/reporting-lines/{reportingLine}', [App\Http\Controllers\AdminController::class, 'updateReportingLine']);
