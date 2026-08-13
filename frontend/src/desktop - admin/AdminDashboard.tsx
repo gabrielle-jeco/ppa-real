@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Activity, BookOpenCheck, Check, ChevronDown, Download, FileSpreadsheet, GitBranch, MapPinned, RefreshCcw, Save, ShieldCheck, Upload, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
+import { Activity, BookOpenCheck, Check, ChevronDown, Download, FileSpreadsheet, GitBranch, LogOut, MapPinned, PanelLeftClose, PanelLeftOpen, RefreshCcw, Save, ShieldCheck, Upload, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
 type Tab = 'users' | 'jobLevels' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations' | 'activity';
 
@@ -222,8 +222,9 @@ const emptyAppRoleForm = {
     active: true,
 };
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>('users');
+    const [sidebarExpanded, setSidebarExpanded] = useState(() => localStorage.getItem('yodaily_cms_sidebar_expanded') === 'true');
     const [data, setData] = useState<CmsData | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -324,6 +325,10 @@ export default function AdminDashboard() {
     useEffect(() => {
         fetchOverview();
     }, []);
+
+    useEffect(() => {
+        localStorage.setItem('yodaily_cms_sidebar_expanded', String(sidebarExpanded));
+    }, [sidebarExpanded]);
 
     useEffect(() => {
         if (!data) return;
@@ -1287,7 +1292,67 @@ export default function AdminDashboard() {
     ].sort((first, second) => first.row - second.row) : [];
 
     return (
-        <div className="h-full overflow-y-auto px-8 py-8">
+        <div className="flex h-full bg-gray-50">
+            <aside className={`${sidebarExpanded ? 'w-64' : 'w-20'} z-20 flex h-full shrink-0 flex-col border-r border-gray-200 bg-white py-6 shadow-sm transition-[width] duration-200`}>
+                <div className={`mb-6 flex items-center ${sidebarExpanded ? 'justify-between px-4' : 'justify-center'}`}>
+                    {sidebarExpanded ? (
+                        <>
+                            <div className="shrink-0 rounded-xl bg-purple-100 p-3 text-primary" title="YoDaily CMS">
+                                <ShieldCheck size={24} />
+                            </div>
+                            <span className="ml-3 flex-1 text-sm font-black text-gray-800">YoDaily CMS</span>
+                            <button
+                                type="button"
+                                onClick={() => setSidebarExpanded(false)}
+                                className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-primary"
+                                title="Lipat sidebar"
+                                aria-label="Lipat sidebar"
+                            >
+                                <PanelLeftClose size={20} />
+                            </button>
+                        </>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => setSidebarExpanded(true)}
+                            className="group rounded-xl bg-purple-100 p-3 text-primary transition-colors hover:bg-purple-200"
+                            title="Buka sidebar YoDaily CMS"
+                            aria-label="Buka sidebar YoDaily CMS"
+                        >
+                            <span className="relative block h-6 w-6">
+                                <ShieldCheck className="absolute inset-0 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0" size={24} />
+                                <PanelLeftOpen className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100" size={24} />
+                            </span>
+                        </button>
+                    )}
+                </div>
+
+                <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3">
+                    {canAccess('users_locations') && <TabButton expanded={sidebarExpanded} active={activeTab === 'users'} icon={<UsersRound size={19} />} label="User & Lokasi" onClick={() => setActiveTab('users')} />}
+                    {canAccess('job_levels') && <TabButton expanded={sidebarExpanded} active={activeTab === 'jobLevels'} icon={<ShieldCheck size={19} />} label="Job Level HR" onClick={() => setActiveTab('jobLevels')} />}
+                    {canAccess('app_roles') && <TabButton expanded={sidebarExpanded} active={activeTab === 'appRoles'} icon={<UserCog size={19} />} label="Role Aplikasi" onClick={() => setActiveTab('appRoles')} />}
+                    {canAccess('reporting_lines') && <TabButton expanded={sidebarExpanded} active={activeTab === 'hierarchy'} icon={<GitBranch size={19} />} label="Relasi Atasan" onClick={() => setActiveTab('hierarchy')} />}
+                    {canAccess('work_stations') && <TabButton expanded={sidebarExpanded} active={activeTab === 'guides'} icon={<BookOpenCheck size={19} />} label="Master Work Station" onClick={() => setActiveTab('guides')} />}
+                    {canAccess('locations') && <TabButton expanded={sidebarExpanded} active={activeTab === 'locations'} icon={<MapPinned size={19} />} label="Master Lokasi" onClick={() => setActiveTab('locations')} />}
+                    {canAccess('regionals') && <TabButton expanded={sidebarExpanded} active={activeTab === 'regionals'} icon={<MapPinned size={19} />} label="Master Regional" onClick={() => setActiveTab('regionals')} />}
+                    {canAccess('evaluation_masters') && <TabButton expanded={sidebarExpanded} active={activeTab === 'evaluations'} icon={<ShieldCheck size={19} />} label="Master Evaluasi" onClick={() => setActiveTab('evaluations')} />}
+                    {canAccess('user_activity') && <TabButton expanded={sidebarExpanded} active={activeTab === 'activity'} icon={<Activity size={19} />} label="Aktivitas User" onClick={() => setActiveTab('activity')} />}
+                </nav>
+
+                <div className="mt-4 px-3">
+                    <button
+                        type="button"
+                        onClick={onLogout}
+                        className={`flex w-full items-center rounded-xl p-3 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 ${sidebarExpanded ? 'gap-3' : 'justify-center'}`}
+                        title="Keluar"
+                    >
+                        <LogOut size={22} className="shrink-0" />
+                        {sidebarExpanded && <span className="text-sm font-bold">Keluar</span>}
+                    </button>
+                </div>
+            </aside>
+
+            <div className="min-w-0 flex-1 overflow-y-auto px-8 py-8">
             <header className="mb-8 flex items-start justify-between">
                 <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-gray-400 font-bold">YoDaily CMS</p>
@@ -1317,18 +1382,6 @@ export default function AdminDashboard() {
                     </button>
                 </div>
             )}
-
-            <div className="flex gap-3 mb-6">
-                {canAccess('users_locations') && <TabButton active={activeTab === 'users'} icon={<UsersRound size={16} />} label="User & Lokasi" onClick={() => setActiveTab('users')} />}
-                {canAccess('job_levels') && <TabButton active={activeTab === 'jobLevels'} icon={<ShieldCheck size={16} />} label="Job Level HR" onClick={() => setActiveTab('jobLevels')} />}
-                {canAccess('app_roles') && <TabButton active={activeTab === 'appRoles'} icon={<UserCog size={16} />} label="Role Aplikasi" onClick={() => setActiveTab('appRoles')} />}
-                {canAccess('reporting_lines') && <TabButton active={activeTab === 'hierarchy'} icon={<GitBranch size={16} />} label="Relasi Atasan" onClick={() => setActiveTab('hierarchy')} />}
-                {canAccess('work_stations') && <TabButton active={activeTab === 'guides'} icon={<BookOpenCheck size={16} />} label="Master Work Station" onClick={() => setActiveTab('guides')} />}
-                {canAccess('locations') && <TabButton active={activeTab === 'locations'} icon={<MapPinned size={16} />} label="Master Lokasi" onClick={() => setActiveTab('locations')} />}
-                {canAccess('regionals') && <TabButton active={activeTab === 'regionals'} icon={<MapPinned size={16} />} label="Master Regional" onClick={() => setActiveTab('regionals')} />}
-                {canAccess('evaluation_masters') && <TabButton active={activeTab === 'evaluations'} icon={<ShieldCheck size={16} />} label="Master Evaluasi" onClick={() => setActiveTab('evaluations')} />}
-                {canAccess('user_activity') && <TabButton active={activeTab === 'activity'} icon={<Activity size={16} />} label="Aktivitas User" onClick={() => setActiveTab('activity')} />}
-            </div>
 
             {activeTab === 'activity' && canAccess('user_activity') && (
                 <div className="grid h-[clamp(420px,calc(100dvh-24rem),700px)] grid-cols-2 gap-6">
@@ -2399,17 +2452,21 @@ export default function AdminDashboard() {
                     </div>
                 </div>
             )}
-
-
+            </div>
         </div>
     );
 }
 
-function TabButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+function TabButton({ active, expanded, icon, label, onClick }: { active: boolean; expanded: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
     return (
-        <button onClick={onClick} className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition ${active ? 'bg-primary text-white shadow-lg shadow-purple-100' : 'bg-white text-gray-500 border border-gray-100 hover:bg-gray-50'}`}>
-            {icon}
-            {label}
+        <button
+            type="button"
+            onClick={onClick}
+            title={!expanded ? label : undefined}
+            className={`flex w-full items-center rounded-xl p-3 text-sm font-bold transition-colors ${expanded ? 'gap-3' : 'justify-center'} ${active ? 'bg-primary text-white shadow-lg shadow-purple-100' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'}`}
+        >
+            <span className="shrink-0">{icon}</span>
+            {expanded && <span className="truncate">{label}</span>}
         </button>
     );
 }
