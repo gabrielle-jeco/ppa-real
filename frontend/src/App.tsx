@@ -175,8 +175,8 @@ function App() {
 
   if (user.role_type === 'superadmin') {
     return (
-      <AdminLayout onLogout={handleLogout}>
-        <AdminDashboard />
+      <AdminLayout>
+        <AdminDashboard onLogout={handleLogout} />
       </AdminLayout>
     );
   }
