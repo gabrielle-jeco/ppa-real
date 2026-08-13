@@ -4,6 +4,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: yodaily-backend:local
     container_name: perf-app-backend
     restart: unless-stopped
     ports:
@@ -48,9 +49,7 @@ services:
 
   # Laravel Scheduler for background reminders and Web Push notifications
   scheduler:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: yodaily-backend:local
     container_name: perf-app-scheduler
     restart: unless-stopped
     working_dir: /var/www
