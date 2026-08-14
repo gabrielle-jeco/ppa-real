@@ -109,7 +109,7 @@ services:
     container_name: perf-app-db
     restart: unless-stopped
     ports:
-     - "5432:5432"
+     - "5758:5432"
     environment:
       POSTGRES_DB: performance_app
       POSTGRES_USER: sail
