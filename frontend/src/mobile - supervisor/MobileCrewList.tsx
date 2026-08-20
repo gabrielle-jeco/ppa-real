@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Star } from 'lucide-react';
 import MobileLayout from './MobileLayout';
+import { formatDisplayNumber } from '../general/numberFormat';
 
 interface Crew {
     id: number;
@@ -115,7 +116,7 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                             </div>
 
                             <p className="text-[10px] text-gray-500 font-medium">
-                                Persentase Aktivitas - {score}%
+                                Persentase Aktivitas - {formatDisplayNumber(score, '0')}%
                             </p>
                         </div>
                     );

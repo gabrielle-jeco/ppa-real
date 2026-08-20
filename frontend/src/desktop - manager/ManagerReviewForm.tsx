@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDisplayNumber, roundToDisplayPrecision } from '../general/numberFormat';
 
 interface ManagerReviewFormProps {
     supervisor: any;
@@ -42,7 +43,9 @@ export default function ManagerReviewForm({ supervisor, targetDate, evaluationSt
         setLoading(true);
         try {
             const token = localStorage.getItem('auth_token');
-            const totalScore = Object.values(scores).reduce((sum, score) => sum + score, 0) / REVIEW_CRITERIA.length * 20;
+            const totalScore = roundToDisplayPrecision(
+                Object.values(scores).reduce((sum, score) => sum + score, 0) / REVIEW_CRITERIA.length * 20,
+            );
             const dateStr = targetDate.toLocaleDateString('en-CA');
 
             const res = await fetch('/api/evaluations', {
@@ -88,7 +91,7 @@ export default function ManagerReviewForm({ supervisor, targetDate, evaluationSt
                     <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${existing ? 'text-green-600' : 'text-gray-400'}`}>
                         {existing ? 'Review Submitted' : 'Review Period Locked'}
                     </p>
-                    <h3 className="text-4xl font-bold text-gray-800 mb-2">{existing?.total_score ?? existing?.score ?? 0}</h3>
+                    <h3 className="text-4xl font-bold text-gray-800 mb-2">{formatDisplayNumber(existing?.total_score ?? existing?.score, '0')}</h3>
                     <p className="text-sm text-gray-500">
                         {existing
                             ? 'This supervisor review has been submitted and is now shown as read-only.'

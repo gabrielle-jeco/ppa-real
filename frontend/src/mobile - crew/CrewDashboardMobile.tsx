@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Users, Calendar, Star, ChevronDown, LogOut } from 'lucide-react';
 import CrewLayout from './CrewLayout';
+import { formatDisplayNumber } from '../general/numberFormat';
 
 interface CrewDashboardProps {
     user: any;
@@ -114,7 +115,7 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                         {/* Star Rating mapped to Active Percentage */}
                         <div className={`flex flex-col items-center ${getScoreColor(activePercentage)}`}>
                             <Star fill="currentColor" size={24} />
-                            <span className="text-xs font-bold mt-1">{activePercentage}</span>
+                            <span className="text-xs font-bold mt-1">{formatDisplayNumber(activePercentage, '0')}</span>
                         </div>
                     </div>
 

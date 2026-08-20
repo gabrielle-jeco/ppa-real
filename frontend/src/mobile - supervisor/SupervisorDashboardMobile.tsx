@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LogOut, CheckSquare, FileText, BarChart2, Users, MapPin, Star } from 'lucide-react';
 import MobileLayout from './MobileLayout';
+import { formatDisplayNumber } from '../general/numberFormat';
 
 interface DashboardProps {
     onNavigate: (view: any) => void;
@@ -80,7 +81,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                     {/* Star Rating */}
                     <div className={`flex flex-col items-center ${getScoreColor(YEARLY_SCORE)}`}>
                         <Star fill="currentColor" size={24} />
-                        <span className="text-xs font-bold mt-1">{YEARLY_SCORE}</span>
+                        <span className="text-xs font-bold mt-1">{formatDisplayNumber(YEARLY_SCORE, '0')}</span>
                     </div>
                 </div>
 
@@ -103,7 +104,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                     ></div>
                 </div>
                 <p className="text-center text-xs text-gray-500 font-medium">
-                    Rata-rata Penyelesaian Tugas : {PROGRESS_PERCENTAGE}%
+                    Rata-rata Penyelesaian Tugas : {formatDisplayNumber(PROGRESS_PERCENTAGE, '0')}%
                 </p>
             </div>
 

@@ -15,6 +15,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import { getAttendanceColor as getAttendanceStatusColor, getAttendanceDay } from '../utils/attendanceCalendar';
+import { formatDisplayNumber } from '../general/numberFormat';
 
 type BackupOption = {
     id: string;
@@ -533,7 +534,7 @@ export default function SupervisorPerformance() {
                             <div className="flex-shrink-0 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                                 <div className="mb-2 flex items-center justify-between">
                                     <h3 className="text-sm font-semibold text-gray-600">Rata-rata Poin Saya</h3>
-                                    <span className="text-sm font-bold text-gray-800">{stats.my_avg_point}%</span>
+                                    <span className="text-sm font-bold text-gray-800">{formatDisplayNumber(stats.my_avg_point, '0')}%</span>
                                 </div>
                                 <div className="h-4 w-full overflow-hidden rounded-full bg-purple-100">
                                     <div className="h-4 rounded-full bg-yellow-400 transition-all duration-500" style={{ width: `${stats.my_avg_point}%` }} />
@@ -546,7 +547,7 @@ export default function SupervisorPerformance() {
                                     <div className="mb-2 h-3 w-full overflow-hidden rounded-full bg-purple-100">
                                         <div className="h-3 rounded-full bg-red-500 transition-all duration-500" style={{ width: `${taskForScPercentage}%` }} />
                                     </div>
-                                    <p className="text-xs text-gray-400">{stats.task_for_sc.completed}% Selesai</p>
+                                    <p className="text-xs text-gray-400">{formatDisplayNumber(stats.task_for_sc.completed, '0')}% Selesai</p>
                                 </div>
 
                                 <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -554,7 +555,7 @@ export default function SupervisorPerformance() {
                                     <div className="mb-2 h-3 w-full overflow-hidden rounded-full bg-purple-100">
                                         <div className="h-3 rounded-full bg-red-500 transition-all duration-500" style={{ width: `${managerPercentage}%` }} />
                                     </div>
-                                    <p className="text-xs text-gray-400">{stats.task_from_manager.completed}%</p>
+                                    <p className="text-xs text-gray-400">{formatDisplayNumber(stats.task_from_manager.completed, '0')}%</p>
                                 </div>
 
                                 <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -567,7 +568,7 @@ export default function SupervisorPerformance() {
                                 <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                                     <h3 className="mb-4 text-sm font-semibold text-gray-600">Rata-rata Nilai Service Crew</h3>
                                     <div className="rounded-xl bg-gray-200 p-4 text-center">
-                                        <span className="font-bold text-gray-700">{stats.avg_service_crew_point}%</span>
+                                        <span className="font-bold text-gray-700">{formatDisplayNumber(stats.avg_service_crew_point, '0')}%</span>
                                     </div>
                                 </div>
                             </div>

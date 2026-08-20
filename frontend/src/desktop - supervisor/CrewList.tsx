@@ -1,5 +1,6 @@
 import React from 'react';
 import { Star, ChevronDown } from 'lucide-react';
+import { formatDisplayNumber } from '../general/numberFormat';
 
 interface CrewListProps {
     data: any;
@@ -59,7 +60,7 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                             style={{ width: `${location_avg_progress}%` }}
                         ></div>
                     </div>
-                    <p className="text-xs text-gray-500">Rata-rata Penyelesaian Tugas : <span className="font-medium text-gray-800">{location_avg_progress}%</span></p>
+                    <p className="text-xs text-gray-500">Rata-rata Penyelesaian Tugas : <span className="font-medium text-gray-800">{formatDisplayNumber(location_avg_progress, '0')}%</span></p>
                 </div>
 
                 <div className="border-b border-gray-200 mt-4"></div>
@@ -97,7 +98,7 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                                 ></div>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-[10px] text-gray-400">Persentase Aktivitas - {crew.activity_percentage}%</span>
+                                <span className="text-[10px] text-gray-400">Persentase Aktivitas - {formatDisplayNumber(crew.activity_percentage, '0')}%</span>
                             </div>
                         </div>
                     </div>

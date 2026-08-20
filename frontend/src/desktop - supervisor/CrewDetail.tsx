@@ -11,6 +11,7 @@ import { canAssignTaskOnDate, clampToTaskWindow, getAvailableTaskMonths, getAvai
 import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
 import { featureFlags } from '../utils/featureFlags';
+import { formatDisplayNumber } from '../general/numberFormat';
 
 interface CrewDetailProps {
     crew: any;
@@ -752,7 +753,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                 <p className="text-gray-500 mb-6">{evaluationStatusView.message}</p>
                                 <div className="bg-purple-50 p-4 rounded-xl w-full max-w-xs mb-6">
                                     <p className="text-xs text-gray-500 uppercase tracking-wide">Total Nilai</p>
-                                    <p className="text-4xl font-bold text-primary">{todayEvaluation.data?.total_score ?? '-'}</p>
+                                    <p className="text-4xl font-bold text-primary">{formatDisplayNumber(todayEvaluation.data?.total_score)}</p>
                                 </div>
                             </div>
                         ) : (
@@ -791,7 +792,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                                     {evalStats.activity_monitor.map((item: any, idx: number) => (
                                                         <div key={idx} className="flex items-center gap-3">
                                                             <div className={`w-3 h-3 rounded-full ${dotColors[idx % dotColors.length]}`}></div>
-                                                            <span className="text-xs font-medium text-gray-600">{item.label} - {item.percentage}%</span>
+                                                            <span className="text-xs font-medium text-gray-600">{item.label} - {formatDisplayNumber(item.percentage, '0')}%</span>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -847,7 +848,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                             {todayEvaluation?.evaluated ? (
                                                 <div className="flex items-center h-10">
                                                     <span className="font-bold text-3xl text-primary leading-none">
-                                                        {todayEvaluation.data?.total_score}
+                                                        {formatDisplayNumber(todayEvaluation.data?.total_score)}
                                                     </span>
                                                 </div>
                                             ) : (
@@ -865,7 +866,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">AKUMULASI NILAI TAHUNAN</h3>
                                         <p className="text-sm font-medium text-gray-400 mb-1">Total Nilai :</p>
                                         <div className="text-6xl font-light text-black tracking-tighter">
-                                            {evalStats?.yearly_score ?? '-'}
+                                            {formatDisplayNumber(evalStats?.yearly_score)}
                                         </div>
                                     </div>
                                 </div>

@@ -272,9 +272,11 @@ class TaskController extends Controller
                 continue;
             }
 
-            $startAt = $date->isSameDay(Carbon::today())
-                ? Carbon::now()
-                : Carbon::parse($date->toDateString() . ' ' . $request->start_time);
+            $scheduledStartAt = Carbon::parse($date->toDateString() . ' ' . $request->start_time);
+            $now = Carbon::now();
+            $startAt = $date->isSameDay($now) && $scheduledStartAt->lte($now)
+                ? $now
+                : $scheduledStartAt;
             $dueAt = Carbon::parse($date->toDateString() . ' ' . $request->due_time);
 
             if ($dueAt->lt($startAt)) {
@@ -510,9 +512,11 @@ class TaskController extends Controller
                 continue;
             }
 
-            $startAt = $date->isSameDay(Carbon::today())
-                ? Carbon::now()
-                : Carbon::parse($date->toDateString() . ' ' . $request->start_time);
+            $scheduledStartAt = Carbon::parse($date->toDateString() . ' ' . $request->start_time);
+            $now = Carbon::now();
+            $startAt = $date->isSameDay($now) && $scheduledStartAt->lte($now)
+                ? $now
+                : $scheduledStartAt;
             $dueAt = Carbon::parse($date->toDateString() . ' ' . $request->due_time);
 
             if ($dueAt->lt($startAt)) {
