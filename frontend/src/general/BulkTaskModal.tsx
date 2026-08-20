@@ -138,13 +138,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
         const startDateObject = new Date(`${startDate}T00:00:00`);
         const endDateObject = new Date(`${endDate}T00:00:00`);
         const now = new Date();
-        let effectiveStartTime = startTime;
         const selectedStartAt = new Date(`${startDate}T${startTime}:00`);
-
-        if (startsToday && selectedStartAt <= now) {
-            effectiveStartTime = now.toTimeString().slice(0, 5);
-            setStartTime(effectiveStartTime);
-        }
 
         const effectiveStartAt = startsToday && selectedStartAt <= now
             ? now
@@ -168,7 +162,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
                 start_date: startDate,
                 end_date: endDate,
                 repeat_days: repeatDays,
-                start_time: effectiveStartTime,
+                start_time: startTime,
                 due_time: dueTime,
                 ...(featureFlags.taskWeight ? { weight_label: weightLabel } : {}),
                 note,
