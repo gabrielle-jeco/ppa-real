@@ -5,6 +5,7 @@ import TaskStartStatus from '../general/TaskStartStatus';
 import ManagerReviewForm from './ManagerReviewForm';
 import { getAttendanceColor as getAttendanceStatusColor, getAttendanceDay } from '../utils/attendanceCalendar';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
+import { formatDisplayNumber } from '../general/numberFormat';
 
 interface SupervisorDetailProps {
     supervisor: any;
@@ -208,7 +209,7 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                             <div className="grid grid-cols-3 gap-2 mt-3 text-[10px] text-gray-500">
                                                 <span>Pending {selectedCrew.tasks_pending}</span>
                                                 <span>Overdue {selectedCrew.tasks_overdue}</span>
-                                                <span>{selectedCrew.activity_percentage}%</span>
+                                                <span>{formatDisplayNumber(selectedCrew.activity_percentage, '0')}%</span>
                                             </div>
                                         </div>
                                     )}
@@ -421,7 +422,7 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                             <h3 className="text-xs font-semibold text-gray-500 mb-3">AVG Service Crew Point Today</h3>
                                             <div className="bg-gray-100 rounded-xl p-3 relative overflow-hidden h-12 flex items-center px-4">
                                                 <div className="absolute left-0 top-0 bottom-0 bg-gray-300 opacity-20 transition-all duration-500" style={{ width: `${stats.avg_sc_point_today || 0}%` }}></div>
-                                                <span className="font-bold text-gray-700 relative z-10">{stats.avg_sc_point_today || 0}%</span>
+                                                <span className="font-bold text-gray-700 relative z-10">{formatDisplayNumber(stats.avg_sc_point_today, '0')}%</span>
                                             </div>
                                         </div>
                                     </div>
@@ -439,7 +440,7 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                             <h3 className="text-xs font-semibold text-gray-500 mb-3">AVG Service Crew Point</h3>
                                             <div className="bg-gray-100 rounded-xl p-3 relative overflow-hidden h-12 flex items-center px-4">
                                                 <div className="absolute left-0 top-0 bottom-0 bg-gray-300 opacity-20 transition-all duration-500" style={{ width: `${stats.avg_service_crew_point || 0}%` }}></div>
-                                                <span className="font-bold text-gray-700 relative z-10">{stats.avg_service_crew_point || 0}%</span>
+                                                <span className="font-bold text-gray-700 relative z-10">{formatDisplayNumber(stats.avg_service_crew_point, '0')}%</span>
                                             </div>
                                         </div>
                                     </div>
@@ -461,7 +462,7 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                                         <div className="flex justify-between items-center mb-2">
                                             <h3 className="text-sm font-semibold text-gray-600">My AVG Point</h3>
-                                            <span className="text-sm font-bold text-gray-800">{stats.my_avg_point}%</span>
+                                            <span className="text-sm font-bold text-gray-800">{formatDisplayNumber(stats.my_avg_point, '0')}%</span>
                                         </div>
                                         <div className="w-full bg-purple-100 rounded-full h-4 overflow-hidden">
                                             <div className="bg-yellow-400 h-4 rounded-full transition-all duration-500" style={{ width: `${stats.my_avg_point}%` }}></div>
@@ -495,7 +496,7 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                         <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
                                             <h3 className="text-[10px] font-semibold text-gray-500 mb-3">AVG Service Crew Point</h3>
                                             <div className="bg-gray-100 rounded-xl p-2 text-center">
-                                                <span className="font-bold text-gray-700 text-sm">{stats.avg_service_crew_point}%</span>
+                                                <span className="font-bold text-gray-700 text-sm">{formatDisplayNumber(stats.avg_service_crew_point, '0')}%</span>
                                             </div>
                                         </div>
                                     </div>

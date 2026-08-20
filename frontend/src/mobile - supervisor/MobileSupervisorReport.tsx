@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
+import { formatDisplayNumber } from '../general/numberFormat';
 
 interface MobileSupervisorReportProps {
     onBack: () => void;
@@ -153,7 +154,7 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
                 <div className="bg-white p-5 rounded-3xl shadow-sm">
                     <div className="flex justify-between items-center mb-2">
                         <h3 className="text-xs font-bold text-gray-600">Rata-rata Poin Saya</h3>
-                        <span className="text-sm font-bold text-gray-800">{stats?.my_avg_point || 0}%</span>
+                        <span className="text-sm font-bold text-gray-800">{formatDisplayNumber(stats?.my_avg_point, '0')}%</span>
                     </div>
                     <div className="w-full bg-purple-50 rounded-full h-3 overflow-hidden">
                         <div className="h-full bg-yellow-400 rounded-full transition-all duration-1000" style={{ width: `${stats?.my_avg_point || 0}%` }}></div>
@@ -189,7 +190,7 @@ export default function MobileSupervisorReport({ onBack }: MobileSupervisorRepor
                     <div className="bg-white p-5 rounded-3xl shadow-sm">
                         <h3 className="text-xs font-bold text-gray-600 mb-3">Rata-rata Nilai Service Crew</h3>
                         <div className="bg-gray-200 rounded-xl py-3 px-4 text-center">
-                            <span className="font-bold text-gray-700 text-sm">{stats?.avg_service_crew_point || 0}%</span>
+                            <span className="font-bold text-gray-700 text-sm">{formatDisplayNumber(stats?.avg_service_crew_point, '0')}%</span>
                         </div>
                     </div>
                 </div>

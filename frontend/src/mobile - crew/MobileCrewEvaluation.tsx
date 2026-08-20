@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { formatDisplayNumber } from '../general/numberFormat';
 import CrewLayout from './CrewLayout';
 import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 
@@ -139,7 +140,7 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                         <div className="w-full bg-white rounded-full h-4 mb-2 overflow-hidden">
                             <div className="bg-green-500 h-full rounded-full transition-all duration-1000" style={{ width: `${activePercentage}%` }}></div>
                         </div>
-                        <p className="text-xs text-gray-500">Persentase Aktivitas - {activePercentage}% ({selectedDate.toLocaleString('id-ID', { month: 'long' })})</p>
+                        <p className="text-xs text-gray-500">Persentase Aktivitas - {formatDisplayNumber(activePercentage, '0')}% ({selectedDate.toLocaleString('id-ID', { month: 'long' })})</p>
                     </div>
 
                     {/* Activity Monitor */}
@@ -157,7 +158,7 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                                     {activityMonitor.map((item: any, idx: number) => (
                                         <div key={idx} className="flex items-center gap-2">
                                             <div className={`w-3 h-3 rounded-full ${['bg-green-400', 'bg-blue-600', 'bg-yellow-400', 'bg-purple-500'][idx % 4]} shrink-0`}></div>
-                                            <span className="text-xs font-medium text-gray-600">{item.label} - {item.percentage}%</span>
+                                            <span className="text-xs font-medium text-gray-600">{item.label} - {formatDisplayNumber(item.percentage, '0')}%</span>
                                         </div>
                                     ))}
                                 </div>
@@ -170,7 +171,7 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                     {/* Personality Score */}
                     <div className="bg-gray-100 rounded-3xl p-5">
                         <p className="text-xs font-medium text-gray-600 mb-2 uppercase">POIN SIKAP KEPRIBADIAN ({selectedDate.toLocaleString('id-ID', { month: 'long' })})</p>
-                        <p className="text-sm font-bold text-gray-700">Total Nilai : {personalityScore}</p>
+                        <p className="text-sm font-bold text-gray-700">Total Nilai : {formatDisplayNumber(personalityScore, '0')}</p>
                     </div>
 
                     {/* Calendar View */}
@@ -207,7 +208,7 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
                     <div className="bg-gray-100 rounded-3xl p-6 pb-12">
                         <p className="text-xs font-medium text-gray-500 uppercase mb-4">AKUMULASI NILAI TAHUNAN</p>
                         <p className="text-sm font-medium text-gray-500 mb-1">Total Nilai :</p>
-                        <p className="text-6xl font-medium text-black tracking-tight">{yearlyScore}</p>
+                        <p className="text-6xl font-medium text-black tracking-tight">{formatDisplayNumber(yearlyScore, '0')}</p>
                     </div>
                 </div>
             </div>

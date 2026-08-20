@@ -52,6 +52,8 @@ class EvaluationController extends Controller
 
             $evaluationType = $this->resolveEvaluationType($evaluator, $evaluatee);
 
+            $totalScore = round((float) $request->total_score, 2);
+
             $evaluation = MonthlyPersonalityEvaluation::updateOrCreate(
                 [
                     'evaluatee_id' => $request->user_id,
@@ -60,13 +62,13 @@ class EvaluationController extends Controller
                     'evaluation_type' => $evaluationType,
                 ],
                 [
-                    'score' => $request->total_score,
+                    'score' => $totalScore,
                     'scores' => $request->scores,
                     'notes' => $request->notes,
                 ]
             );
 
-            $evaluation->setAttribute('total_score', $evaluation->score);
+            $evaluation->setAttribute('total_score', round((float) $evaluation->score, 2));
             $evaluation->setAttribute('user_id', $evaluation->evaluatee_id);
             $evaluation->setAttribute('date', $evaluation->evaluation_period);
 
@@ -116,7 +118,7 @@ class EvaluationController extends Controller
             ->first();
 
         if ($evaluation) {
-            $evaluation->setAttribute('total_score', $evaluation->score);
+            $evaluation->setAttribute('total_score', round((float) $evaluation->score, 2));
             $evaluation->setAttribute('user_id', $evaluation->evaluatee_id);
             $evaluation->setAttribute('date', $evaluation->evaluation_period);
         }

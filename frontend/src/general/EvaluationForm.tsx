@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { roundToDisplayPrecision } from './numberFormat';
 
 interface EvaluationFormProps {
     supervisor: any;
@@ -75,7 +76,9 @@ export default function EvaluationForm({ supervisor, targetDate, onSuccess }: Ev
         setLoading(true);
         try {
             const token = localStorage.getItem('auth_token');
-            const totalScore = Object.values(scores).reduce((a, b) => a + b, 0) / criteria.length * 20;
+            const totalScore = roundToDisplayPrecision(
+                Object.values(scores).reduce((a, b) => a + b, 0) / criteria.length * 20,
+            );
 
             const dateStr = targetDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
 
