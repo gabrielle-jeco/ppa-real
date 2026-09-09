@@ -43,6 +43,16 @@ class AdminController extends Controller
         'user_activity' => 'Aktivitas User',
     ];
 
+    public function serverTime()
+    {
+        $this->authorizeSuperadmin();
+
+        return response()->json([
+            'server_time' => now()->toISOString(),
+            'timezone' => config('app.timezone'),
+        ])->header('Cache-Control', 'no-store, private');
+    }
+
     public function overview()
     {
         $this->authorizeSuperadmin();

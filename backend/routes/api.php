@@ -56,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // CMS / Superadmin Routes
     Route::prefix('cms')->group(function () {
+        Route::get('/server-time', [App\Http\Controllers\AdminController::class, 'serverTime']);
         Route::get('/overview', [App\Http\Controllers\AdminController::class, 'overview']);
         Route::get('/user-activity/online', [App\Http\Controllers\AdminController::class, 'getOnlineUsers']);
         Route::get('/user-activity/recent-logins', [App\Http\Controllers\AdminController::class, 'getRecentLogins']);
