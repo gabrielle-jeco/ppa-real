@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import ServerClock from './ServerClock';
 import { Activity, BookOpenCheck, Check, ChevronDown, Download, FileSpreadsheet, GitBranch, LogOut, MapPinned, PanelLeftClose, PanelLeftOpen, RefreshCcw, Save, ShieldCheck, Upload, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
 type Tab = 'users' | 'jobLevels' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations' | 'activity';
@@ -1353,16 +1354,19 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             </aside>
 
             <div className="min-w-0 flex-1 overflow-y-auto px-8 py-8">
-            <header className="mb-8 flex items-start justify-between">
+            <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-gray-400 font-bold">YoDaily CMS</p>
                     <h1 className="text-3xl font-extrabold text-gray-900 mt-2">Panel Admin</h1>
                     <p className="text-gray-500 mt-2">Kelola user, role, relasi, assignment tempat kerja, work station, lokasi, regional, dan evaluasi.</p>
                 </div>
-                <button onClick={fetchOverview} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl shadow-sm text-sm font-semibold hover:bg-gray-50">
-                    <RefreshCcw size={16} />
-                    Muat Ulang
-                </button>
+                <div className="flex shrink-0 flex-wrap items-center gap-4">
+                    <ServerClock />
+                    <button onClick={fetchOverview} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl shadow-sm text-sm font-semibold hover:bg-gray-50">
+                        <RefreshCcw size={16} />
+                        Muat Ulang
+                    </button>
+                </div>
             </header>
 
             <section className="grid grid-cols-6 gap-4 mb-6">
