@@ -10,6 +10,7 @@ use App\Models\TaskAssignmentBatch;
 use App\Models\User;
 use App\Models\WorkStation;
 use App\Services\UserNotificationService;
+use App\Services\SupervisorTaskAccessService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -704,7 +705,11 @@ class TaskController extends Controller
         return response()->json(['message' => 'Tugas berhasil dihapus.']);
     }
 
-    public function updateStatus(Request $request, $id)
+    public function updateStatus(
+        Request $request,
+        $id,
+        SupervisorTaskAccessService $taskAccess
+    )
     {
         $request->validate([
             'status' => 'required|in:approved,rejected,pending',
@@ -713,8 +718,11 @@ class TaskController extends Controller
 
         $task = Task::findOrFail($id);
 
-        if ($task->employer_id !== Auth::user()->username) {
-            return response()->json(['message' => 'Tidak memiliki akses. Hanya pemberi tugas yang dapat mengubah status tugas.'], 403);
+        $reviewer = Auth::user();
+        if (!$reviewer || !$taskAccess->canReviewTask($reviewer, $task, Carbon::today())) {
+            return response()->json([
+                'message' => 'Tidak memiliki akses. Hanya pemberi tugas atau supervisor cadangan yang sedang aktif yang dapat mengubah status tugas.'
+            ], 403);
         }
 
         if ($response = $this->rejectNonTodayActionDate($request, $task)) {
@@ -748,6 +756,8 @@ class TaskController extends Controller
                 'tag' => 'task-status-' . $task->id,
             ]
         );
+
+        $this->refreshApprovalNotification($task->employer_id);
 
         return response()->json($task);
     }
@@ -850,13 +860,11 @@ class TaskController extends Controller
             DB::commit();
 
             if ($authUser->username === $task->employee_id) {
-                $pendingApprovalCount = Task::where('employer_id', $task->employer_id)
-                    ->where('status', 'pending')
-                    ->whereHas('evidences')
-                    ->count();
+                $pendingApprovalCount = $this->pendingApprovalCount($task->employer_id);
 
-                app(UserNotificationService::class)->createAndPush(
+                app(UserNotificationService::class)->createOrRefreshAggregateAndPush(
                     $task->employer_id,
+                    'approval-needed-' . $task->employer_id,
                     'approval_needed',
                     'Persetujuan',
                     'Anda memiliki ' . $pendingApprovalCount . ' pekerjaan yang membutuhkan persetujuan saat ini.',
@@ -1051,5 +1059,30 @@ class TaskController extends Controller
         return $supervisor?->is_back_office
             ? $deadline->addDay()
             : $deadline;
+    }
+
+    private function pendingApprovalCount(string $supervisorId): int
+    {
+        return Task::where('employer_id', $supervisorId)
+            ->whereIn('status', ['pending', 'rejected'])
+            ->whereHas('evidences')
+            ->count();
+    }
+
+    private function refreshApprovalNotification(string $supervisorId): void
+    {
+        $pendingApprovalCount = $this->pendingApprovalCount($supervisorId);
+
+        app(UserNotificationService::class)->refreshAggregate(
+            $supervisorId,
+            'approval-needed-' . $supervisorId,
+            'Anda memiliki ' . $pendingApprovalCount . ' pekerjaan yang membutuhkan persetujuan saat ini.',
+            [
+                'url' => '/',
+                'tag' => 'approval-needed-' . $supervisorId,
+                'pending_count' => $pendingApprovalCount,
+            ],
+            $pendingApprovalCount === 0
+        );
     }
 }

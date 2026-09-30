@@ -12,7 +12,8 @@ class SyncYojadwalAttendance extends Command
     protected $signature = 'attendance:sync-yojadwal
         {--nik=* : Specific NIK/username to sync. Can be provided multiple times.}
         {--month= : Month number, defaults to current month.}
-        {--year= : Year number, defaults to current year.}';
+        {--year= : Year number, defaults to current year.}
+        {--previous-day : Sync the month containing the previous calendar day.}';
 
     protected $description = 'Sync monthly attendance from YoJadwal presence API into the local attendances table.';
 
@@ -23,8 +24,9 @@ class SyncYojadwalAttendance extends Command
             return self::SUCCESS;
         }
 
-        $month = (int) ($this->option('month') ?: Carbon::now()->month);
-        $year = (int) ($this->option('year') ?: Carbon::now()->year);
+        $targetDate = $this->option('previous-day') ? Carbon::yesterday() : Carbon::now();
+        $month = (int) ($this->option('month') ?: $targetDate->month);
+        $year = (int) ($this->option('year') ?: $targetDate->year);
         $niks = $this->option('nik');
 
         $totalRows = 0;

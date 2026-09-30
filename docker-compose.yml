@@ -73,6 +73,13 @@ services:
       DB_PASSWORD: password
       CACHE_DRIVER: database
       PHP_MEMORY_LIMIT: 1024M
+      YOJADWAL_ENABLED: "true"
+      YOJADWAL_BASE_URL: http://yojadwal.yogya.com
+      YOJADWAL_PRESENCE_PATH: /api/presence
+      YOJADWAL_APP_CLIENT: Android-Mobile-App
+      YOJADWAL_TOKEN: ""
+      YOJADWAL_COOKIE: ""
+      YOJADWAL_TIMEOUT: 10
       WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-true}"
       WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-https://yodaily.yogya.co.id}"
       WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-BFaZ-aI2jbDJKARmhM62K3QmGi8JDKtfprQYizvvG0NwC2UR02YUbY9cZrjZlVp0QaaGu5KNKea_hKsmgQs_wx0}"

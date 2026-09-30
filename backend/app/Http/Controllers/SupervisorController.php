@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\ScoringService;
+use App\Services\SupervisorTaskAccessService;
 use App\Services\YojadwalPresenceService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -14,7 +15,11 @@ use Illuminate\Support\Facades\Auth;
 
 class SupervisorController extends Controller
 {
-    public function index(Request $request, ScoringService $scoringService)
+    public function index(
+        Request $request,
+        ScoringService $scoringService,
+        SupervisorTaskAccessService $taskAccess
+    )
     {
         $user = Auth::user();
 
@@ -24,23 +29,23 @@ class SupervisorController extends Controller
 
         $subordinates = $user->subordinateLines()->with('subordinate.locations')->get();
         $today = Carbon::today();
+        $crewIds = $subordinates->pluck('subordinate_id');
+        $backupPairs = $taskAccess->reviewableBackupPairs($user, $crewIds, $today);
 
         $crews = $subordinates->pluck('subordinate')->filter(function ($crew) {
             return $crew && $crew->active;
         })
             ->values()
-            ->map(function ($crew) use ($user, $today, $scoringService) {
+            ->map(function ($crew) use ($user, $today, $scoringService, $taskAccess, $backupPairs) {
                 $crewStats = $scoringService->getCrewMonthlyDetailedStats($crew, Carbon::now());
                 $score = $crewStats['active_percentage'] ?? 0;
 
-                $totalTasks = Task::where('employee_id', $crew->user_id)
-                    ->where('employer_id', $user->username)
-                    ->activeOnDate($today)
-                    ->count();
+                $reviewableTasks = Task::where('employee_id', $crew->user_id)
+                    ->activeOnDate($today);
+                $taskAccess->constrainReviewableTasks($reviewableTasks, $user, $backupPairs);
 
-                $approvedTasks = Task::where('employee_id', $crew->user_id)
-                    ->where('employer_id', $user->username)
-                    ->activeOnDate($today)
+                $totalTasks = (clone $reviewableTasks)->count();
+                $approvedTasks = (clone $reviewableTasks)
                     ->whereIn('status', ['approved', 'completed'])
                     ->count();
 
@@ -114,7 +119,11 @@ class SupervisorController extends Controller
         return response()->json($detailedStats);
     }
 
-    public function dashboardSummary(Request $request, ScoringService $scoringService)
+    public function dashboardSummary(
+        Request $request,
+        ScoringService $scoringService,
+        SupervisorTaskAccessService $taskAccess
+    )
     {
         $request->validate([
             'date' => 'nullable|date_format:Y-m-d',
@@ -145,12 +154,13 @@ class SupervisorController extends Controller
 
         $crewIds = $subordinates->pluck('username')->values();
         $crewCount = $subordinates->count();
+        $backupPairs = $taskAccess->reviewableBackupPairs($user, $crewIds, $targetDate);
 
-        $tasks = Task::with(['assignedTo', 'evidences'])
-            ->where('employer_id', $user->username)
+        $taskQuery = Task::with(['assignedTo', 'evidences'])
             ->whereIn('employee_id', $crewIds)
-            ->activeOnDate($targetDate)
-            ->get();
+            ->activeOnDate($targetDate);
+        $taskAccess->constrainReviewableTasks($taskQuery, $user, $backupPairs);
+        $tasks = $taskQuery->get();
 
         $completedStatuses = ['approved', 'completed'];
         $completedTaskCount = $tasks->whereIn('status', $completedStatuses)->count();

@@ -20,7 +20,7 @@ interface SupervisorLayoutProps {
 export default function SupervisorLayout({ children, activePage, onPageChange, onLogout }: SupervisorLayoutProps) {
     const [notifications, setNotifications] = useState<DashboardNotification[]>([]);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-    const unreadCount = notifications.filter((notification) => notification.unread).length;
+    const [unreadCount, setUnreadCount] = useState(0);
 
     const fetchNotifications = async () => {
         try {
@@ -34,6 +34,7 @@ export default function SupervisorLayout({ children, activePage, onPageChange, o
             if (response.ok) {
                 const payload = await response.json();
                 setNotifications(payload.notifications || []);
+                setUnreadCount(payload.unread_count || 0);
             }
         } catch (error) {
             console.error('Gagal mengambil notifikasi', error);
@@ -52,6 +53,7 @@ export default function SupervisorLayout({ children, activePage, onPageChange, o
             });
             if (response.ok) {
                 setNotifications((current) => current.map((notification) => ({ ...notification, unread: false })));
+                setUnreadCount(0);
             }
         } catch (error) {
             console.error('Gagal menandai notifikasi', error);

@@ -22,6 +22,12 @@ class Kernel extends ConsoleKernel
         $schedule->command('notifications:dispatch-evaluations')
             ->dailyAt('08:00')
             ->withoutOverlapping(30);
+
+        $schedule->command('attendance:sync-yojadwal --previous-day')
+            ->dailyAt('00:30')
+            ->timezone(config('app.timezone'))
+            ->withoutOverlapping(1440)
+            ->runInBackground();
     }
 
     /**
