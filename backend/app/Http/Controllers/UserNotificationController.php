@@ -12,7 +12,22 @@ class UserNotificationController extends Controller
     {
         $user = Auth::user();
 
-        $notifications = UserNotification::where('recipient_id', $user->username)
+        $latestApprovalNotificationId = UserNotification::where('recipient_id', $user->username)
+            ->where('type', 'approval_needed')
+            ->max('id');
+
+        $notificationQuery = UserNotification::where('recipient_id', $user->username)
+            ->where(function ($query) use ($latestApprovalNotificationId) {
+                $query->where('type', '!=', 'approval_needed');
+
+                if ($latestApprovalNotificationId) {
+                    $query->orWhere('id', $latestApprovalNotificationId);
+                }
+            });
+
+        $unreadCount = (clone $notificationQuery)->whereNull('read_at')->count();
+
+        $notifications = $notificationQuery
             ->latest()
             ->limit(25)
             ->get()
@@ -30,7 +45,7 @@ class UserNotificationController extends Controller
 
         return response()->json([
             'notifications' => $notifications,
-            'unread_count' => $notifications->where('unread', true)->count(),
+            'unread_count' => $unreadCount,
         ]);
     }
 

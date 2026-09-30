@@ -12,6 +12,10 @@ use Carbon\Carbon;
 
 class ScoringService
 {
+    private const MONTHLY_TASK_WEIGHT = 0.60;
+    private const MONTHLY_ATTENDANCE_WEIGHT = 0.25;
+    private const MONTHLY_PERSONALITY_WEIGHT = 0.15;
+
     public function getCrewDailyScore(User $crew, Carbon $date): int
     {
         if (!$this->isScoringDay($crew, $date)) {
@@ -19,9 +23,8 @@ class ScoringService
         }
 
         $taskScore = $this->getCrewTaskScoreForDate($crew, $date);
-        $attendanceScore = $this->getAttendanceScoreForDate($crew, $date);
 
-        return (int) round(($taskScore * 0.6) + ($attendanceScore * 0.4));
+        return (int) round($taskScore);
     }
 
     public function getCrewMonthlyScore(User $crew, Carbon $month): array
@@ -43,7 +46,11 @@ class ScoringService
         $taskAverage = $this->average($dailyBreakdown['task_scores']);
         $attendanceAverage = $this->average($dailyBreakdown['attendance_scores']);
         $personalityScore = $this->getPersonalityScoreForMonth($crew, $month);
-        $totalScore = (int) round(($dailyAverage * 0.7) + ($personalityScore * 0.3));
+        $totalScore = $this->calculateCrewMonthlyTotal(
+            $taskAverage,
+            $attendanceAverage,
+            $personalityScore
+        );
 
         return [
             'daily_average_score' => round($dailyAverage, 2),
@@ -279,15 +286,16 @@ class ScoringService
         $attendanceScores = [];
 
         for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
-            if (!$this->isScoringDay($crew, $date)) {
+            $attendanceStatus = $this->getAttendanceStatusForDate($crew, $date);
+            $attendanceScores[] = $this->getAttendanceScoreFromStatus($attendanceStatus);
+
+            if (!$this->isScoringStatus($attendanceStatus)) {
                 continue;
             }
 
             $taskScore = $this->getCrewTaskScoreForDate($crew, $date);
-            $attendanceScore = $this->getAttendanceScoreForDate($crew, $date);
-            $dailyScores[] = ($taskScore * 0.6) + ($attendanceScore * 0.4);
+            $dailyScores[] = $taskScore;
             $taskScores[] = $taskScore;
-            $attendanceScores[] = $attendanceScore;
         }
 
         return [
@@ -340,10 +348,8 @@ class ScoringService
         return round((2 / $photoCount) * 100, 2);
     }
 
-    private function getAttendanceScoreForDate(User $crew, Carbon $date): float
+    private function getAttendanceScoreFromStatus(string $status): float
     {
-        $status = $this->getAttendanceStatusForDate($crew, $date);
-
         return in_array($status, ['H', 'T'], true) ? 100 : 0;
     }
 
@@ -383,6 +389,11 @@ class ScoringService
     {
         $status = $this->getAttendanceStatusForDate($crew, $date);
 
+        return $this->isScoringStatus($status);
+    }
+
+    private function isScoringStatus(string $status): bool
+    {
         return !in_array($status, ['S', 'C', 'L'], true);
     }
 
@@ -420,5 +431,17 @@ class ScoringService
         }
 
         return array_sum($values) / count($values);
+    }
+
+    private function calculateCrewMonthlyTotal(
+        float $taskScore,
+        float $attendanceScore,
+        float $personalityScore
+    ): int {
+        return (int) round(
+            ($taskScore * self::MONTHLY_TASK_WEIGHT)
+            + ($attendanceScore * self::MONTHLY_ATTENDANCE_WEIGHT)
+            + ($personalityScore * self::MONTHLY_PERSONALITY_WEIGHT)
+        );
     }
 }
