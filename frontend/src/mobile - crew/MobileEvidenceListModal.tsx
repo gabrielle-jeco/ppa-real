@@ -42,40 +42,57 @@ export default function MobileEvidenceListModal({
             return `/storage/${url}`;
         };
         const fullUrl = getFullUrl(evidence.file_path);
+        const reviewLabel = evidence.review_status === 'approved'
+            ? 'Disetujui'
+            : evidence.review_status === 'rejected'
+                ? 'Ditolak'
+                : evidence.review_status === 'pending'
+                    ? 'Menunggu'
+                    : null;
 
         return (
             <div
                 key={evidence.id || fullUrl}
-                className="bg-gray-100 rounded-2xl p-3 flex items-center justify-between transition-transform active:scale-[0.98] mb-3 shadow-sm"
+                className="overflow-hidden bg-gray-100 rounded-2xl p-3 transition-transform active:scale-[0.98] mb-3 shadow-sm"
             >
-                <div
-                    className="flex items-center gap-4 flex-1 cursor-pointer"
-                    onClick={() => onSelectImage(type, index)}
-                >
-                    {/* Thumbnail */}
-                    <div className="w-12 h-12 rounded-xl bg-gray-600 overflow-hidden shrink-0 shadow-md">
-                        <img src={fullUrl} alt={label} className="w-full h-full object-cover opacity-90" />
-                    </div>
-
-                    {/* Text Info */}
-                    <div className="flex-1 min-w-0">
-                        <p className="font-bold text-gray-700 text-sm mb-0.5 truncate">{label}</p>
-                        <p className="text-[10px] text-gray-400 flex items-center gap-1">
-                            <Calendar size={10} />
-                            {new Date(evidence.created_at || task.updated_at || new Date()).toLocaleString()}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2">
-                    <button
+                <div className="flex min-w-0 items-center justify-between">
+                    <div
+                        className="flex min-w-0 items-center gap-3 flex-1 cursor-pointer"
                         onClick={() => onSelectImage(type, index)}
-                        className="p-2 text-gray-400 hover:text-blue-600 rounded-full transition"
                     >
-                        <ChevronRight size={18} />
-                    </button>
+                        {/* Thumbnail */}
+                        <div className="w-12 h-12 rounded-xl bg-gray-600 overflow-hidden shrink-0 shadow-md">
+                            <img src={fullUrl} alt={label} className="w-full h-full object-cover opacity-90" />
+                        </div>
+
+                        {/* Text Info */}
+                        <div className="flex-1 min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <p className="min-w-0 flex-1 font-bold text-gray-700 text-sm mb-0.5 truncate">{evidence.attempt_no ? `${label} - Attempt ${evidence.attempt_no}` : label}</p>
+                                {reviewLabel && (
+                                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${evidence.review_status === 'approved' ? 'bg-green-100 text-green-700' : evidence.review_status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                        {reviewLabel}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                                <Calendar size={10} />
+                                {new Date(evidence.created_at || task.updated_at || new Date()).toLocaleString()}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex shrink-0 items-center gap-2">
+                        <button
+                            onClick={() => onSelectImage(type, index)}
+                            className="p-2 text-gray-400 hover:text-blue-600 rounded-full transition"
+                        >
+                            <ChevronRight size={18} />
+                        </button>
+                    </div>
                 </div>
+                {evidence.rejection_reason && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-[11px] leading-relaxed text-red-700">Catatan: {evidence.rejection_reason}</p>}
             </div>
         );
     };
@@ -117,7 +134,7 @@ export default function MobileEvidenceListModal({
                             <p className="text-sm">Belum ada bukti yang diunggah.</p>
                         </div>
                     ) : (
-                        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                        <div className="space-y-4 max-h-[60vh] overflow-x-hidden overflow-y-auto pr-2">
                             {/* Crew Task Images */}
                             {beforeEvidences.length > 0 && (
                                 <div>

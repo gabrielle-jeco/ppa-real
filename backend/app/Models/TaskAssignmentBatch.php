@@ -15,6 +15,7 @@ class TaskAssignmentBatch extends Model
         'title',
         'description',
         'work_station_id',
+        'task_definition_id',
         'start_date',
         'end_date',
         'start_time',
@@ -40,5 +41,10 @@ class TaskAssignmentBatch extends Model
     public function tasks()
     {
         return $this->hasMany(Task::class, 'assignment_batch_id');
+    }
+
+    public function taskDefinition()
+    {
+        return $this->belongsTo(TaskDefinition::class);
     }
 }

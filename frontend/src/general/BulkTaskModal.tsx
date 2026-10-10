@@ -4,6 +4,7 @@ import { Check, Clock, X } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
 import useModalTransition from '../utils/useModalTransition';
 import { featureFlags } from '../utils/featureFlags';
+import TaskCatalogFields from './TaskCatalogFields';
 
 type CrewOption = { id: string; name: string };
 
@@ -33,9 +34,9 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
     const initializedKeyRef = useRef<string | null>(null);
     const [crewOptions, setCrewOptions] = useState<CrewOption[]>(crews || []);
     const [selectedCrewIds, setSelectedCrewIds] = useState<string[]>([]);
-    const [workStations, setWorkStations] = useState<any[]>([]);
-    const [title, setTitle] = useState('');
     const [workStationId, setWorkStationId] = useState('');
+    const [taskAreaId, setTaskAreaId] = useState('');
+    const [taskDefinitionId, setTaskDefinitionId] = useState('');
     const [startDate, setStartDate] = useState(defaultDate || toDateInputValue(new Date()));
     const [endDate, setEndDate] = useState(defaultDate || toDateInputValue(new Date()));
     const [repeatDays, setRepeatDays] = useState<number[]>([]);
@@ -63,8 +64,9 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
 
         const fallbackDate = defaultDate || toDateInputValue(new Date());
         if (initialBatch) {
-            setTitle(initialBatch.title || '');
             setWorkStationId(initialBatch.work_station_id ? String(initialBatch.work_station_id) : '');
+            setTaskAreaId('');
+            setTaskDefinitionId(initialBatch.task_definition_id ? String(initialBatch.task_definition_id) : '');
             setStartDate(toDateFieldValue(initialBatch.start_date, fallbackDate));
             setEndDate(toDateFieldValue(initialBatch.end_date, fallbackDate));
             setRepeatDays(Array.isArray(initialBatch.repeat_days) ? initialBatch.repeat_days.map((day: any) => Number(day)) : []);
@@ -74,6 +76,9 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
             setNote(initialBatch.description || '');
             setSelectedCrewIds(Array.isArray(initialBatch.crew_ids) ? initialBatch.crew_ids.map((id: any) => String(id)) : []);
         } else {
+            setWorkStationId('');
+            setTaskAreaId('');
+            setTaskDefinitionId('');
             setStartDate(fallbackDate);
             setEndDate(fallbackDate);
             setStartTime(new Date().toTimeString().slice(0, 5));
@@ -87,11 +92,6 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
 
         const fetchSupportData = async () => {
             const token = localStorage.getItem('auth_token');
-            const workStationResponse = await fetch('/api/work-stations', {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (workStationResponse.ok) setWorkStations(await workStationResponse.json());
-
             if (!crews) {
                 const crewResponse = await fetch('/api/supervisor/crews', {
                     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
@@ -124,8 +124,9 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
     };
 
     const reset = () => {
-        setTitle('');
         setWorkStationId('');
+        setTaskAreaId('');
+        setTaskDefinitionId('');
         setSelectedCrewIds([]);
         setRepeatDays([]);
         setDueTime('');
@@ -157,8 +158,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
         try {
             await onSubmit({
                 crew_ids: selectedCrewIds,
-                title,
-                work_station_id: workStationId || null,
+                task_definition_id: taskDefinitionId || null,
                 start_date: startDate,
                 end_date: endDate,
                 repeat_days: repeatDays,
@@ -203,12 +203,18 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
 
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                     <div className="space-y-4">
-                        <input className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Judul pekerjaan" required />
-
-                        <select className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none capitalize`} value={workStationId} onChange={(e) => setWorkStationId(e.target.value)}>
-                            <option value="">Umum (lintas work station)</option>
-                            {workStations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}
-                        </select>
+                        <TaskCatalogFields
+                            enabled={isOpen}
+                            value={{ workStationId, taskAreaId, taskDefinitionId }}
+                            onChange={(selection) => {
+                                setWorkStationId(selection.workStationId);
+                                setTaskAreaId(selection.taskAreaId);
+                                setTaskDefinitionId(selection.taskDefinitionId);
+                            }}
+                            accent={accent}
+                            allowLegacy={Boolean(initialBatch && !initialBatch.task_definition_id)}
+                            legacyTitle={initialBatch?.title || ''}
+                        />
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>

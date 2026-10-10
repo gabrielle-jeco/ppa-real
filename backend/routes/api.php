@@ -34,11 +34,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/supervisor/{id}/tasks', [App\Http\Controllers\TaskController::class, 'index']);
     Route::get('/crews/{id}/tasks', [App\Http\Controllers\TaskController::class, 'index']);
     Route::post('/tasks', [App\Http\Controllers\TaskController::class, 'store']);
+    Route::get('/task-catalog', [App\Http\Controllers\TaskController::class, 'taskCatalog']);
     Route::post('/tasks/bulk', [App\Http\Controllers\TaskController::class, 'bulkStore']);
     Route::patch('/task-batches/{id}', [App\Http\Controllers\TaskController::class, 'updateBatch']);
     Route::patch('/tasks/{id}', [App\Http\Controllers\TaskController::class, 'update']);
     Route::delete('/tasks/{id}', [App\Http\Controllers\TaskController::class, 'destroy']);
     Route::patch('/tasks/{id}/status', [App\Http\Controllers\TaskController::class, 'updateStatus']);
+    Route::post('/tasks/{id}/reject', [App\Http\Controllers\TaskController::class, 'rejectEvidence']);
     Route::post('/tasks/{id}/evidence', [App\Http\Controllers\TaskController::class, 'uploadEvidence']);
 
     // Evaluation Routes
@@ -64,6 +66,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/users/{username}', [App\Http\Controllers\AdminController::class, 'updateUser']);
         Route::get('/job-levels', [App\Http\Controllers\AdminController::class, 'getJobLevels']);
         Route::patch('/job-levels/{jobLevel}', [App\Http\Controllers\AdminController::class, 'updateJobLevel']);
+        Route::get('/divisions', [App\Http\Controllers\AdminController::class, 'getDivisions']);
+        Route::patch('/divisions/{division}', [App\Http\Controllers\AdminController::class, 'updateDivision']);
         Route::get('/locations', [App\Http\Controllers\AdminController::class, 'getLocations']);
         Route::post('/locations', [App\Http\Controllers\AdminController::class, 'storeLocation']);
         Route::patch('/locations/{initial}', [App\Http\Controllers\AdminController::class, 'updateLocation']);
@@ -74,6 +78,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/evaluation-masters', [App\Http\Controllers\AdminController::class, 'storeEvaluationMaster']);
         Route::patch('/evaluation-masters/{evaluationMaster}', [App\Http\Controllers\AdminController::class, 'updateEvaluationMaster']);
         Route::delete('/evaluation-masters/{evaluationMaster}', [App\Http\Controllers\AdminController::class, 'destroyEvaluationMaster']);
+        Route::post('/scoring-rules', [App\Http\Controllers\AdminController::class, 'storeScoringRule']);
         Route::post('/roles', [App\Http\Controllers\AdminController::class, 'storeRole']);
         Route::patch('/roles/{role}', [App\Http\Controllers\AdminController::class, 'updateRole']);
         Route::delete('/roles/{role}', [App\Http\Controllers\AdminController::class, 'destroyRole']);
@@ -102,6 +107,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/work-stations', [App\Http\Controllers\AdminController::class, 'storeWorkStation']);
         Route::patch('/work-stations/{workStation}', [App\Http\Controllers\AdminController::class, 'updateWorkStation']);
         Route::delete('/work-stations/{workStation}', [App\Http\Controllers\AdminController::class, 'destroyWorkStation']);
+        Route::get('/task-catalog', [App\Http\Controllers\AdminController::class, 'getTaskCatalog']);
+        Route::post('/work-stations/{workStation}/task-areas', [App\Http\Controllers\AdminController::class, 'storeTaskArea']);
+        Route::patch('/task-areas/{taskArea}', [App\Http\Controllers\AdminController::class, 'updateTaskArea']);
+        Route::delete('/task-areas/{taskArea}', [App\Http\Controllers\AdminController::class, 'destroyTaskArea']);
+        Route::post('/task-areas/{taskArea}/task-definitions', [App\Http\Controllers\AdminController::class, 'storeTaskDefinition']);
+        Route::patch('/task-definitions/{taskDefinition}', [App\Http\Controllers\AdminController::class, 'updateTaskDefinition']);
+        Route::delete('/task-definitions/{taskDefinition}', [App\Http\Controllers\AdminController::class, 'destroyTaskDefinition']);
     });
 });
 
@@ -110,6 +122,16 @@ Route::middleware(['auth:sanctum'])->prefix('supervisor')->group(function () {
     Route::get('/crews', [App\Http\Controllers\SupervisorController::class, 'index']);
     Route::get('/dashboard-summary', [App\Http\Controllers\SupervisorController::class, 'dashboardSummary']);
     Route::get('/stats', [App\Http\Controllers\SupervisorController::class, 'myStats']);
+    Route::get('/team-scores/daily', [App\Http\Controllers\SupervisorController::class, 'teamDailyScores']);
+    Route::get('/team-scores/daily/{crew}', [App\Http\Controllers\SupervisorController::class, 'teamDailyScoreDetail']);
+    Route::get('/team-scores/monthly', [App\Http\Controllers\SupervisorController::class, 'teamMonthlyScores']);
+    Route::get('/team-scores/monthly/{crew}', [App\Http\Controllers\SupervisorController::class, 'teamMonthlyScoreDetail']);
+    Route::get('/cashier', [App\Http\Controllers\SupervisorCashierController::class, 'overview']);
+    Route::patch('/cashier/crew/{crew}', [App\Http\Controllers\SupervisorCashierController::class, 'updateCashierId']);
+    Route::get('/push-selling-campaigns', [App\Http\Controllers\SupervisorCashierController::class, 'campaigns']);
+    Route::post('/push-selling-campaigns', [App\Http\Controllers\SupervisorCashierController::class, 'storeCampaign']);
+    Route::get('/push-selling-campaigns/{campaign}', [App\Http\Controllers\SupervisorCashierController::class, 'showCampaign']);
+    Route::patch('/push-selling-campaigns/{campaign}', [App\Http\Controllers\SupervisorCashierController::class, 'updateCampaign']);
     Route::get('/crew/{id}/eval-stats', [App\Http\Controllers\SupervisorController::class, 'getCrewEvalStats']);
     Route::get('/backup-options', [App\Http\Controllers\SupervisorBackupController::class, 'options']);
     Route::get('/backups', [App\Http\Controllers\SupervisorBackupController::class, 'index']);

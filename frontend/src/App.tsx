@@ -9,12 +9,13 @@ import SupervisorSummaryDashboard from './desktop - supervisor/SupervisorSummary
 import SupervisorDashboard from './desktop - supervisor/SupervisorDashboard';
 import SupervisorMobileApp from './mobile - supervisor/SupervisorMobileApp';
 import SupervisorPerformance from './desktop - supervisor/SupervisorPerformance';
+import SupervisorCashier from './desktop - supervisor/SupervisorCashier';
 import CrewMobileApp from './mobile - crew/CrewMobileApp';
 import { registerPushSubscription, requestNotificationPermission } from './utils/browserNotifications';
 
 function App() {
   const [user, setUser] = useState<any>(null);
-  const [activeSupervisorPage, setActiveSupervisorPage] = useState<'dashboard' | 'monitoring' | 'performance'>('dashboard');
+  const [activeSupervisorPage, setActiveSupervisorPage] = useState<'dashboard' | 'monitoring' | 'performance' | 'cashier'>('dashboard');
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [isVerifying, setIsVerifying] = useState(true);
 
@@ -206,8 +207,10 @@ function App() {
           <SupervisorSummaryDashboard />
         ) : activeSupervisorPage === 'monitoring' ? (
           <SupervisorDashboard />
-        ) : (
+        ) : activeSupervisorPage === 'performance' ? (
           <SupervisorPerformance />
+        ) : (
+          <SupervisorCashier />
         )}
       </SupervisorLayout>
     );

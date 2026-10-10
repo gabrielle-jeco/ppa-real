@@ -35,22 +35,21 @@ class EvaluationController extends Controller
                 return response()->json(['error' => 'Tidak memiliki akses. Anda hanya dapat mengevaluasi bawahan Anda.'], 403);
             }
 
-            $period = Carbon::parse($request->date)->startOfMonth();
-            $currentPeriod = now()->startOfMonth();
-
-            if (!$period->isSameMonth($currentPeriod) || !$period->isSameYear($currentPeriod)) {
-                return response()->json([
-                    'error' => 'Evaluasi hanya bisa diisi untuk bulan berjalan.'
-                ], 422);
-            }
-
-            if (!$this->isEvaluationWindowOpen()) {
-                return response()->json([
-                    'error' => 'Evaluasi bulanan baru bisa diisi pada 7 hari terakhir bulan berjalan.'
-                ], 422);
-            }
-
             $evaluationType = $this->resolveEvaluationType($evaluator, $evaluatee);
+            $period = Carbon::parse($request->date)->startOfMonth();
+            $targetPeriod = $this->evaluationTargetPeriod($evaluationType);
+
+            if (!$this->isSamePeriod($period, $targetPeriod)) {
+                return response()->json([
+                    'error' => $this->periodLockedMessage($evaluationType)
+                ], 422);
+            }
+
+            if (!$this->isEvaluationWindowOpen($evaluationType)) {
+                return response()->json([
+                    'error' => $this->windowLockedMessage($evaluationType)
+                ], 422);
+            }
 
             $totalScore = round((float) $request->total_score, 2);
 
@@ -92,11 +91,6 @@ class EvaluationController extends Controller
             'date' => 'nullable|date_format:Y-m-d',
         ]);
 
-        $dateStr = $request->query('date', now()->format('Y-m-d'));
-        $date = Carbon::parse($dateStr);
-        $currentPeriod = now()->startOfMonth();
-        $requestedPeriod = $date->copy()->startOfMonth();
-
         $evaluator = Auth::user();
         $evaluatee = User::where('username', $supervisorId)->first();
 
@@ -109,12 +103,17 @@ class EvaluationController extends Controller
         }
 
         $evaluationType = $this->resolveEvaluationType($evaluator, $evaluatee);
+        $targetPeriod = $this->evaluationTargetPeriod($evaluationType);
+        $dateStr = $request->query('date');
+        $requestedPeriod = $dateStr
+            ? Carbon::parse($dateStr)->startOfMonth()
+            : $targetPeriod->copy();
 
         $evaluation = MonthlyPersonalityEvaluation::where('evaluatee_id', $supervisorId)
             ->where('evaluator_id', $evaluator->username)
             ->where('evaluation_type', $evaluationType)
-            ->whereYear('evaluation_period', $date->year)
-            ->whereMonth('evaluation_period', $date->month)
+            ->whereYear('evaluation_period', $requestedPeriod->year)
+            ->whereMonth('evaluation_period', $requestedPeriod->month)
             ->first();
 
         if ($evaluation) {
@@ -123,15 +122,15 @@ class EvaluationController extends Controller
             $evaluation->setAttribute('date', $evaluation->evaluation_period);
         }
 
-        $isCurrentPeriod = $requestedPeriod->equalTo($currentPeriod);
-        $isWindowOpen = $this->isEvaluationWindowOpen();
-        $canEvaluate = $isCurrentPeriod && $isWindowOpen;
+        $isTargetPeriod = $this->isSamePeriod($requestedPeriod, $targetPeriod);
+        $isWindowOpen = $this->isEvaluationWindowOpen($evaluationType);
+        $canEvaluate = $isTargetPeriod && $isWindowOpen;
         $lockedMessage = null;
 
-        if (!$isCurrentPeriod) {
-            $lockedMessage = 'Evaluasi hanya bisa diisi untuk bulan berjalan.';
+        if (!$isTargetPeriod) {
+            $lockedMessage = $this->periodLockedMessage($evaluationType);
         } elseif (!$isWindowOpen) {
-            $lockedMessage = 'Evaluasi bulanan baru dibuka pada 7 hari terakhir bulan ini.';
+            $lockedMessage = $this->windowLockedMessage($evaluationType);
         }
 
         return response()->json([
@@ -139,7 +138,10 @@ class EvaluationController extends Controller
             'can_evaluate' => $canEvaluate,
             'is_locked' => !$canEvaluate,
             'locked_message' => $lockedMessage,
-            'evaluation_window_starts_at' => $this->evaluationWindowStart()->toDateString(),
+            'evaluation_period' => $requestedPeriod->toDateString(),
+            'target_period' => $targetPeriod->toDateString(),
+            'evaluation_window_starts_at' => $this->evaluationWindowStart($evaluationType)->toDateString(),
+            'evaluation_window_ends_at' => $this->evaluationWindowEnd($evaluationType)->toDateString(),
             'evaluation_type' => $evaluationType,
             'data' => $evaluation
         ]);
@@ -166,13 +168,63 @@ class EvaluationController extends Controller
         return 'personality';
     }
 
-    private function isEvaluationWindowOpen(): bool
+    private function evaluationTargetPeriod(string $evaluationType): Carbon
     {
-        return now()->startOfDay()->greaterThanOrEqualTo($this->evaluationWindowStart());
+        if ($evaluationType === 'personality') {
+            return now()->copy()->subMonthNoOverflow()->startOfMonth();
+        }
+
+        return now()->copy()->startOfMonth();
     }
 
-    private function evaluationWindowStart(): Carbon
+    private function isEvaluationWindowOpen(string $evaluationType): bool
     {
+        $today = now()->startOfDay();
+
+        return $today->betweenIncluded(
+            $this->evaluationWindowStart($evaluationType),
+            $this->evaluationWindowEnd($evaluationType)
+        );
+    }
+
+    private function evaluationWindowStart(string $evaluationType): Carbon
+    {
+        if ($evaluationType === 'personality') {
+            return now()->copy()->startOfMonth()->startOfDay();
+        }
+
         return now()->copy()->endOfMonth()->subDays(6)->startOfDay();
+    }
+
+    private function evaluationWindowEnd(string $evaluationType): Carbon
+    {
+        if ($evaluationType === 'personality') {
+            return now()->copy()->startOfMonth()->addDays(5)->endOfDay();
+        }
+
+        return now()->copy()->endOfMonth()->endOfDay();
+    }
+
+    private function isSamePeriod(Carbon $period, Carbon $targetPeriod): bool
+    {
+        return $period->year === $targetPeriod->year && $period->month === $targetPeriod->month;
+    }
+
+    private function periodLockedMessage(string $evaluationType): string
+    {
+        if ($evaluationType === 'personality') {
+            return 'Evaluasi hanya bisa diisi untuk bulan sebelumnya.';
+        }
+
+        return 'Evaluasi hanya bisa diisi untuk bulan berjalan.';
+    }
+
+    private function windowLockedMessage(string $evaluationType): string
+    {
+        if ($evaluationType === 'personality') {
+            return 'Evaluasi bulan sebelumnya hanya dapat diisi pada tanggal 1-6 bulan berjalan.';
+        }
+
+        return 'Evaluasi bulanan baru bisa diisi pada 7 hari terakhir bulan berjalan.';
     }
 }

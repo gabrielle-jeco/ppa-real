@@ -9,8 +9,10 @@ import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAft
 import { notifyApprovalGrace } from '../utils/browserNotifications';
 import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
-import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
+import { isTaskNotStarted } from '../utils/taskTiming';
 import { featureFlags } from '../utils/featureFlags';
+import RejectTaskModal from '../general/RejectTaskModal';
+import { canDeleteTask, canRejectTask, canToggleTaskApproval } from '../utils/taskReview';
 
 interface MobileCrewHistoryProps {
     crew: any;
@@ -28,6 +30,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<any>(null);
     const [editingBatch, setEditingBatch] = useState<any>(null);
+    const [rejectTask, setRejectTask] = useState<any>(null);
 
     const isFutureDate = (date: Date) => {
         return isAfterTaskWindow(date);
@@ -88,13 +91,9 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     };
 
     const handleUpdateStatus = async (taskId: number, newStatus: string) => {
-        setTasks(tasks.map(t => t.task_id === taskId ? { ...t, status: newStatus } : t));
-        if (previewTask?.task_id === taskId) {
-            setPreviewTask({ ...previewTask, status: newStatus });
-        }
         try {
             const token = localStorage.getItem('auth_token');
-            await fetch(`/api/tasks/${taskId}/status`, {
+            const response = await fetch(`/api/tasks/${taskId}/status`, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -102,15 +101,45 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                 },
                 body: JSON.stringify({ status: newStatus })
             });
-        } catch (error) {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal memperbarui status.');
+            }
+            setTasks(current => current.map(item => item.task_id === taskId ? { ...item, ...data } : item));
+            if (previewTask?.task_id === taskId) setPreviewTask({ ...previewTask, ...data });
+        } catch (error: any) {
             console.error("Gagal memperbarui status", error);
-            // Optionally could re-fetch tasks here on failure
+            alert(error.message || 'Gagal memperbarui status.');
+            fetchData();
         }
     };
 
     const handleToggleStatus = async (task: any) => {
+        if (!canApproveTask(task)) return;
         const newStatus = task.status === 'approved' ? 'pending' : 'approved';
         handleUpdateStatus(task.task_id, newStatus);
+    };
+
+    const handleRejectTask = async (note: string) => {
+        if (!rejectTask) return;
+
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(`/api/tasks/${rejectTask.task_id}/reject`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ note }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal menolak pekerjaan.');
+        }
+
+        setTasks(current => current.map(item => item.task_id === rejectTask.task_id ? { ...item, ...data } : item));
+        if (previewTask?.task_id === rejectTask.task_id) setPreviewTask({ ...previewTask, ...data });
     };
 
     const handleDeleteTask = async (taskId: number) => {
@@ -238,7 +267,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
         && (task.evidences || []).length === 0
         && !isTaskPastDue(task)
     );
-    const canApproveTask = (task: any) => (getTaskApprovalDeadline(task)?.getTime() ?? 0) >= Date.now();
+    const canApproveTask = (task: any) => canToggleTaskApproval(task);
 
     // Calendar Logic
     const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -497,6 +526,11 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                 </div>
                                             </div>
                                             <div className="flex flex-col gap-2 items-end">
+                                                {task.review_summary && (
+                                                    <span className="rounded-full bg-gray-800 px-2.5 py-1 text-[10px] font-bold text-white">
+                                                        {task.review_summary.potential_score}%
+                                                    </span>
+                                                )}
                                                 <button
                                                     onClick={() => handleViewPhoto(task)}
                                                     className="bg-blue-600 text-white shadow-blue-200 text-[10px] font-bold py-2 px-4 rounded-xl shadow-md active:scale-95 transition-transform flex items-center gap-1"
@@ -504,32 +538,42 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                     <Camera size={14} />
                                                     Foto
                                                 </button>
-                                                {(!isPastDue && !isApproved) && (
-                                                    <button
-                                                        onClick={() => handleDeleteTask(task.task_id)}
-                                                        className="text-red-300 hover:text-red-500 p-1 transition"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
-                                                {canEditTask(task) && (
-                                                    <button
-                                                        onClick={() => setEditingTask(task)}
-                                                        className="text-gray-400 hover:text-blue-600 p-1 transition"
-                                                        title="Edit tugas"
-                                                    >
-                                                        <Edit3 size={16} />
-                                                    </button>
-                                                )}
-                                                {featureFlags.bulkAssignment && canEditBatchTask(task) && (
-                                                    <button
-                                                        onClick={() => setEditingBatch(task.assignment_batch)}
-                                                        className="text-gray-400 hover:text-blue-600 p-1 transition"
-                                                        title="Edit Bulk Assignment"
-                                                    >
-                                                        <Edit3 size={16} />
-                                                    </button>
-                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => canRejectTask(task) && setRejectTask(task)}
+                                                    disabled={!canRejectTask(task)}
+                                                    className="rounded-xl bg-red-500 px-4 py-2 text-[10px] font-bold text-white transition disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+                                                >
+                                                    Reject
+                                                </button>
+                                                <div className="flex items-center gap-1">
+                                                    {canDeleteTask(task) && (
+                                                        <button
+                                                            onClick={() => handleDeleteTask(task.task_id)}
+                                                            className="text-red-300 hover:text-red-500 p-1 transition"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
+                                                    {canEditTask(task) && (
+                                                        <button
+                                                            onClick={() => setEditingTask(task)}
+                                                            className="text-gray-400 hover:text-blue-600 p-1 transition"
+                                                            title="Edit tugas"
+                                                        >
+                                                            <Edit3 size={16} />
+                                                        </button>
+                                                    )}
+                                                    {featureFlags.bulkAssignment && canEditBatchTask(task) && (
+                                                        <button
+                                                            onClick={() => setEditingBatch(task.assignment_batch)}
+                                                            className="text-gray-400 hover:text-blue-600 p-1 transition"
+                                                            title="Edit Bulk Assignment"
+                                                        >
+                                                            <Edit3 size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     )
@@ -547,6 +591,12 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
 
                 </MobileDraggableSheet>
             </div>
+            <RejectTaskModal
+                task={rejectTask}
+                isOpen={Boolean(rejectTask)}
+                onClose={() => setRejectTask(null)}
+                onSubmit={handleRejectTask}
+            />
         </MobileLayout >
     );
 }

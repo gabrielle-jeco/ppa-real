@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapPin, Users, Calendar, Star, ChevronDown, LogOut } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 import { formatDisplayNumber } from '../general/numberFormat';
+import { dailyScoreAvailabilityLabel, dailyScoreColor, formatDailyScoreDate } from '../utils/dailyScore';
 
 interface CrewDashboardProps {
     user: any;
@@ -16,6 +17,9 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
     const [workStations, setWorkStations] = useState<Array<{ id: number; name: string }>>([]);
     const [stats, setStats] = useState<any>({
         yearly_score: 0,
+        daily_score: null,
+        daily_score_date: null,
+        daily_score_available: false,
         active_percentage: 0,
         task_progress: { completed: 0, total: 0 }
     });
@@ -84,16 +88,8 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
     }, [selectedRole]);
 
     // Bound Data
-    const activePercentage = stats.active_percentage || 0;
     const taskProgress = stats.task_progress;
     const progressPercent = taskProgress.total > 0 ? (taskProgress.completed / taskProgress.total) * 100 : 0;
-
-    // Helper for Star Color (Active Percentage rules)
-    const getScoreColor = (score: number) => {
-        if (score > 90) return 'text-green-500';
-        if (score >= 75) return 'text-yellow-400';
-        return 'text-red-500';
-    };
 
     return (
         <CrewLayout title="Dasbor" showBack={false}>
@@ -112,10 +108,13 @@ export default function CrewDashboardMobile({ user, onNavigate, selectedRole, on
                                 </h2>
                             </div>
                         </div>
-                        {/* Star Rating mapped to Active Percentage */}
-                        <div className={`flex flex-col items-center ${getScoreColor(activePercentage)}`}>
+                        <div
+                            className={`flex flex-col items-center ${dailyScoreColor(stats.daily_score, stats.daily_score_available)}`}
+                            title={stats.daily_score_available ? `Nilai harian ${stats.daily_score}` : dailyScoreAvailabilityLabel(stats.daily_score_unavailable_reason)}
+                        >
                             <Star fill="currentColor" size={24} />
-                            <span className="text-xs font-bold mt-1">{formatDisplayNumber(activePercentage, '0')}</span>
+                            <span className="mt-1 text-xs font-bold">{stats.daily_score_available ? formatDisplayNumber(stats.daily_score, '0') : '-'}</span>
+                            <span className="whitespace-nowrap text-[9px] font-semibold text-gray-400">{formatDailyScoreDate(stats.daily_score_date)}</span>
                         </div>
                     </div>
 

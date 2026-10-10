@@ -15,6 +15,16 @@ type Criterion = {
     desc: string;
 };
 
+type EvaluationPeriodSource = {
+    evaluation_period?: string;
+    target_period?: string;
+};
+
+const getInitialEvaluationDate = (crew: EvaluationPeriodSource) => {
+    const evaluationPeriod = crew?.evaluation_period || crew?.target_period;
+    return evaluationPeriod ? new Date(`${evaluationPeriod}T12:00:00`) : new Date();
+};
+
 const FALLBACK_CRITERIA: Criterion[] = [
     {
         id: 'self_development',
@@ -29,7 +39,7 @@ const FALLBACK_CRITERIA: Criterion[] = [
 ];
 
 export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluationProps) {
-    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState(() => getInitialEvaluationDate(crew));
     const [evaluationData, setEvaluationData] = useState<any>(null); // To store checked evaluation
     const [loading, setLoading] = useState(true);
     const [criteria, setCriteria] = useState<Criterion[]>(FALLBACK_CRITERIA);
@@ -230,7 +240,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                 Icon: CheckCircle,
                 iconWrapClass: 'bg-green-100 text-green-600',
                 title: 'Evaluasi Selesai',
-                message: 'Form evaluasi bulanan untuk bulan ini sudah diisi.',
+                message: 'Form evaluasi bulanan untuk periode ini sudah diisi.',
             };
         }
 
@@ -243,7 +253,7 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                 Icon: XCircle,
                 iconWrapClass: 'bg-red-100 text-red-500',
                 title: 'Evaluasi Terlewat',
-                message: evaluationData.locked_message || 'Periode evaluasi sudah ditutup dan tidak dapat diisi lagi.',
+                message: 'Evaluasi bulan sebelumnya hanya dapat diisi pada tanggal 1-6 bulan berjalan.',
             };
         }
 

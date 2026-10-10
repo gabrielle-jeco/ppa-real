@@ -58,10 +58,8 @@ class DatabaseSeeder extends Seeder
             AppRole::updateOrCreate(['name' => $appRole['name']], [...$appRole, 'active' => true]);
         }
 
-        WorkStation::create(['name' => 'cashier', 'guide_content' => ['Check register', 'Greet customers']]);
-        WorkStation::create(['name' => 'supermarket', 'guide_content' => ['Stock shelves', 'Check expiry dates']]);
-        WorkStation::create(['name' => 'fashion', 'guide_content' => ['Fold clothes', 'Arrange mannequins']]);
-        WorkStation::create(['name' => 'fresh', 'guide_content' => ['Sort vegetables', 'Check meat storage']]);
+        WorkStation::firstOrCreate(['name' => 'sc'], ['guide_content' => [], 'active' => true]);
+        WorkStation::firstOrCreate(['name' => 'cashier'], ['guide_content' => [], 'active' => true]);
 
         $locSudirman = Location::create([
             'name' => 'YOGYA SUDIRMAN',

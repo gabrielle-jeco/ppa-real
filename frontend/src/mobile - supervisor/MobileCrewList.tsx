@@ -2,13 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { Search, Star } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import { formatDisplayNumber } from '../general/numberFormat';
+import { dailyScoreAvailabilityLabel, dailyScoreColor, formatDailyScoreDate } from '../utils/dailyScore';
 
 interface Crew {
-    id: number;
+    id: string;
     name: string; // Changed from full_name to match API
     role: string; // Changed from role_name
     current_workstation: string | null; // Latest workstation from ActivityLog
     score: number; // Changed from performance_score
+    daily_score: number | null;
+    daily_score_date: string;
+    daily_score_available: boolean;
+    daily_score_unavailable_reason?: string | null;
     location: string;
 }
 
@@ -42,23 +47,16 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
         }
     };
 
+    const normalizedSearch = searchTerm.trim().toLocaleLowerCase('id-ID');
     const filteredCrews = crews.filter(c =>
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.role.toLowerCase().includes(searchTerm.toLowerCase())
+        String(c.name || '').toLocaleLowerCase('id-ID').includes(normalizedSearch) ||
+        String(c.id || '').toLocaleLowerCase('id-ID').includes(normalizedSearch)
     );
-
-    const maxScore = Math.max(...crews.map(c => c.score || 0));
 
     const getProgressBarColor = (score: number) => {
         if (score > 90) return 'bg-green-500';
         if (score >= 75.5) return 'bg-yellow-400';
         return 'bg-red-500';
-    };
-
-    const getStarColor = (score: number) => {
-        if (score > 90) return 'text-green-500';
-        if (score >= 75.5) return 'text-yellow-400';
-        return 'text-red-500';
     };
 
     return (
@@ -71,7 +69,7 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                 <div className="bg-white rounded-full shadow-sm border border-gray-100 flex items-center px-4 py-3">
                     <input
                         type="text"
-                        placeholder="Cari"
+                        placeholder="Cari nama atau NIK..."
                         className="flex-1 bg-transparent outline-none text-gray-700 placeholder-gray-400 text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -87,12 +85,11 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                 )}
 
                 {!loading && filteredCrews.length === 0 && (
-                    <div className="text-center text-gray-400 py-10">Karyawan tidak ditemukan.</div>
+                    <div className="text-center text-gray-400 py-10">Service crew tidak ditemukan.</div>
                 )}
 
                 {filteredCrews.map((crew, index) => {
                     const score = crew.score || 0;
-                    const isTopPerformer = score === maxScore && score > 0;
                     const displayRole = crew.role === 'employee' ? 'Karyawan' : crew.role;
 
                     return (
@@ -105,7 +102,14 @@ const MobileCrewList: React.FC<MobileCrewListProps> = ({ onNavigate }) => {
                                 <h3 className="font-medium text-gray-700 text-sm">
                                     {index + 1}. {crew.name} - <span className="text-gray-500 text-xs">{displayRole}</span>
                                 </h3>
-                                {isTopPerformer && <Star size={16} className={`${getStarColor(score)} fill-current`} />}
+                                <div
+                                    className={`flex shrink-0 flex-col items-center ${dailyScoreColor(crew.daily_score, crew.daily_score_available)}`}
+                                    title={crew.daily_score_available ? `Nilai harian ${crew.daily_score}` : dailyScoreAvailabilityLabel(crew.daily_score_unavailable_reason)}
+                                >
+                                    <Star size={16} className="fill-current" />
+                                    <span className="text-[10px] font-black">{crew.daily_score_available ? formatDisplayNumber(crew.daily_score, '0') : '-'}</span>
+                                    <span className="whitespace-nowrap text-[8px] font-semibold text-gray-400">{formatDailyScoreDate(crew.daily_score_date)}</span>
+                                </div>
                             </div>
 
                             <div className="w-full bg-white rounded-full h-3 mb-1">

@@ -63,7 +63,7 @@ class CrewController extends Controller
 
         $this->presenceService->syncMonthIfNeeded($user->username, (int) $targetDate->month, (int) $targetDate->year);
 
-        $dailyScore = $this->scoringService->getCrewDailyScore($user, Carbon::now());
+        $dailyScore = $this->scoringService->getCrewDailyScoreDisplay($user, Carbon::now());
         $monthlyScoreData = $this->scoringService->getCrewMonthlyScore($user, $targetDate);
         $monthlyScore = $monthlyScoreData['total_score'];
         $yearlyScore = $this->scoringService->getCrewYearlyScore($user, $targetDate);
@@ -77,7 +77,11 @@ class CrewController extends Controller
         $totalCompleted = $tasks->whereIn('status', ['approved', 'completed'])->count();
 
         return response()->json([
-            'daily_score' => $dailyScore,
+            'daily_score' => $dailyScore['score'],
+            'daily_score_date' => $dailyScore['score_date'],
+            'daily_score_available' => $dailyScore['available'],
+            'daily_score_availability_mode' => $dailyScore['availability_mode'],
+            'daily_score_unavailable_reason' => $dailyScore['unavailable_reason'],
             'monthly_score' => $monthlyScore,
             'yearly_score' => $yearlyScore,
             'active_percentage' => $detailedStats['active_percentage'],

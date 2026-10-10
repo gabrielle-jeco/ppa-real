@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Trash2, ChevronDown, CheckCircle, XCircle, Ban, Edit3 } from 'lucide-react';
 import AddTaskModal from '../general/AddTaskModal';
 import BulkTaskModal from '../general/BulkTaskModal';
@@ -6,18 +6,28 @@ import TaskPreview from '../general/TaskPreview';
 import EvaluationForm from '../general/EvaluationForm';
 import SubmissionHistory from './SubmissionHistory';
 import TaskStartStatus from '../general/TaskStartStatus';
-import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
+import { getAttendanceColor, getAttendanceDay, normalizeAttendanceStatus } from '../utils/attendanceCalendar';
 import { canAssignTaskOnDate, clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
-import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
+import { isTaskNotStarted } from '../utils/taskTiming';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
 import { featureFlags } from '../utils/featureFlags';
 import { formatDisplayNumber } from '../general/numberFormat';
+import RejectTaskModal from '../general/RejectTaskModal';
+import { canDeleteTask, canRejectTask, canToggleTaskApproval } from '../utils/taskReview';
 
 interface CrewDetailProps {
     crew: any;
     crews?: any[];
     onTaskChange?: () => void;
 }
+
+type EvaluationAvailability = {
+    can_evaluate: boolean;
+    evaluated: boolean;
+    locked_message?: string | null;
+    evaluation_period?: string;
+    target_period?: string;
+};
 
 export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetailProps) {
     const [tasks, setTasks] = useState<any[]>([]);
@@ -32,10 +42,13 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
     const [previewTask, setPreviewTask] = useState<any>(null);
     const [viewMode, setViewMode] = useState<'TASKS' | 'EVALUATION'>('TASKS');
     const [todayEvaluation, setTodayEvaluation] = useState<any>(null);
+    const [evaluationAvailability, setEvaluationAvailability] = useState<EvaluationAvailability | null>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const taskDateBeforeEvaluation = useRef<Date | null>(null);
     const [activityLogs, setActivityLogs] = useState<any[]>([]);
     const [evalStats, setEvalStats] = useState<any>(null);
     const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
+    const [rejectTask, setRejectTask] = useState<any>(null);
 
     // Fetch Crew's Tasks
     async function fetchTasks() {
@@ -67,6 +80,21 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
             }
         } catch (error) {
             console.error("Gagal memeriksa evaluasi", error);
+        }
+    }
+
+    async function fetchEvaluationAvailability() {
+        setEvaluationAvailability(null);
+        try {
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch(`/api/evaluations/check/${crew.id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setEvaluationAvailability(await res.json());
+            }
+        } catch (error) {
+            console.error("Gagal memeriksa periode evaluasi", error);
         }
     }
 
@@ -175,6 +203,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         if (crew?.id) {
             fetchTasks();
             fetchEvaluationStatus();
+            fetchEvaluationAvailability();
             fetchActivityLogs();
             setRightPanelMode('ACTIVITY');
             setViewMode('TASKS');
@@ -261,15 +290,10 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         }
 
         const newStatus = task.status === 'approved' ? 'pending' : 'approved';
-        setTasks(tasks.map(t => t.task_id === task.task_id ? { ...t, status: newStatus } : t));
-
-        if (previewTask?.task_id === task.task_id) {
-            setPreviewTask({ ...previewTask, status: newStatus });
-        }
 
         try {
             const token = localStorage.getItem('auth_token');
-            await fetch(`/api/tasks/${task.task_id}/status`, {
+            const response = await fetch(`/api/tasks/${task.task_id}/status`, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -277,11 +301,42 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                 },
                 body: JSON.stringify({ status: newStatus })
             });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal memperbarui status.');
+            }
+
+            setTasks(current => current.map(item => item.task_id === task.task_id ? { ...item, ...data } : item));
+            if (previewTask?.task_id === task.task_id) setPreviewTask({ ...previewTask, ...data });
             onTaskChange?.();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Gagal memperbarui status", error);
+            alert(error.message || 'Gagal memperbarui status.');
             fetchTasks();
         }
+    };
+
+    const handleRejectTask = async (note: string) => {
+        if (!rejectTask) return;
+
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(`/api/tasks/${rejectTask.task_id}/reject`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ note }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal menolak pekerjaan.');
+        }
+
+        setTasks(current => current.map(item => item.task_id === rejectTask.task_id ? { ...item, ...data } : item));
+        if (previewTask?.task_id === rejectTask.task_id) setPreviewTask({ ...previewTask, ...data });
+        onTaskChange?.();
     };
 
     const handleDeleteProof = async (evidenceId: number) => {
@@ -328,11 +383,23 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
     };
 
     const handleSetViewMode = (mode: 'TASKS' | 'EVALUATION') => {
+        if (mode === 'EVALUATION') {
+            taskDateBeforeEvaluation.current = new Date(selectedDate);
+            const evaluationPeriod = evaluationAvailability?.evaluation_period || evaluationAvailability?.target_period;
+            if (evaluationPeriod) {
+                setSelectedDate(new Date(`${evaluationPeriod}T12:00:00`));
+            }
+            setTodayEvaluation(evaluationAvailability);
+        } else if (taskDateBeforeEvaluation.current) {
+            setSelectedDate(taskDateBeforeEvaluation.current);
+            taskDateBeforeEvaluation.current = null;
+        }
+
         setViewMode(mode);
     };
 
     const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
-    const canApproveTask = (task: any) => (getTaskApprovalDeadline(task)?.getTime() ?? 0) >= currentTimestamp;
+    const canApproveTask = (task: any) => canToggleTaskApproval(task, new Date(currentTimestamp));
 
     const canEditTask = (task: any) => (
         (task.assignment_type || 'individual') === 'individual'
@@ -386,7 +453,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         };
 
         calendar.forEach((day: any) => {
-            const code = String(day?.status_code || '').trim().toUpperCase();
+            const code = normalizeAttendanceStatus(day?.status_code);
             const dayDate = day?.date ? new Date(`${day.date}T00:00:00`) : null;
             const isFutureDay = dayDate ? dayDate > new Date() : day?.source === 'future';
 
@@ -404,8 +471,8 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
             else if (['T', 'TELAT', 'LATE'].includes(code)) summary.late += 1;
             else if (['S', 'SAKIT', 'SD'].includes(code)) summary.sick += 1;
             else if (['I', 'IZIN', 'PS'].includes(code)) summary.permit += 1;
-            else if (['C', 'CUTI'].includes(code)) summary.leave += 1;
-            else if (['OFF', 'L', 'LIBUR'].includes(code)) summary.off += 1;
+            else if (code === 'CT') summary.leave += 1;
+            else if (['O', 'OP'].includes(code)) summary.off += 1;
             else summary.noAttendance += 1;
         });
 
@@ -437,7 +504,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                 iconWrapClass: 'bg-green-100 text-green-600',
                 iconClass: 'text-green-600',
                 title: 'Evaluasi Selesai',
-                message: 'Form evaluasi bulanan untuk bulan ini sudah diisi.',
+                message: 'Form evaluasi bulanan untuk periode ini sudah diisi.',
             };
         }
 
@@ -451,7 +518,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                 iconWrapClass: 'bg-red-100 text-red-500',
                 iconClass: 'text-red-500',
                 title: 'Evaluasi Terlewat',
-                message: todayEvaluation?.locked_message || 'Periode evaluasi sudah ditutup dan tidak dapat diisi lagi.',
+                message: 'Evaluasi bulan sebelumnya hanya dapat diisi pada tanggal 1-6 bulan berjalan.',
             };
         }
 
@@ -508,12 +575,12 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                         </p>
                         <button
                             onClick={() => handleSetViewMode('EVALUATION')}
-                            className={`text-xs font-bold py-2 px-6 rounded-full transition w-full shadow-md ${viewMode === 'EVALUATION'
+                            className={`text-xs font-bold py-2 px-6 rounded-full transition w-full ${viewMode === 'EVALUATION'
                                 ? 'bg-purple-100 text-primary border-2 border-primary'
-                                : 'bg-primary text-white border-2 border-transparent hover:bg-purple-700'
+                                : 'bg-primary text-white border-2 border-transparent hover:bg-purple-700 shadow-md'
                                 }`}
                         >
-                            Evaluasi
+                            {evaluationAvailability?.evaluated ? 'Lihat Evaluasi' : 'Evaluasi'}
                         </button>
                     </div>
 
@@ -718,24 +785,39 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                                 {task.note && <p className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words mt-0.5">{task.note}</p>}
                                             </div>
                                             <div className="flex flex-col gap-2 items-center">
+                                                {task.review_summary && (
+                                                    <span className="rounded-full bg-gray-800 px-2.5 py-1 text-[10px] font-bold text-white">
+                                                        {task.review_summary.potential_score}%
+                                                    </span>
+                                                )}
                                                 <button onClick={() => handleViewPhoto(task)} className="bg-primary text-white text-[10px] font-bold py-1.5 px-4 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center gap-1">
                                                     <Camera size={12} /> Foto
                                                 </button>
-                                                {(!isTaskPastDue(task) && task.status !== 'approved') && (
-                                                    <button onClick={() => handleDeleteTask(task.task_id)} className="text-red-400 hover:text-red-600 p-1 opacity-50 group-hover:opacity-100 transition">
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                )}
-                                                {canEditTask(task) && (
-                                                    <button onClick={() => setEditingTask(task)} className="text-gray-400 hover:text-primary p-1 opacity-50 group-hover:opacity-100 transition" title="Edit tugas">
-                                                        <Edit3 size={14} />
-                                                    </button>
-                                                )}
-                                                {featureFlags.bulkAssignment && canEditBatchTask(task) && (
-                                                    <button onClick={() => openBatchEditor(task.assignment_batch)} className="text-gray-400 hover:text-primary p-1 opacity-50 group-hover:opacity-100 transition" title="Edit Bulk Assignment">
-                                                        <Edit3 size={14} />
-                                                    </button>
-                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => canRejectTask(task, new Date(currentTimestamp)) && setRejectTask(task)}
+                                                    disabled={!canRejectTask(task, new Date(currentTimestamp))}
+                                                    className="rounded-lg bg-red-500 px-4 py-1.5 text-[10px] font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+                                                >
+                                                    Reject
+                                                </button>
+                                                <div className="flex items-center gap-1">
+                                                    {canDeleteTask(task, new Date(currentTimestamp)) && (
+                                                        <button onClick={() => handleDeleteTask(task.task_id)} className="text-red-400 hover:text-red-600 p-1 opacity-50 group-hover:opacity-100 transition">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    )}
+                                                    {canEditTask(task) && (
+                                                        <button onClick={() => setEditingTask(task)} className="text-gray-400 hover:text-primary p-1 opacity-50 group-hover:opacity-100 transition" title="Edit tugas">
+                                                            <Edit3 size={14} />
+                                                        </button>
+                                                    )}
+                                                    {featureFlags.bulkAssignment && canEditBatchTask(task) && (
+                                                        <button onClick={() => openBatchEditor(task.assignment_batch)} className="text-gray-400 hover:text-primary p-1 opacity-50 group-hover:opacity-100 transition" title="Edit Bulk Assignment">
+                                                            <Edit3 size={14} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -760,7 +842,10 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                             <EvaluationForm
                                 supervisor={crew}
                                 targetDate={selectedDate}
-                                onSuccess={() => fetchEvaluationStatus()}
+                                onSuccess={() => {
+                                    fetchEvaluationStatus();
+                                    fetchEvaluationAvailability();
+                                }}
                             />
                         )
                     )}
@@ -910,6 +995,12 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                     )}
                 </div>
             </div>
+            <RejectTaskModal
+                task={rejectTask}
+                isOpen={Boolean(rejectTask)}
+                onClose={() => setRejectTask(null)}
+                onSubmit={handleRejectTask}
+            />
         </div>
     );
 }

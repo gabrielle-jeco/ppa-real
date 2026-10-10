@@ -6,30 +6,89 @@ use App\Models\Attendance;
 use App\Models\GuideRead;
 use App\Models\MonthlyOverallScore;
 use App\Models\MonthlyPersonalityEvaluation;
+use App\Models\ScoringRule;
 use App\Models\Task;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 
 class ScoringService
 {
-    private const MONTHLY_TASK_WEIGHT = 0.60;
-    private const MONTHLY_ATTENDANCE_WEIGHT = 0.25;
-    private const MONTHLY_PERSONALITY_WEIGHT = 0.15;
-
     public function getCrewDailyScore(User $crew, Carbon $date): int
     {
-        if (!$this->isScoringDay($crew, $date)) {
-            return 0;
+        $display = $this->getCrewDailyScoreDisplay($crew, $date);
+
+        return (int) ($display['score'] ?? 0);
+    }
+
+    public function getCrewDailyScoreDisplay(User $crew, Carbon $displayDate, string $category = 'service_crew'): array
+    {
+        $normalizedCategory = strtolower(trim($category));
+        $isCashier = $normalizedCategory === 'cashier';
+        $scoreDate = $isCashier ? $displayDate->copy()->subDay() : $displayDate->copy();
+
+        if ($isCashier) {
+            return [
+                'category' => 'cashier',
+                'score' => null,
+                'score_date' => $scoreDate->toDateString(),
+                'available' => false,
+                'availability_mode' => 'H+1',
+                'unavailable_reason' => 'cashier_integration_pending',
+            ];
         }
 
-        $taskScore = $this->getCrewTaskScoreForDate($crew, $date);
+        $rule = ScoringRule::configurationFor($scoreDate);
+        $status = $this->getAttendanceStatusForDate($crew, $scoreDate);
 
-        return (int) round($taskScore);
+        if ($status === null) {
+            $tasks = $this->getCrewTasksForDate($crew, $scoreDate);
+            if ($tasks->isNotEmpty()) {
+                return [
+                    'category' => 'service_crew',
+                    'score' => (int) round($this->getCrewTaskScore($tasks)),
+                    'score_date' => $scoreDate->toDateString(),
+                    'available' => true,
+                    'availability_mode' => 'H',
+                    'unavailable_reason' => null,
+                ];
+            }
+
+            return [
+                'category' => 'service_crew',
+                'score' => null,
+                'score_date' => $scoreDate->toDateString(),
+                'available' => false,
+                'availability_mode' => 'H',
+                'unavailable_reason' => 'attendance_missing',
+            ];
+        }
+
+        if ($this->isTaskExcludedStatus($status, $rule)) {
+            return [
+                'category' => 'service_crew',
+                'score' => null,
+                'score_date' => $scoreDate->toDateString(),
+                'available' => false,
+                'availability_mode' => 'H',
+                'unavailable_reason' => 'non_working_day',
+            ];
+        }
+
+        return [
+            'category' => 'service_crew',
+            'score' => (int) round($this->getCrewTaskScoreForDate($crew, $scoreDate)),
+            'score_date' => $scoreDate->toDateString(),
+            'available' => true,
+            'availability_mode' => 'H',
+            'unavailable_reason' => null,
+        ];
     }
 
     public function getCrewMonthlyScore(User $crew, Carbon $month): array
     {
         [$startOfMonth, $endOfRange] = $this->getScoringRangeForMonth($month);
+        $rule = ScoringRule::configurationFor($month);
 
         if ($endOfRange->lt($startOfMonth)) {
             return [
@@ -38,18 +97,25 @@ class ScoringService
                 'attendance_score' => 0,
                 'personality_score' => 0,
                 'total_score' => 0,
+                'scoring_rule_id' => $rule['id'],
+                'scoring_rule_effective_from' => $rule['effective_from'],
             ];
         }
 
-        $dailyBreakdown = $this->collectDailyBreakdown($crew, $startOfMonth, $endOfRange);
+        $dailyBreakdown = $this->collectDailyBreakdown($crew, $startOfMonth, $endOfRange, $rule);
         $dailyAverage = $this->average($dailyBreakdown['daily_scores']);
         $taskAverage = $this->average($dailyBreakdown['task_scores']);
-        $attendanceAverage = $this->average($dailyBreakdown['attendance_scores']);
+        $attendanceAverage = $this->calculateAttendanceScore(
+            $dailyBreakdown['attendance_statuses'],
+            $rule['attendance_included_statuses'],
+            $rule['attendance_target']
+        );
         $personalityScore = $this->getPersonalityScoreForMonth($crew, $month);
         $totalScore = $this->calculateCrewMonthlyTotal(
             $taskAverage,
             $attendanceAverage,
-            $personalityScore
+            $personalityScore,
+            $rule
         );
 
         return [
@@ -58,15 +124,21 @@ class ScoringService
             'attendance_score' => round($attendanceAverage, 2),
             'personality_score' => $personalityScore,
             'total_score' => $totalScore,
+            'attendance_count' => $this->countIncludedAttendanceStatuses($dailyBreakdown['attendance_statuses'], $rule['attendance_included_statuses']),
+            'attendance_target' => $rule['attendance_target'],
+            'missing_attendance_dates' => $dailyBreakdown['missing_attendance_dates'],
+            'scoring_rule_id' => $rule['id'],
+            'scoring_rule_effective_from' => $rule['effective_from'],
         ];
     }
 
     public function getCrewMonthlyDetailedStats(User $crew, Carbon $month): array
     {
         [$startOfMonth, $endOfRange] = $this->getScoringRangeForMonth($month);
+        $rule = ScoringRule::configurationFor($month);
         $dailyBreakdown = $endOfRange->lt($startOfMonth)
             ? ['daily_scores' => []]
-            : $this->collectDailyBreakdown($crew, $startOfMonth, $endOfRange);
+            : $this->collectDailyBreakdown($crew, $startOfMonth, $endOfRange, $rule);
 
         $guideReads = $endOfRange->lt($startOfMonth)
             ? collect()
@@ -106,6 +178,104 @@ class ScoringService
         ];
     }
 
+    public function getCrewDailyReport(User $crew, Carbon $startDate, Carbon $endDate): array
+    {
+        $attendanceByDate = Attendance::where('user_id', $crew->username)
+            ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->get()
+            ->keyBy(fn(Attendance $attendance) => Carbon::parse($attendance->date)->toDateString());
+
+        $tasksByDate = Task::with('evidences')
+            ->where('employee_id', $crew->username)
+            ->whereBetween('due_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
+            ->get()
+            ->groupBy(fn(Task $task) => Carbon::parse($task->due_at)->toDateString());
+
+        $rows = [];
+        $scores = [];
+        $approvedTotal = 0;
+        $unapprovedTotal = 0;
+
+        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
+            $dateKey = $date->toDateString();
+            $attendance = $attendanceByDate->get($dateKey);
+            $attendanceStatus = $attendance
+                ? strtoupper(trim((string) $attendance->status_code))
+                : null;
+            $tasks = $tasksByDate->get($dateKey, collect());
+            $approved = $tasks->whereIn('status', ['approved', 'completed'])->count();
+            $unapproved = $tasks->count() - $approved;
+            $available = true;
+            $unavailableReason = null;
+            $score = null;
+
+            if ($attendanceStatus === null && $tasks->isEmpty()) {
+                $available = false;
+                $unavailableReason = 'attendance_missing';
+            } elseif ($attendanceStatus !== null && $this->isTaskExcludedStatus(
+                $attendanceStatus,
+                ScoringRule::configurationFor($date)
+            )) {
+                $available = false;
+                $unavailableReason = 'non_working_day';
+            } else {
+                $score = round($this->getCrewTaskScore($tasks), 2);
+                $scores[] = $score;
+            }
+
+            $approvedTotal += $approved;
+            $unapprovedTotal += $unapproved;
+            $rows[] = [
+                'date' => $dateKey,
+                'attendance_status' => $attendanceStatus,
+                'approved_tasks' => $approved,
+                'unapproved_tasks' => $unapproved,
+                'score' => $score,
+                'available' => $available,
+                'unavailable_reason' => $unavailableReason,
+            ];
+        }
+
+        return [
+            'summary' => [
+                'approved_tasks' => $approvedTotal,
+                'unapproved_tasks' => $unapprovedTotal,
+                'score' => $scores === [] ? null : round($this->average($scores), 2),
+                'available_days' => count($scores),
+            ],
+            'rows' => $rows,
+        ];
+    }
+
+    public function getCrewMonthlyReport(User $crew, Carbon $startMonth, Carbon $endMonth): array
+    {
+        $rows = [];
+
+        for ($month = $startMonth->copy()->startOfMonth(); $month->lte($endMonth); $month->addMonth()) {
+            $score = $this->getCrewMonthlyScore($crew, $month);
+            $rows[] = [
+                'month' => $month->format('Y-m'),
+                'task_score' => $score['task_score'],
+                'attendance_score' => $score['attendance_score'],
+                'evaluation_score' => $score['personality_score'],
+                'total_score' => $score['total_score'],
+                'missing_attendance_dates' => $score['missing_attendance_dates'] ?? [],
+                'scoring_rule_id' => $score['scoring_rule_id'],
+                'scoring_rule_effective_from' => $score['scoring_rule_effective_from'],
+            ];
+        }
+
+        return [
+            'summary' => [
+                'task_score' => round($this->average(array_column($rows, 'task_score')), 2),
+                'attendance_score' => round($this->average(array_column($rows, 'attendance_score')), 2),
+                'evaluation_score' => round($this->average(array_column($rows, 'evaluation_score')), 2),
+                'total_score' => round($this->average(array_column($rows, 'total_score')), 2),
+            ],
+            'rows' => $rows,
+        ];
+    }
+
     public function getCrewYearlyScore(User $crew, Carbon $yearDate): int
     {
         $currentMonth = Carbon::now()->month;
@@ -116,7 +286,7 @@ class ScoringService
             return 0;
         }
 
-        $monthsToCalculate = ($targetYear === $currentYear) ? $currentMonth : 12;
+        $monthsToCalculate = $this->completedMonthsInYear($targetYear, $currentYear, $currentMonth);
 
         $snapshots = MonthlyOverallScore::where('user_id', $crew->username)
             ->whereYear('period', $targetYear)
@@ -131,10 +301,7 @@ class ScoringService
             $monthDate = Carbon::create($targetYear, $month, 1);
             $periodKey = $monthDate->toDateString();
 
-            if ($monthDate->format('Y-m') === Carbon::now()->format('Y-m')) {
-                $monthlyScoreData = $this->getCrewMonthlyScore($crew, $monthDate);
-                $totalScore += $monthlyScoreData['total_score'];
-            } elseif ($snapshots->has($periodKey)) {
+            if ($snapshots->has($periodKey)) {
                 $totalScore += $snapshots->get($periodKey)->final_score;
             } else {
                 $monthlyScoreData = $this->getCrewMonthlyScore($crew, $monthDate);
@@ -264,8 +431,8 @@ class ScoringService
                 $status = strtoupper((string) $attendance->status_code);
                 $source = 'attendance';
             } else {
-                $status = $this->getDummyAttendanceStatus($date);
-                $source = 'fallback';
+                $status = null;
+                $source = 'missing';
             }
 
             $calendar[] = [
@@ -279,21 +446,44 @@ class ScoringService
         return $calendar;
     }
 
-    private function collectDailyBreakdown(User $crew, Carbon $startDate, Carbon $endDate): array
+    private function collectDailyBreakdown(User $crew, Carbon $startDate, Carbon $endDate, array $rule): array
     {
         $dailyScores = [];
         $taskScores = [];
-        $attendanceScores = [];
+        $attendanceStatuses = [];
+        $missingAttendanceDates = [];
+
+        $attendanceByDate = Attendance::where('user_id', $crew->username)
+            ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->get()
+            ->keyBy(fn(Attendance $attendance) => Carbon::parse($attendance->date)->toDateString());
+
+        $tasksByDate = Task::with('evidences')
+            ->where('employee_id', $crew->username)
+            ->whereBetween('due_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
+            ->get()
+            ->groupBy(fn(Task $task) => Carbon::parse($task->due_at)->toDateString());
 
         for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
-            $attendanceStatus = $this->getAttendanceStatusForDate($crew, $date);
-            $attendanceScores[] = $this->getAttendanceScoreFromStatus($attendanceStatus);
+            $dateKey = $date->toDateString();
+            $attendance = $attendanceByDate->get($dateKey);
 
-            if (!$this->isScoringStatus($attendanceStatus)) {
+            if (!$attendance) {
+                $missingAttendanceDates[] = $dateKey;
                 continue;
             }
 
-            $taskScore = $this->getCrewTaskScoreForDate($crew, $date);
+            $attendanceStatus = strtoupper(trim((string) $attendance->status_code));
+            $attendanceStatuses[] = $attendanceStatus;
+
+            if ($this->isTaskExcludedStatus($attendanceStatus, $rule)) {
+                continue;
+            }
+
+            $tasks = $tasksByDate->get($dateKey, collect());
+            $taskScore = $tasks->isEmpty()
+                ? 0
+                : $this->average($tasks->map(fn(Task $task) => $this->getTaskScore($task))->all());
             $dailyScores[] = $taskScore;
             $taskScores[] = $taskScore;
         }
@@ -301,17 +491,26 @@ class ScoringService
         return [
             'daily_scores' => $dailyScores,
             'task_scores' => $taskScores,
-            'attendance_scores' => $attendanceScores,
+            'attendance_statuses' => $attendanceStatuses,
+            'missing_attendance_dates' => $missingAttendanceDates,
         ];
     }
 
     private function getCrewTaskScoreForDate(User $crew, Carbon $date): float
     {
-        $tasks = Task::with('evidences')
+        return $this->getCrewTaskScore($this->getCrewTasksForDate($crew, $date));
+    }
+
+    private function getCrewTasksForDate(User $crew, Carbon $date): Collection
+    {
+        return Task::with('evidences')
             ->where('employee_id', $crew->username)
             ->whereDate('due_at', $date->toDateString())
             ->get();
+    }
 
+    private function getCrewTaskScore(Collection $tasks): float
+    {
         if ($tasks->isEmpty()) {
             return 0;
         }
@@ -333,6 +532,25 @@ class ScoringService
         $afterCount = $task->evidences->where('type', 'after')->count();
         $photoCount = $beforeCount + $afterCount;
 
+        if ($task->getRawOriginal('revision_deadline_at')) {
+            if ($beforeCount === 0) {
+                return 0;
+            }
+
+            $approvedAfter = $task->evidences
+                ->where('type', 'after')
+                ->where('review_status', 'approved')
+                ->sortByDesc('attempt_no')
+                ->first();
+
+            if (!$approvedAfter) {
+                return 0;
+            }
+
+            return (float) ($approvedAfter->awarded_score
+                ?? config('task_review.attempt_scores.' . $approvedAfter->attempt_no, 0));
+        }
+
         if ($photoCount < 1) {
             return 0;
         }
@@ -348,53 +566,74 @@ class ScoringService
         return round((2 / $photoCount) * 100, 2);
     }
 
-    private function getAttendanceScoreFromStatus(string $status): float
+    public function calculateAttendanceScore(array $statuses, array $includedStatuses, int $target): float
     {
-        return in_array($status, ['H', 'T'], true) ? 100 : 0;
+        if ($target <= 0) {
+            return 0;
+        }
+
+        $count = $this->countIncludedAttendanceStatuses($statuses, $includedStatuses);
+
+        return min(100, round(($count / $target) * 100, 2));
     }
 
-    private function getAttendanceStatusForDate(User $crew, Carbon $date): string
+    public function calculateIbopScore(?int $totalQuantity): ?int
+    {
+        return $this->calculateBandScore(
+            $totalQuantity,
+            $this->scoringConfig('ibop_bands', $this->defaultIbopBands())
+        );
+    }
+
+    public function calculatePushSellingScore(?int $totalQuantity): ?int
+    {
+        return $this->calculateBandScore(
+            $totalQuantity,
+            $this->scoringConfig('push_selling_bands', $this->defaultPushSellingBands())
+        );
+    }
+
+    public function calculateCashierTaskScore(
+        ?float $monthlyTaskScore,
+        ?float $ibopScore,
+        ?float $pushSellingScore,
+        ?array $rule = null
+    ): ?float {
+        if ($monthlyTaskScore === null || $ibopScore === null || $pushSellingScore === null) {
+            return null;
+        }
+
+        $rule ??= $this->defaultRule();
+
+        return round(
+            ($monthlyTaskScore * ((float) $rule['cashier_task_weight'] / 100))
+            + ($ibopScore * ((float) $rule['cashier_ibop_weight'] / 100))
+            + ($pushSellingScore * ((float) $rule['cashier_push_selling_weight'] / 100)),
+            2
+        );
+    }
+
+    private function getAttendanceStatusForDate(User $crew, Carbon $date): ?string
     {
         $attendance = Attendance::where('user_id', $crew->username)
             ->whereDate('date', $date->toDateString())
             ->first();
 
         if ($attendance) {
-            return strtoupper((string) $attendance->status_code);
+            return strtoupper(trim((string) $attendance->status_code));
         }
 
-        return $this->getDummyAttendanceStatus($date);
+        return null;
     }
 
-    private function getDummyAttendanceStatus(Carbon $date): string
+    private function isTaskExcludedStatus(string $status, array $rule): bool
     {
-        if ($date->isWeekend()) {
-            return 'L';
-        }
+        $excluded = array_map(
+            fn($item) => strtoupper(trim((string) $item)),
+            $rule['task_excluded_statuses'] ?? []
+        );
 
-        $hash = ($date->day + ($date->month * 31)) % 7;
-
-        if ($hash === 5) {
-            return 'A';
-        }
-
-        if ($hash === 4) {
-            return 'T';
-        }
-
-        return 'H';
-    }
-
-    private function isScoringDay(User $crew, Carbon $date): bool
-    {
-        $status = $this->getAttendanceStatusForDate($crew, $date);
-
-        return $this->isScoringStatus($status);
-    }
-
-    private function isScoringStatus(string $status): bool
-    {
-        return !in_array($status, ['S', 'C', 'L'], true);
+        return in_array(strtoupper(trim($status)), $excluded, true);
     }
 
     private function getPersonalityScoreForMonth(User $crew, Carbon $month): int
@@ -433,15 +672,105 @@ class ScoringService
         return array_sum($values) / count($values);
     }
 
+    private function completedMonthsInYear(int $targetYear, int $currentYear, int $currentMonth): int
+    {
+        if ($targetYear > $currentYear) {
+            return 0;
+        }
+
+        return $targetYear === $currentYear ? max(0, $currentMonth - 1) : 12;
+    }
+
     private function calculateCrewMonthlyTotal(
         float $taskScore,
         float $attendanceScore,
-        float $personalityScore
+        float $personalityScore,
+        ?array $rule = null
     ): int {
+        $rule ??= $this->defaultRule();
+
         return (int) round(
-            ($taskScore * self::MONTHLY_TASK_WEIGHT)
-            + ($attendanceScore * self::MONTHLY_ATTENDANCE_WEIGHT)
-            + ($personalityScore * self::MONTHLY_PERSONALITY_WEIGHT)
+            ($taskScore * ((float) $rule['task_weight'] / 100))
+            + ($attendanceScore * ((float) $rule['attendance_weight'] / 100))
+            + ($personalityScore * ((float) $rule['evaluation_weight'] / 100))
         );
+    }
+
+    private function countIncludedAttendanceStatuses(array $statuses, array $includedStatuses): int
+    {
+        $included = array_map(fn($status) => strtoupper(trim((string) $status)), $includedStatuses);
+
+        return count(array_filter(
+            $statuses,
+            fn($status) => in_array(strtoupper(trim((string) $status)), $included, true)
+        ));
+    }
+
+    private function calculateBandScore(?int $quantity, array $bands): ?int
+    {
+        if ($quantity === null) {
+            return null;
+        }
+
+        foreach ($bands as $band) {
+            if ($quantity >= (int) $band['min']) {
+                return (int) $band['score'];
+            }
+        }
+
+        return 0;
+    }
+
+    private function defaultRule(): array
+    {
+        return [
+            'task_weight' => 60,
+            'attendance_weight' => 25,
+            'evaluation_weight' => 15,
+            'attendance_target' => 25,
+            'attendance_included_statuses' => ['H', 'O', 'OP', 'CT'],
+            'task_excluded_statuses' => ['O', 'OP', 'CT'],
+            'cashier_task_weight' => 33.3333,
+            'cashier_ibop_weight' => 33.3333,
+            'cashier_push_selling_weight' => 33.3334,
+        ];
+    }
+
+    private function scoringConfig(string $key, mixed $fallback): mixed
+    {
+        try {
+            return config("scoring.{$key}", $fallback);
+        } catch (\Throwable) {
+            return $fallback;
+        }
+    }
+
+    private function defaultIbopBands(): array
+    {
+        return [
+            ['min' => 30000, 'score' => 100],
+            ['min' => 25000, 'score' => 90],
+            ['min' => 20000, 'score' => 80],
+            ['min' => 15000, 'score' => 70],
+            ['min' => 10000, 'score' => 60],
+            ['min' => 5000, 'score' => 50],
+            ['min' => 2000, 'score' => 40],
+            ['min' => 1000, 'score' => 30],
+            ['min' => 1, 'score' => 20],
+            ['min' => 0, 'score' => 0],
+        ];
+    }
+
+    private function defaultPushSellingBands(): array
+    {
+        return [
+            ['min' => 1250, 'score' => 100],
+            ['min' => 1000, 'score' => 95],
+            ['min' => 750, 'score' => 85],
+            ['min' => 500, 'score' => 75],
+            ['min' => 250, 'score' => 65],
+            ['min' => 100, 'score' => 50],
+            ['min' => 0, 'score' => 40],
+        ];
     }
 }

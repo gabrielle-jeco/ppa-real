@@ -15,6 +15,18 @@ class TaskEvidence extends Model
         'task_id',
         'file_path',
         'type',
+        'attempt_no',
+        'review_status',
+        'rejection_reason',
+        'reviewed_by',
+        'reviewed_at',
+        'awarded_score',
+    ];
+
+    protected $casts = [
+        'attempt_no' => 'integer',
+        'reviewed_at' => 'datetime',
+        'awarded_score' => 'float',
     ];
 
     public function task()

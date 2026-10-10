@@ -3,15 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\JobLevel;
+use App\Models\Division;
 use App\Models\AppRole;
 use App\Models\EvaluationMaster;
 use App\Models\ActivityLog;
+use App\Models\Attendance;
 use App\Models\GuideRead;
 use App\Models\Location;
 use App\Models\Regional;
 use App\Models\ReportingLine;
 use App\Models\Role;
+use App\Models\ScoringRule;
 use App\Models\Task;
+use App\Models\TaskArea;
+use App\Models\TaskDefinition;
 use App\Models\User;
 use App\Models\UserLocation;
 use App\Models\UserLoginEvent;
@@ -33,12 +38,14 @@ class AdminController extends Controller
     private const CMS_PERMISSIONS = [
         'users_locations' => 'User & Lokasi',
         'job_levels' => 'Job Level HR',
+        'divisions' => 'Master Divisi',
         'app_roles' => 'Role Aplikasi',
         'reporting_lines' => 'Relasi Atasan',
         'work_stations' => 'Master Work Station',
         'locations' => 'Master Lokasi',
         'regionals' => 'Master Regional',
         'evaluation_masters' => 'Master Evaluasi',
+        'scoring_masters' => 'Master Penilaian',
         'role_management' => 'Role Akun',
         'user_activity' => 'Aktivitas User',
     ];
@@ -82,7 +89,9 @@ class AdminController extends Controller
                 'account_roles' => $this->canPermission('role_management') ? Role::count() : 0,
                 'app_roles' => $this->canPermission('app_roles') ? AppRole::count() : 0,
                 'evaluation_masters' => $this->canPermission('evaluation_masters') ? EvaluationMaster::count() : 0,
+                'scoring_rules' => $this->canPermission('scoring_masters') ? ScoringRule::count() : 0,
                 'job_levels' => $this->canPermission('job_levels') ? JobLevel::where('visible_in_yodaily', true)->count() : 0,
+                'divisions' => $this->canPermission('divisions') ? Division::where('visible_in_yodaily', true)->count() : 0,
                 'online_users' => $this->canPermission('user_activity') ? UserPresence::where('last_seen_at', '>=', now()->subMinutes(5))->distinct('user_id')->count('user_id') : 0,
             ],
             'roles' => $this->canPermission('role_management') ? Role::orderBy('name')->get()->map(fn(Role $role) => $this->formatRole($role)) : [],
@@ -92,6 +101,11 @@ class AdminController extends Controller
             'job_levels' => $this->canAnyPermission(['users_locations', 'job_levels']) ? JobLevel::where('visible_in_yodaily', true)
                 ->orderBy('name')
                 ->get(['id', 'position_code', 'name', 'description', 'grade', 'department', 'visible_in_yodaily', 'external_active']) : [],
+            'divisions' => $this->canAnyPermission(['users_locations', 'divisions']) ? Division::with('parent:id,name')
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get()
+                ->map(fn(Division $division) => $this->formatDivision($division)) : [],
             'locations' => $canUseLocations ? Location::orderBy('name')->get([
                 'initial',
                 'name',
@@ -108,7 +122,62 @@ class AdminController extends Controller
             'app_job_levels' => $this->canPermission('app_roles') ? $this->appJobLevelNames() : [],
             'regionals' => $this->canPermission('regionals') ? Regional::orderBy('kode_regional')->get() : [],
             'evaluation_masters' => $this->canPermission('evaluation_masters') ? EvaluationMaster::orderBy('sort_order')->orderBy('id')->get()->map(fn(EvaluationMaster $master) => $this->formatEvaluationMaster($master)) : [],
+            'scoring_rules' => $this->canPermission('scoring_masters') ? ScoringRule::orderByDesc('effective_from')->orderByDesc('id')->get()->map(fn(ScoringRule $rule) => $this->formatScoringRule($rule)) : [],
+            'attendance_statuses' => $this->canPermission('scoring_masters') ? Attendance::query()
+                ->whereNotNull('status_code')
+                ->distinct()
+                ->orderBy('status_code')
+                ->pluck('status_code')
+                ->map(fn($status) => Attendance::normalizeStatusCode($status))
+                ->filter()
+                ->unique()
+                ->values() : [],
         ]);
+    }
+
+    public function storeScoringRule(Request $request)
+    {
+        $this->authorizePermission('scoring_masters');
+
+        $data = $request->validate([
+            'effective_from' => ['required', 'date'],
+            'task_weight' => ['required', 'numeric', 'min:0', 'max:100'],
+            'attendance_weight' => ['required', 'numeric', 'min:0', 'max:100'],
+            'evaluation_weight' => ['required', 'numeric', 'min:0', 'max:100'],
+            'attendance_target' => ['required', 'integer', 'min:1', 'max:999'],
+            'attendance_included_statuses' => ['present', 'array'],
+            'attendance_included_statuses.*' => ['required', 'string', 'max:20'],
+            'task_excluded_statuses' => ['present', 'array'],
+            'task_excluded_statuses.*' => ['required', 'string', 'max:20'],
+            'cashier_task_weight' => ['required', 'numeric', 'min:0', 'max:100'],
+            'cashier_ibop_weight' => ['required', 'numeric', 'min:0', 'max:100'],
+            'cashier_push_selling_weight' => ['required', 'numeric', 'min:0', 'max:100'],
+        ]);
+
+        $this->validateWeightTotal([
+            $data['task_weight'],
+            $data['attendance_weight'],
+            $data['evaluation_weight'],
+        ], 'task_weight');
+        $this->validateWeightTotal([
+            $data['cashier_task_weight'],
+            $data['cashier_ibop_weight'],
+            $data['cashier_push_selling_weight'],
+        ], 'cashier_task_weight');
+
+        $data['effective_from'] = Carbon::parse($data['effective_from'])->startOfMonth()->toDateString();
+        if (ScoringRule::whereDate('effective_from', $data['effective_from'])->exists()) {
+            throw ValidationException::withMessages([
+                'effective_from' => ['Sudah ada formula untuk bulan efektif tersebut.'],
+            ]);
+        }
+        $data['attendance_included_statuses'] = $this->normalizeStatusCodes($data['attendance_included_statuses']);
+        $data['task_excluded_statuses'] = $this->normalizeStatusCodes($data['task_excluded_statuses']);
+        $data['created_by'] = Auth::user()?->username;
+
+        $rule = ScoringRule::create($data);
+
+        return response()->json($this->formatScoringRule($rule), 201);
     }
 
     public function getJobLevels(Request $request)
@@ -141,6 +210,38 @@ class AdminController extends Controller
         return response()->json($paginator);
     }
 
+    public function getDivisions(Request $request)
+    {
+        $this->authorizePermission('divisions');
+
+        $query = Division::with('parent:id,name')
+            ->orderBy('sort_order')
+            ->orderBy('name');
+
+        if ($request->filled('search')) {
+            $search = strtolower($request->query('search'));
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(code) like ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(group_code) like ?', ["%{$search}%"])
+                    ->orWhereHas('parent', fn($parentQuery) => $parentQuery->whereRaw('LOWER(name) like ?', ["%{$search}%"]));
+            });
+        }
+
+        if ($request->filled('visibility')) {
+            if ($request->query('visibility') === 'visible') {
+                $query->where('visible_in_yodaily', true);
+            } elseif ($request->query('visibility') === 'hidden') {
+                $query->where('visible_in_yodaily', false);
+            }
+        }
+
+        $paginator = $query->paginate(50);
+        $paginator->getCollection()->transform(fn(Division $division) => $this->formatDivision($division));
+
+        return response()->json($paginator);
+    }
+
     public function getUsers(Request $request)
     {
         $this->authorizePermission('users_locations');
@@ -153,6 +254,7 @@ class AdminController extends Controller
             ->with([
                 'accountRole:id,name,description,permissions',
                 'jobLevel:id,position_code,name,grade,department',
+                'division:id,code,name,group_code,parent_id',
                 'locations:initial,name',
                 'userLocations:user_id,job_level',
                 'leaderLines' => fn($q) => $q
@@ -170,7 +272,10 @@ class AdminController extends Controller
             $searchTerm = '%' . strtolower($request->search) . '%';
             $query->where(function ($q) use ($searchTerm) {
                 $q->whereRaw('LOWER(name) like ?', [$searchTerm])
-                  ->orWhereRaw('LOWER(username) like ?', [$searchTerm]);
+                  ->orWhereRaw('LOWER(username) like ?', [$searchTerm])
+                  ->orWhereHas('division', fn($divisionQuery) => $divisionQuery
+                      ->whereRaw('LOWER(name) like ?', [$searchTerm])
+                      ->orWhereRaw('LOWER(group_code) like ?', [$searchTerm]));
             });
         }
 
@@ -238,14 +343,17 @@ class AdminController extends Controller
         }
 
         $leaders = $leaders
+            ->with('division:id,name,group_code')
             ->orderBy('name')
-            ->get(['username', 'name']);
+            ->get(['username', 'name', 'division_id']);
             
         $leadersArray = $leaders->map(function(User $u) {
             return [
                 'username' => $u->username,
                 'name' => $u->name,
-                'role_type' => $u->role_type
+                'role_type' => $u->role_type,
+                'division_name' => $u->division?->name,
+                'division_group_code' => $u->division?->group_code,
             ];
         });
 
@@ -258,14 +366,20 @@ class AdminController extends Controller
 
         $query = User::without(['jobLevel'])
             ->whereHas('userLocations')
-            ->with(['jobLevel:id,position_code,name,grade,department'])
+            ->with([
+                'jobLevel:id,position_code,name,grade,department',
+                'division:id,name,group_code',
+            ])
             ->orderBy('name');
 
         if ($request->filled('search')) {
             $search = strtolower($request->query('search'));
             $query->where(function ($q) use ($search) {
                 $q->whereRaw('LOWER(name) like ?', ["%{$search}%"])
-                    ->orWhereRaw('LOWER(username) like ?', ["%{$search}%"]);
+                    ->orWhereRaw('LOWER(username) like ?', ["%{$search}%"])
+                    ->orWhereHas('division', fn($divisionQuery) => $divisionQuery
+                        ->whereRaw('LOWER(name) like ?', ["%{$search}%"])
+                        ->orWhereRaw('LOWER(group_code) like ?', ["%{$search}%"]));
             });
         }
 
@@ -273,10 +387,12 @@ class AdminController extends Controller
             $query->whereHas('locations', fn($q) => $q->where('locations.initial', $request->query('store')));
         }
 
-        return response()->json($query->get(['username', 'name', 'job_level_id'])->map(fn(User $user) => [
+        return response()->json($query->get(['username', 'name', 'job_level_id', 'division_id'])->map(fn(User $user) => [
             'username' => $user->username,
             'name' => $user->name,
             'role_type' => $user->role_type,
+            'division_name' => $user->division?->name,
+            'division_group_code' => $user->division?->group_code,
         ]));
     }
 
@@ -286,7 +402,7 @@ class AdminController extends Controller
         
         $query = ReportingLine::withoutGlobalScope('effective_backup_period')
             ->where('relation_type', 'permanent')
-            ->with(['leader.jobLevel', 'subordinate.jobLevel'])
+            ->with(['leader.jobLevel', 'leader.division', 'subordinate.jobLevel', 'subordinate.division'])
             ->whereHas('leader.userLocations')
             ->whereHas('subordinate.userLocations')
             ->orderBy('leader_id')
@@ -411,6 +527,7 @@ class AdminController extends Controller
             'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'password' => ['nullable', 'string', 'min:8', 'max:255'],
             'job_level_id' => ['required', $this->visibleJobLevelRule()],
+            'division_id' => ['nullable', $this->selectableDivisionRule()],
             'role_id' => ['nullable', 'exists:roles,id'],
             'active' => ['boolean'],
             'is_back_office' => ['boolean'],
@@ -436,6 +553,7 @@ class AdminController extends Controller
             'email' => $data['email'] ?? null,
             'password' => Hash::make($data['password'] ?? Str::random(40)),
             'job_level_id' => $data['job_level_id'],
+            'division_id' => $data['division_id'] ?? null,
             'role_id' => $roleId,
             'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? true,
@@ -525,6 +643,7 @@ class AdminController extends Controller
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:8', 'max:255'],
             'job_level_id' => ['required', $this->visibleJobLevelRule()],
+            'division_id' => ['nullable', $this->selectableDivisionRule($user->division_id)],
             'role_id' => ['nullable', 'exists:roles,id'],
             'active' => ['boolean'],
             'is_back_office' => ['boolean'],
@@ -548,6 +667,7 @@ class AdminController extends Controller
             'name' => $data['name'],
             'email' => $data['email'] ?? null,
             'job_level_id' => $data['job_level_id'],
+            'division_id' => $data['division_id'] ?? null,
             'role_id' => $roleId,
             'initial_store' => $data['initial_store'] ?? null,
             'active' => $data['active'] ?? false,
@@ -752,6 +872,12 @@ class AdminController extends Controller
     {
         $this->authorizePermission('work_stations');
 
+        if ($workStation->taskAreas()->exists()) {
+            throw ValidationException::withMessages([
+                'work_station' => ['Work station masih memiliki area. Hapus atau pindahkan area terlebih dahulu.'],
+            ]);
+        }
+
         $hasHistory = Task::where('work_station_id', $workStation->id)->exists()
             || ActivityLog::where('work_station_id', $workStation->id)->exists()
             || GuideRead::where('work_station_id', $workStation->id)->exists();
@@ -767,6 +893,81 @@ class AdminController extends Controller
         return response()->json(['message' => 'Work station deleted.']);
     }
 
+    public function getTaskCatalog()
+    {
+        $this->authorizePermission('work_stations');
+
+        return response()->json(
+            WorkStation::with(['taskAreas.taskDefinitions'])
+                ->orderBy('name')
+                ->get()
+        );
+    }
+
+    public function storeTaskArea(Request $request, WorkStation $workStation)
+    {
+        $this->authorizePermission('work_stations');
+        $data = $this->validateTaskArea($request, $workStation);
+
+        return response()->json($workStation->taskAreas()->create($data), 201);
+    }
+
+    public function updateTaskArea(Request $request, TaskArea $taskArea)
+    {
+        $this->authorizePermission('work_stations');
+        $data = $this->validateTaskArea($request, $taskArea->workStation, $taskArea);
+        $taskArea->update($data);
+
+        return response()->json($taskArea->fresh('taskDefinitions'));
+    }
+
+    public function destroyTaskArea(TaskArea $taskArea)
+    {
+        $this->authorizePermission('work_stations');
+
+        if ($taskArea->taskDefinitions()->exists()) {
+            throw ValidationException::withMessages([
+                'task_area' => ['Area masih memiliki master task. Hapus atau nonaktifkan master task terlebih dahulu.'],
+            ]);
+        }
+
+        $taskArea->delete();
+
+        return response()->json(['message' => 'Area berhasil dihapus.']);
+    }
+
+    public function storeTaskDefinition(Request $request, TaskArea $taskArea)
+    {
+        $this->authorizePermission('work_stations');
+        $data = $this->validateTaskDefinition($request, $taskArea);
+
+        return response()->json($taskArea->taskDefinitions()->create($data), 201);
+    }
+
+    public function updateTaskDefinition(Request $request, TaskDefinition $taskDefinition)
+    {
+        $this->authorizePermission('work_stations');
+        $data = $this->validateTaskDefinition($request, $taskDefinition->taskArea, $taskDefinition);
+        $taskDefinition->update($data);
+
+        return response()->json($taskDefinition->fresh());
+    }
+
+    public function destroyTaskDefinition(TaskDefinition $taskDefinition)
+    {
+        $this->authorizePermission('work_stations');
+
+        if ($taskDefinition->tasks()->exists() || $taskDefinition->assignmentBatches()->exists()) {
+            throw ValidationException::withMessages([
+                'task_definition' => ['Master task sudah digunakan. Nonaktifkan master task agar histori tetap terjaga.'],
+            ]);
+        }
+
+        $taskDefinition->delete();
+
+        return response()->json(['message' => 'Master task berhasil dihapus.']);
+    }
+
     public function updateJobLevel(Request $request, JobLevel $jobLevel)
     {
         $this->authorizePermission('job_levels');
@@ -780,6 +981,21 @@ class AdminController extends Controller
         ]);
 
         return response()->json($this->formatJobLevel($jobLevel->fresh()));
+    }
+
+    public function updateDivision(Request $request, Division $division)
+    {
+        $this->authorizePermission('divisions');
+
+        $data = $request->validate([
+            'visible_in_yodaily' => ['required', 'boolean'],
+        ]);
+
+        $division->update([
+            'visible_in_yodaily' => $data['visible_in_yodaily'],
+        ]);
+
+        return response()->json($this->formatDivision($division->fresh('parent')));
     }
 
     public function updateUserLocation(Request $request, UserLocation $userLocation)
@@ -1021,6 +1237,46 @@ class AdminController extends Controller
         abort_if(Auth::user()?->role_type !== 'superadmin', 403, 'Tidak memiliki akses.');
     }
 
+    private function validateTaskArea(Request $request, WorkStation $workStation, ?TaskArea $taskArea = null): array
+    {
+        if ($request->has('name')) {
+            $request->merge(['name' => trim((string) $request->input('name'))]);
+        }
+
+        return $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('task_areas', 'name')
+                    ->where(fn($query) => $query->where('work_station_id', $workStation->id))
+                    ->ignore($taskArea?->id),
+            ],
+            'sort_order' => ['required', 'integer', 'min:0', 'max:65535'],
+            'active' => ['required', 'boolean'],
+        ]);
+    }
+
+    private function validateTaskDefinition(Request $request, TaskArea $taskArea, ?TaskDefinition $taskDefinition = null): array
+    {
+        if ($request->has('title')) {
+            $request->merge(['title' => trim((string) $request->input('title'))]);
+        }
+
+        return $request->validate([
+            'title' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('task_definitions', 'title')
+                    ->where(fn($query) => $query->where('task_area_id', $taskArea->id))
+                    ->ignore($taskDefinition?->id),
+            ],
+            'sort_order' => ['required', 'integer', 'min:0', 'max:65535'],
+            'active' => ['required', 'boolean'],
+        ]);
+    }
+
     private function authorizePermission(string $permission): void
     {
         $this->authorizeSuperadmin();
@@ -1068,11 +1324,15 @@ class AdminController extends Controller
             'email' => $user->email,
             'initial_store' => $user->initial_store,
             'job_level_id' => $user->job_level_id,
+            'division_id' => $user->division_id,
             'role_id' => $user->role_id,
             'account_role' => $user->accountRole?->name,
             'job_level_name' => $user->jobLevel?->name,
             'corporate_job_level_name' => $user->jobLevel?->name,
             'job_level_position_code' => $user->jobLevel?->position_code,
+            'division_code' => $user->division?->code,
+            'division_name' => $user->division?->name,
+            'division_group_code' => $user->division?->group_code,
             'role_type' => $user->role_type,
             'manager_type' => $user->manager_type,
             'active' => (bool) $user->active,
@@ -1221,6 +1481,16 @@ class AdminController extends Controller
         return Rule::exists('job_levels', 'id')->where('visible_in_yodaily', true);
     }
 
+    private function selectableDivisionRule(?int $currentDivisionId = null)
+    {
+        return Rule::exists('divisions', 'id')->where(function ($query) use ($currentDivisionId) {
+            $query->where('visible_in_yodaily', true);
+            if ($currentDivisionId) {
+                $query->orWhere('id', $currentDivisionId);
+            }
+        });
+    }
+
     private function formatJobLevel(JobLevel $jobLevel): array
     {
         return [
@@ -1233,6 +1503,20 @@ class AdminController extends Controller
             'visible_in_yodaily' => (bool) $jobLevel->visible_in_yodaily,
             'external_active' => (bool) $jobLevel->external_active,
             'synced_at' => $jobLevel->synced_at?->toDateTimeString(),
+        ];
+    }
+
+    private function formatDivision(Division $division): array
+    {
+        return [
+            'id' => $division->id,
+            'code' => $division->code,
+            'name' => $division->name,
+            'group_code' => $division->group_code,
+            'parent_id' => $division->parent_id,
+            'parent_name' => $division->parent?->name,
+            'sort_order' => $division->sort_order,
+            'visible_in_yodaily' => (bool) $division->visible_in_yodaily,
         ];
     }
 
@@ -1305,8 +1589,14 @@ class AdminController extends Controller
             'id' => $line->id,
             'leader_id' => $line->leader_id,
             'leader_name' => $line->leader?->name,
+            'leader_role_type' => $line->leader?->role_type,
+            'leader_division_name' => $line->leader?->division?->name,
+            'leader_division_group_code' => $line->leader?->division?->group_code,
             'subordinate_id' => $line->subordinate_id,
             'subordinate_name' => $line->subordinate?->name,
+            'subordinate_role_type' => $line->subordinate?->role_type,
+            'subordinate_division_name' => $line->subordinate?->division?->name,
+            'subordinate_division_group_code' => $line->subordinate?->division?->group_code,
             'status' => $line->status,
         ];
     }
@@ -1347,6 +1637,44 @@ class AdminController extends Controller
             'sort_order' => $master->sort_order,
             'active' => (bool) $master->active,
         ];
+    }
+
+    private function formatScoringRule(ScoringRule $rule): array
+    {
+        return [
+            'id' => $rule->id,
+            'effective_from' => $rule->effective_from->toDateString(),
+            'task_weight' => (float) $rule->task_weight,
+            'attendance_weight' => (float) $rule->attendance_weight,
+            'evaluation_weight' => (float) $rule->evaluation_weight,
+            'attendance_target' => (int) $rule->attendance_target,
+            'attendance_included_statuses' => $rule->attendance_included_statuses ?: [],
+            'task_excluded_statuses' => $rule->task_excluded_statuses ?: [],
+            'cashier_task_weight' => (float) $rule->cashier_task_weight,
+            'cashier_ibop_weight' => (float) $rule->cashier_ibop_weight,
+            'cashier_push_selling_weight' => (float) $rule->cashier_push_selling_weight,
+            'created_by' => $rule->created_by,
+            'created_at' => $rule->created_at?->toISOString(),
+        ];
+    }
+
+    private function normalizeStatusCodes(array $statuses): array
+    {
+        return collect($statuses)
+            ->map(fn($status) => Attendance::normalizeStatusCode($status))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function validateWeightTotal(array $weights, string $field): void
+    {
+        if (abs(array_sum(array_map('floatval', $weights)) - 100) > 0.01) {
+            throw ValidationException::withMessages([
+                $field => ['Total bobot harus tepat 100%.'],
+            ]);
+        }
     }
 
     private function validateReportingLineHierarchy(string $leaderId, string $subordinateId)

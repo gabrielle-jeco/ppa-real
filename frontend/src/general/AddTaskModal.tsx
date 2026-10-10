@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Calendar, X } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
 import { featureFlags } from '../utils/featureFlags';
+import TaskCatalogFields from './TaskCatalogFields';
 
 interface AddTaskModalProps {
     isOpen: boolean;
@@ -16,17 +17,18 @@ interface AddTaskModalProps {
 
 export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false, initialTask, submitLabel = 'Simpan' }: AddTaskModalProps) {
     const initializedKeyRef = React.useRef<string | null>(null);
-    const [title, setTitle] = useState('');
     const [date, setDate] = useState(defaultDate || '');
     const [startTime, setStartTime] = useState('');
     const [dueTime, setDueTime] = useState('');
     const [note, setNote] = useState('');
     const [workStationId, setWorkStationId] = useState('');
+    const [taskAreaId, setTaskAreaId] = useState('');
+    const [taskDefinitionId, setTaskDefinitionId] = useState('');
     const [weightLabel, setWeightLabel] = useState('mudah');
-    const [workStations, setWorkStations] = useState<any[]>([]);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
     const isTodayTask = date === minTaskDate;
+    const shouldShowCatalog = requireCategory || Boolean(initialTask);
 
     React.useEffect(() => {
         const modalKey = initialTask?.id ? `edit:${initialTask.id}` : `create:${defaultDate || ''}`;
@@ -38,39 +40,25 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
         initializedKeyRef.current = modalKey;
 
         if (initialTask) {
-            setTitle(initialTask.title || '');
             setDate(toDateFieldValue(initialTask.due_at, defaultDate || ''));
             setStartTime(toTimeFieldValue(initialTask.start_at, toTimeFieldValue(initialTask.due_at, new Date().toTimeString().slice(0, 5))));
             setDueTime(toTimeFieldValue(initialTask.due_at));
             setNote(initialTask.note || initialTask.description || '');
             setWorkStationId(initialTask.work_station_id ? String(initialTask.work_station_id) : '');
+            setTaskAreaId('');
+            setTaskDefinitionId(initialTask.task_definition_id ? String(initialTask.task_definition_id) : '');
             setWeightLabel(initialTask.weight_label || 'mudah');
         } else {
             setDate(defaultDate || '');
             setStartTime(new Date().toTimeString().slice(0, 5));
             setDueTime('');
-            setTitle('');
             setNote('');
             setWorkStationId('');
+            setTaskAreaId('');
+            setTaskDefinitionId('');
             setWeightLabel('mudah');
         }
     }, [isOpen, defaultDate, initialTask]);
-
-    React.useEffect(() => {
-        if (!isOpen || !requireCategory) return;
-
-        const fetchWorkStations = async () => {
-            const res = await fetch('/api/work-stations', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-            });
-
-            if (res.ok) {
-                setWorkStations(await res.json());
-            }
-        };
-
-        fetchWorkStations();
-    }, [isOpen, requireCategory]);
 
     if (!isOpen) return null;
 
@@ -101,21 +89,21 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
             return;
         }
         onSubmit({
-            title,
+            task_definition_id: taskDefinitionId || null,
             start_at: startAt,
             due_at: dueAt,
             ...(featureFlags.taskWeight ? { weight_label: weightLabel } : {}),
             note,
-            ...(requireCategory ? { work_station_id: workStationId } : {}),
         });
         onClose();
         // Reset form
-        setTitle('');
         setDate('');
         setStartTime('');
         setDueTime('');
         setNote('');
         setWorkStationId('');
+        setTaskAreaId('');
+        setTaskDefinitionId('');
         setWeightLabel('mudah');
     };
 
@@ -136,33 +124,18 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                 <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">Tenggat Pekerjaan</h2>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <input
-                            type="text"
-                            placeholder="Judul pekerjaan (contoh: Cek Kebersihan)"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-primary outline-none shadow-inner"
-                            required
+                    {shouldShowCatalog && (
+                        <TaskCatalogFields
+                            enabled={isOpen}
+                            value={{ workStationId, taskAreaId, taskDefinitionId }}
+                            onChange={(selection) => {
+                                setWorkStationId(selection.workStationId);
+                                setTaskAreaId(selection.taskAreaId);
+                                setTaskDefinitionId(selection.taskDefinitionId);
+                            }}
+                            allowLegacy={Boolean(initialTask && !initialTask.task_definition_id)}
+                            legacyTitle={initialTask?.title || ''}
                         />
-                    </div>
-
-                    {requireCategory && (
-                        <div>
-                            <select
-                                value={workStationId}
-                                onChange={(e) => setWorkStationId(e.target.value)}
-                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm text-gray-700 focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer capitalize"
-                                required
-                            >
-                                <option value="">Pilih Kategori</option>
-                                {workStations.map((station) => (
-                                    <option key={station.id} value={station.id}>
-                                        {station.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
                     )}
 
                     {/* Date Picker */}

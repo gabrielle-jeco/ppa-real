@@ -7,14 +7,17 @@ use App\Models\GuideRead;
 use Illuminate\Http\Request;
 use App\Models\Task;
 use App\Models\TaskAssignmentBatch;
+use App\Models\TaskDefinition;
 use App\Models\User;
 use App\Models\WorkStation;
 use App\Services\UserNotificationService;
 use App\Services\SupervisorTaskAccessService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class TaskController extends Controller
 {
@@ -23,6 +26,18 @@ class TaskController extends Controller
         'menengah' => 6,
         'sulit' => 10,
     ];
+
+    public function taskCatalog()
+    {
+        return response()->json(
+            WorkStation::with([
+                'taskAreas' => fn ($query) => $query->orderBy('sort_order')->orderBy('name'),
+                'taskAreas.taskDefinitions' => fn ($query) => $query->orderBy('sort_order')->orderBy('title'),
+            ])
+                ->orderBy('name')
+                ->get()
+        );
+    }
 
     public function index(Request $request, $supervisorId)
     {
@@ -110,11 +125,7 @@ class TaskController extends Controller
     {
         $request->validate([
             'supervisor_id' => 'required|exists:users,username',
-            'work_station_id' => [
-                'nullable',
-                Rule::exists('work_stations', 'id')->where('active', true),
-            ],
-            'title' => 'required|string|max:255',
+            'task_definition_id' => ['required', 'integer', 'exists:task_definitions,id'],
             'due_at' => 'required|date',
             'start_at' => 'nullable|date',
             'weight_label' => ['nullable', Rule::in(array_keys(self::TASK_WEIGHTS))],
@@ -149,11 +160,7 @@ class TaskController extends Controller
             return response()->json(['message' => 'Tidak memiliki akses. Anda hanya dapat memberi tugas kepada bawahan Anda.'], 403);
         }
 
-        if (!$request->filled('work_station_id')) {
-            throw ValidationException::withMessages([
-                'work_station_id' => ['Kategori pekerjaan wajib dipilih untuk tugas crew.'],
-            ]);
-        }
+        $taskDefinition = $this->activeTaskDefinition((int) $request->input('task_definition_id'));
 
         $dueAt = Carbon::parse($request->due_at);
         $isTodayTask = $dueAt->isSameDay(Carbon::today());
@@ -186,18 +193,21 @@ class TaskController extends Controller
             ]);
         }
 
+        $this->validateRevisionWindow($employer, $dueAt);
+        $approvalDeadline = $this->approvalDeadlineFor($employer, $dueAt);
+
         $weightLabel = $this->normalizeWeightLabel($request->input('weight_label'));
 
         $task = Task::create([
             'employee_id' => $request->supervisor_id,
             'employer_id' => $employer->username,
-            'work_station_id' => $request->work_station_id,
+            ...$this->taskIdentityAttributes($taskDefinition),
             'assignment_type' => 'individual',
-            'title' => $request->title,
             'description' => $request->note,
             'start_at' => $startAt,
             'due_at' => $dueAt,
-            'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
+            'approval_deadline_at' => $approvalDeadline,
+            'revision_deadline_at' => $this->revisionDeadlineFor($approvalDeadline),
             ...$this->taskWeightAttributes($weightLabel),
             'status' => 'pending',
         ]);
@@ -224,11 +234,7 @@ class TaskController extends Controller
         $request->validate([
             'crew_ids' => 'required|array|min:1|max:200',
             'crew_ids.*' => 'required|exists:users,username',
-            'work_station_id' => [
-                'nullable',
-                Rule::exists('work_stations', 'id')->where('active', true),
-            ],
-            'title' => 'required|string|max:255',
+            'task_definition_id' => ['required', 'integer', 'exists:task_definitions,id'],
             'note' => 'nullable|string|max:5000',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
@@ -254,8 +260,9 @@ class TaskController extends Controller
             return response()->json(['message' => 'Beberapa karyawan bukan bawahan aktif Anda.'], 403);
         }
 
+        $taskDefinition = $this->activeTaskDefinition((int) $request->input('task_definition_id'));
+        $taskIdentity = $this->taskIdentityAttributes($taskDefinition);
         $weightLabel = $this->normalizeWeightLabel($request->input('weight_label'));
-        $workStationId = $request->filled('work_station_id') ? $request->input('work_station_id') : null;
         $repeatDays = collect($request->input('repeat_days', []))
             ->map(fn ($day) => (int) $day)
             ->unique()
@@ -292,6 +299,8 @@ class TaskController extends Controller
                 return response()->json(['message' => 'Tenggat pekerjaan tidak boleh berada di masa lalu.'], 422);
             }
 
+            $this->validateRevisionWindow($employer, $dueAt);
+
             $dates[] = [$startAt, $dueAt];
         }
 
@@ -299,13 +308,12 @@ class TaskController extends Controller
             return response()->json(['message' => 'Tidak ada tanggal penugasan yang sesuai dengan pengaturan hari.'], 422);
         }
 
-        $tasks = DB::transaction(function () use ($request, $employer, $validCrewIds, $weightLabel, $workStationId, $repeatDays, $startDate, $endDate, $dates) {
+        $tasks = DB::transaction(function () use ($request, $employer, $validCrewIds, $weightLabel, $taskIdentity, $repeatDays, $startDate, $endDate, $dates) {
             $batch = TaskAssignmentBatch::create([
                 'created_by' => $employer->username,
                 'assignment_type' => $startDate->isSameDay($endDate) && $repeatDays->isEmpty() ? 'broadcast' : 'recurring',
-                'title' => $request->title,
+                ...$taskIdentity,
                 'description' => $request->note,
-                'work_station_id' => $workStationId,
                 'start_date' => $startDate->toDateString(),
                 'end_date' => $endDate->toDateString(),
                 'start_time' => $request->start_time,
@@ -318,17 +326,18 @@ class TaskController extends Controller
             $created = collect();
             foreach ($validCrewIds as $crewId) {
                 foreach ($dates as [$startAt, $dueAt]) {
+                    $approvalDeadline = $this->approvalDeadlineFor($employer, $dueAt);
                     $created->push(Task::create([
                         'employee_id' => $crewId,
                         'employer_id' => $employer->username,
-                        'work_station_id' => $workStationId,
+                        ...$taskIdentity,
                         'assignment_batch_id' => $batch->id,
                         'assignment_type' => $batch->assignment_type,
-                        'title' => $request->title,
                         'description' => $request->note,
                         'start_at' => $startAt,
                         'due_at' => $dueAt,
-                        'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
+                        'approval_deadline_at' => $approvalDeadline,
+                        'revision_deadline_at' => $this->revisionDeadlineFor($approvalDeadline),
                         ...$this->taskWeightAttributes($weightLabel),
                         'status' => 'pending',
                     ]));
@@ -344,7 +353,7 @@ class TaskController extends Controller
                 $crewId,
                 'task_created',
                 'Pekerjaan Baru',
-                'Anda mendapat penugasan baru: ' . $request->title,
+                'Anda mendapat penugasan baru: ' . $taskDefinition->title,
                 'Periksa jadwal pekerjaan yang telah dibuat untuk Anda.',
                 [
                     'assignment_batch_id' => $batchId,
@@ -368,11 +377,7 @@ class TaskController extends Controller
     public function update(Request $request, $id)
     {
         $request->validate([
-            'work_station_id' => [
-                'nullable',
-                Rule::exists('work_stations', 'id')->where('active', true),
-            ],
-            'title' => 'sometimes|required|string|max:255',
+            'task_definition_id' => ['nullable', 'integer', 'exists:task_definitions,id'],
             'due_at' => 'sometimes|required|date',
             'start_at' => 'nullable|date',
             'weight_label' => ['nullable', Rule::in(array_keys(self::TASK_WEIGHTS))],
@@ -389,6 +394,11 @@ class TaskController extends Controller
         if ($task->status === 'approved' || $task->evidences->isNotEmpty()) {
             return response()->json(['message' => 'Tugas yang sudah berjalan atau disetujui tidak dapat diedit.'], 400);
         }
+
+        $taskDefinition = $this->taskDefinitionForUpdate(
+            $request->input('task_definition_id'),
+            $task->task_definition_id
+        );
 
         $dueAt = $request->filled('due_at') ? Carbon::parse($request->due_at) : Carbon::parse($task->due_at);
         $isTodayTask = $dueAt->isSameDay(Carbon::today());
@@ -416,15 +426,19 @@ class TaskController extends Controller
             return response()->json(['message' => 'Tanggal pekerjaan hanya dapat dibuat dalam tujuh hari berjalan.'], 422);
         }
 
+
+        $this->validateRevisionWindow($employer, $dueAt);
+        $approvalDeadline = $this->approvalDeadlineFor($employer, $dueAt);
+
         $weightLabel = $this->normalizeWeightLabel($request->input('weight_label', $task->weight_label));
 
         $task->fill([
-            'work_station_id' => $request->input('work_station_id', $task->work_station_id),
-            'title' => $request->input('title', $task->title),
+            ...($taskDefinition ? $this->taskIdentityAttributes($taskDefinition) : []),
             'description' => $request->input('note', $task->description),
             'start_at' => $startAt,
             'due_at' => $dueAt,
-            'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
+            'approval_deadline_at' => $approvalDeadline,
+            'revision_deadline_at' => $this->revisionDeadlineFor($approvalDeadline),
             ...$this->taskWeightAttributes($weightLabel),
         ])->save();
 
@@ -449,11 +463,7 @@ class TaskController extends Controller
         $request->validate([
             'crew_ids' => 'required|array|min:1|max:200',
             'crew_ids.*' => 'required|exists:users,username',
-            'work_station_id' => [
-                'nullable',
-                Rule::exists('work_stations', 'id')->where('active', true),
-            ],
-            'title' => 'required|string|max:255',
+            'task_definition_id' => ['nullable', 'integer', 'exists:task_definitions,id'],
             'note' => 'nullable|string|max:5000',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
@@ -470,6 +480,18 @@ class TaskController extends Controller
         if ($employer->role_type !== 'supervisor' || $batch->created_by !== $employer->username) {
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
+
+        $taskDefinition = $this->taskDefinitionForUpdate(
+            $request->input('task_definition_id'),
+            $batch->task_definition_id
+        );
+        $taskIdentity = $taskDefinition
+            ? $this->taskIdentityAttributes($taskDefinition)
+            : [
+                'task_definition_id' => $batch->task_definition_id,
+                'work_station_id' => $batch->work_station_id,
+                'title' => $batch->title,
+            ];
 
         $batchTasks = Task::where('assignment_batch_id', $batch->id)->with('evidences')->get();
         $previousCrewIds = $batchTasks->pluck('employee_id')->unique();
@@ -495,7 +517,6 @@ class TaskController extends Controller
         }
 
         $weightLabel = $this->normalizeWeightLabel($request->input('weight_label'));
-        $workStationId = $request->filled('work_station_id') ? $request->input('work_station_id') : null;
         $repeatDays = collect($request->input('repeat_days', []))
             ->map(fn ($day) => (int) $day)
             ->unique()
@@ -528,6 +549,8 @@ class TaskController extends Controller
                 continue;
             }
 
+            $this->validateRevisionWindow($employer, $dueAt);
+
             $dates[] = [$startAt, $dueAt];
         }
 
@@ -549,16 +572,15 @@ class TaskController extends Controller
             return response()->json(['message' => 'Semua tugas pada jadwal ini sudah berjalan atau memiliki bukti dan tidak dapat diubah.'], 400);
         }
 
-        $tasks = DB::transaction(function () use ($batch, $request, $employer, $validCrewIds, $weightLabel, $workStationId, $repeatDays, $startDate, $endDate, $dates, $editableTaskIds, $protectedTaskKeys) {
+        $tasks = DB::transaction(function () use ($batch, $request, $employer, $validCrewIds, $weightLabel, $taskIdentity, $repeatDays, $startDate, $endDate, $dates, $editableTaskIds, $protectedTaskKeys) {
             if ($editableTaskIds->isNotEmpty()) {
                 Task::whereIn('id', $editableTaskIds)->delete();
             }
 
             $batch->update([
                 'assignment_type' => $startDate->isSameDay($endDate) && $repeatDays->isEmpty() ? 'broadcast' : 'recurring',
-                'title' => $request->title,
+                ...$taskIdentity,
                 'description' => $request->note,
-                'work_station_id' => $workStationId,
                 'start_date' => $startDate->toDateString(),
                 'end_date' => $endDate->toDateString(),
                 'start_time' => $request->start_time,
@@ -575,17 +597,18 @@ class TaskController extends Controller
                         continue;
                     }
 
+                    $approvalDeadline = $this->approvalDeadlineFor($employer, $dueAt);
                     $created->push(Task::create([
                         'employee_id' => $crewId,
                         'employer_id' => $employer->username,
-                        'work_station_id' => $workStationId,
+                        ...$taskIdentity,
                         'assignment_batch_id' => $batch->id,
                         'assignment_type' => $batch->assignment_type,
-                        'title' => $request->title,
                         'description' => $request->note,
                         'start_at' => $startAt,
                         'due_at' => $dueAt,
-                        'approval_deadline_at' => $this->approvalDeadlineFor($employer, $dueAt),
+                        'approval_deadline_at' => $approvalDeadline,
+                        'revision_deadline_at' => $this->revisionDeadlineFor($approvalDeadline),
                         ...$this->taskWeightAttributes($weightLabel),
                         'status' => 'pending',
                     ]));
@@ -674,7 +697,11 @@ class TaskController extends Controller
             return response()->json(['message' => 'Tugas yang sudah disetujui tidak dapat dihapus. Batalkan persetujuan terlebih dahulu jika perlu menghapus.'], 400);
         }
 
-        if ($this->isTaskLocked($task)) {
+        if ($this->usesRevisionWorkflow($task) && !($task->review_summary['can_delete'] ?? false)) {
+            return response()->json(['message' => 'Tugas yang sudah final atau berada di luar batas waktu review tidak dapat dihapus.'], 400);
+        }
+
+        if (!$this->usesRevisionWorkflow($task) && $this->isTaskLocked($task)) {
             return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan tidak dapat dihapus.'], 400);
         }
 
@@ -712,7 +739,7 @@ class TaskController extends Controller
     )
     {
         $request->validate([
-            'status' => 'required|in:approved,rejected,pending',
+            'status' => 'required|in:approved,pending',
             'action_date' => 'nullable|date_format:Y-m-d',
         ]);
 
@@ -733,12 +760,66 @@ class TaskController extends Controller
             return response()->json(['message' => 'Batas waktu approval tugas sudah berakhir.'], 400);
         }
 
-        $task->status = $request->status;
-        $task->save();
+        $task = DB::transaction(function () use ($id, $request, $reviewer, $taskAccess) {
+            $lockedTask = Task::lockForUpdate()->findOrFail($id);
+
+            if (!$taskAccess->canReviewTask($reviewer, $lockedTask, Carbon::today())) {
+                abort(403, 'Tidak memiliki akses untuk memeriksa tugas ini.');
+            }
+
+            if ($this->isApprovalLocked($lockedTask)) {
+                throw ValidationException::withMessages([
+                    'status' => ['Batas waktu approval tugas sudah berakhir.'],
+                ]);
+            }
+
+            if ($this->usesRevisionWorkflow($lockedTask)) {
+                $latestAfter = $lockedTask->evidences()
+                    ->where('type', 'after')
+                    ->whereNotNull('attempt_no')
+                    ->orderByDesc('attempt_no')
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($request->status === 'approved') {
+                    $hasBefore = $lockedTask->evidences()->where('type', 'before')->exists();
+                    if (!$hasBefore || !$latestAfter || $latestAfter->review_status !== 'pending') {
+                        throw ValidationException::withMessages([
+                            'status' => ['Tugas hanya dapat disetujui setelah bukti before dan bukti after yang menunggu pemeriksaan tersedia.'],
+                        ]);
+                    }
+
+                    $latestAfter->update([
+                        'review_status' => 'approved',
+                        'rejection_reason' => null,
+                        'reviewed_by' => $reviewer->username,
+                        'reviewed_at' => Carbon::now(),
+                        'awarded_score' => $this->scoreForAttempt((int) $latestAfter->attempt_no),
+                    ]);
+                } else {
+                    if ($lockedTask->status !== 'approved' || !$latestAfter || $latestAfter->review_status !== 'approved') {
+                        throw ValidationException::withMessages([
+                            'status' => ['Hanya tugas yang sudah disetujui yang dapat dikembalikan ke status menunggu.'],
+                        ]);
+                    }
+
+                    $latestAfter->update([
+                        'review_status' => 'pending',
+                        'reviewed_by' => null,
+                        'reviewed_at' => null,
+                        'awarded_score' => null,
+                    ]);
+                }
+            }
+
+            $lockedTask->status = $request->status;
+            $lockedTask->save();
+
+            return $lockedTask->load('evidences');
+        });
 
         $statusMessages = [
             'approved' => ['Pekerjaan Disetujui', 'Pekerjaan "' . $task->title . '" telah disetujui oleh supervisor.'],
-            'rejected' => ['Pekerjaan Ditolak', 'Pekerjaan "' . $task->title . '" ditolak. Periksa kembali hasil pekerjaan Anda.'],
             'pending' => ['Status Pekerjaan Diperbarui', 'Persetujuan pekerjaan "' . $task->title . '" dibatalkan dan kembali menunggu pemeriksaan.'],
         ];
         [$notificationTitle, $notificationMessage] = $statusMessages[$request->status];
@@ -759,7 +840,106 @@ class TaskController extends Controller
 
         $this->refreshApprovalNotification($task->employer_id);
 
-        return response()->json($task);
+        return response()->json($task->load('evidences'));
+    }
+
+    public function rejectEvidence(
+        Request $request,
+        $id,
+        SupervisorTaskAccessService $taskAccess
+    ) {
+        $request->validate([
+            'note' => 'required|string|max:1000',
+            'action_date' => 'nullable|date_format:Y-m-d',
+        ]);
+
+        $task = Task::findOrFail($id);
+        $reviewer = Auth::user();
+
+        if (!$reviewer || !$taskAccess->canReviewTask($reviewer, $task, Carbon::today())) {
+            return response()->json([
+                'message' => 'Tidak memiliki akses. Hanya pemberi tugas atau supervisor cadangan yang sedang aktif yang dapat menolak bukti tugas.'
+            ], 403);
+        }
+
+        if ($response = $this->rejectNonTodayActionDate($request, $task)) {
+            return $response;
+        }
+
+        if (!$this->usesRevisionWorkflow($task)) {
+            return response()->json(['message' => 'Alur revisi tidak diterapkan pada tugas lama ini.'], 422);
+        }
+
+        $task = DB::transaction(function () use ($id, $request, $reviewer, $taskAccess) {
+            $lockedTask = Task::lockForUpdate()->findOrFail($id);
+
+            if (!$taskAccess->canReviewTask($reviewer, $lockedTask, Carbon::today())) {
+                abort(403, 'Tidak memiliki akses untuk memeriksa tugas ini.');
+            }
+
+            if ($lockedTask->status === 'approved') {
+                throw ValidationException::withMessages([
+                    'status' => ['Tugas yang sudah disetujui harus dibatalkan ceklisnya sebelum bukti dapat ditolak.'],
+                ]);
+            }
+
+            $latestAfter = $lockedTask->evidences()
+                ->where('type', 'after')
+                ->whereNotNull('attempt_no')
+                ->orderByDesc('attempt_no')
+                ->lockForUpdate()
+                ->first();
+
+            if (!$latestAfter || $latestAfter->review_status !== 'pending') {
+                throw ValidationException::withMessages([
+                    'status' => ['Tidak ada bukti after yang sedang menunggu pemeriksaan.'],
+                ]);
+            }
+
+            $maxAttempts = (int) config('task_review.max_after_attempts', 3);
+            $attemptNo = (int) $latestAfter->attempt_no;
+            $rejectDeadline = $attemptNo >= $maxAttempts
+                ? Carbon::parse($lockedTask->approval_deadline_at)
+                : Carbon::parse($lockedTask->revision_deadline_at)
+                    ->subMinutes((int) config('task_review.minimum_revision_window_minutes', 30));
+
+            if (Carbon::now()->gt($rejectDeadline)) {
+                throw ValidationException::withMessages([
+                    'status' => [$attemptNo >= $maxAttempts
+                        ? 'Batas waktu keputusan akhir sudah berakhir.'
+                        : 'Waktu yang tersisa tidak cukup untuk memberikan kesempatan revisi.'],
+                ]);
+            }
+
+            $latestAfter->update([
+                'review_status' => 'rejected',
+                'rejection_reason' => trim($request->note),
+                'reviewed_by' => $reviewer->username,
+                'reviewed_at' => Carbon::now(),
+                'awarded_score' => 0,
+            ]);
+            $lockedTask->update(['status' => 'rejected']);
+
+            return $lockedTask->load('evidences');
+        });
+
+        app(UserNotificationService::class)->createAndPush(
+            $task->employee_id,
+            'task_rejected',
+            'Revisi Pekerjaan',
+            'Bukti pekerjaan "' . $task->title . '" ditolak: ' . trim($request->note),
+            null,
+            [
+                'task_id' => $task->id,
+                'status' => $task->status,
+                'url' => '/',
+                'tag' => 'task-rejected-' . $task->id . '-' . optional($task->evidences->where('type', 'after')->sortByDesc('attempt_no')->first())->attempt_no,
+            ]
+        );
+
+        $this->refreshApprovalNotification($task->employer_id);
+
+        return response()->json($task->load('evidences'));
     }
 
 
@@ -777,10 +957,6 @@ class TaskController extends Controller
 
         if ($task->status === 'approved') {
             return response()->json(['message' => 'Bukti pekerjaan yang sudah disetujui tidak dapat diubah. Batalkan persetujuan terlebih dahulu.'], 400);
-        }
-
-        if ($this->isTaskLocked($task)) {
-            return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan unggah bukti sudah dikunci.'], 400);
         }
 
         if ($this->isTaskNotStarted($task)) {
@@ -810,6 +986,14 @@ class TaskController extends Controller
             return response()->json([
                 'message' => 'Foto tidak terdeteksi atau terlalu besar (Maks 10MB).'
             ], 400);
+        }
+
+        if ($this->usesRevisionWorkflow($task)) {
+            return $this->uploadRevisionEvidence($request, $task, $authUser);
+        }
+
+        if ($this->isTaskLocked($task)) {
+            return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan unggah bukti sudah dikunci.'], 400);
         }
 
         $existingBeforeCount = $task->evidences->where('type', 'before')->count();
@@ -884,6 +1068,145 @@ class TaskController extends Controller
             return response()->json(['message' => 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.'], 500);
         }
     }
+
+    private function uploadRevisionEvidence(Request $request, Task $task, User $authUser)
+    {
+        if ($request->hasFile('after') && count($request->file('after')) > 1) {
+            return response()->json([
+                'message' => 'Setiap kesempatan revisi hanya dapat mengunggah 1 foto after.'
+            ], 422);
+        }
+
+        $storedPaths = [];
+
+        try {
+            $task = DB::transaction(function () use ($request, $task, &$storedPaths) {
+                $lockedTask = Task::with('evidences')->lockForUpdate()->findOrFail($task->id);
+
+                if ($lockedTask->status === 'approved') {
+                    throw ValidationException::withMessages([
+                        'status' => ['Bukti pekerjaan yang sudah disetujui tidak dapat diubah. Batalkan persetujuan terlebih dahulu.'],
+                    ]);
+                }
+
+                $now = Carbon::now();
+                $dueAt = Carbon::parse($lockedTask->due_at);
+                $revisionDeadline = Carbon::parse($lockedTask->revision_deadline_at);
+                $beforeEvidences = $lockedTask->evidences->where('type', 'before');
+                $afterEvidences = $lockedTask->evidences
+                    ->where('type', 'after')
+                    ->whereNotNull('attempt_no')
+                    ->sortBy('attempt_no');
+                $latestAfter = $afterEvidences->last();
+
+                if ($request->hasFile('before')) {
+                    if ($now->gt($dueAt)) {
+                        throw ValidationException::withMessages([
+                            'before' => ['Bukti before tidak dapat diunggah setelah tenggat tugas.'],
+                        ]);
+                    }
+
+                    if ($beforeEvidences->isNotEmpty()) {
+                        throw ValidationException::withMessages([
+                            'before' => ['Bukti sebelum bekerja dibatasi maksimal 1 foto.'],
+                        ]);
+                    }
+                }
+
+                $nextAttempt = null;
+                if ($request->hasFile('after')) {
+                    $maxAttempts = (int) config('task_review.max_after_attempts', 3);
+
+                    if (!$latestAfter) {
+                        if ($now->gt($dueAt)) {
+                            throw ValidationException::withMessages([
+                                'after' => ['Bukti after pertama tidak dapat diunggah setelah tenggat tugas.'],
+                            ]);
+                        }
+                        $nextAttempt = 1;
+                    } else {
+                        if ($latestAfter->review_status !== 'rejected') {
+                            throw ValidationException::withMessages([
+                                'after' => ['Bukti after berikutnya hanya dapat diunggah setelah bukti sebelumnya ditolak.'],
+                            ]);
+                        }
+
+                        $nextAttempt = (int) $latestAfter->attempt_no + 1;
+                        if ($nextAttempt > $maxAttempts) {
+                            throw ValidationException::withMessages([
+                                'after' => ['Kesempatan unggah bukti after sudah mencapai batas maksimal.'],
+                            ]);
+                        }
+
+                        if ($now->gt($revisionDeadline)) {
+                            throw ValidationException::withMessages([
+                                'after' => ['Batas waktu unggah revisi sudah berakhir.'],
+                            ]);
+                        }
+                    }
+                }
+
+                if ($request->hasFile('before')) {
+                    $file = $request->file('before')[0];
+                    $path = $file->store('tasks', 'public');
+                    $storedPaths[] = $path;
+                    $lockedTask->evidences()->create([
+                        'file_path' => $path,
+                        'type' => 'before',
+                    ]);
+                }
+
+                if ($request->hasFile('after')) {
+                    $file = $request->file('after')[0];
+                    $path = $file->store('tasks', 'public');
+                    $storedPaths[] = $path;
+                    $lockedTask->evidences()->create([
+                        'file_path' => $path,
+                        'type' => 'after',
+                        'attempt_no' => $nextAttempt,
+                        'review_status' => 'pending',
+                    ]);
+                    $lockedTask->update(['status' => 'pending']);
+                }
+
+                return $lockedTask->load('evidences');
+            });
+        } catch (ValidationException $exception) {
+            foreach ($storedPaths as $path) {
+                Storage::disk('public')->delete($path);
+            }
+            throw $exception;
+        } catch (Throwable $exception) {
+            foreach ($storedPaths as $path) {
+                Storage::disk('public')->delete($path);
+            }
+            report($exception);
+
+            return response()->json(['message' => 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.'], 500);
+        }
+
+        if ($authUser->username === $task->employee_id && $request->hasFile('after')) {
+            $pendingApprovalCount = $this->pendingApprovalCount($task->employer_id);
+
+            app(UserNotificationService::class)->createOrRefreshAggregateAndPush(
+                $task->employer_id,
+                'approval-needed-' . $task->employer_id,
+                'approval_needed',
+                'Persetujuan',
+                'Anda memiliki ' . $pendingApprovalCount . ' pekerjaan yang membutuhkan persetujuan saat ini.',
+                'Pekerjaan telah dilakukan oleh bawahan Anda.',
+                [
+                    'task_id' => $task->id,
+                    'crew_id' => $task->employee_id,
+                    'url' => '/',
+                    'tag' => 'approval-needed-' . $task->employer_id,
+                ]
+            );
+        }
+
+        return response()->json($task->load('evidences'));
+    }
+
     public function readGuide(Request $request)
     {
         $request->validate([
@@ -965,6 +1288,53 @@ class TaskController extends Controller
             ->exists();
     }
 
+    private function activeTaskDefinition(int $id): TaskDefinition
+    {
+        $taskDefinition = TaskDefinition::with('taskArea.workStation')->find($id);
+
+        if (!$taskDefinition || !$this->isTaskDefinitionActive($taskDefinition)) {
+            throw ValidationException::withMessages([
+                'task_definition_id' => ['Kategori, area, atau master task sudah tidak aktif.'],
+            ]);
+        }
+
+        return $taskDefinition;
+    }
+
+    private function taskDefinitionForUpdate(mixed $requestedId, mixed $currentId): ?TaskDefinition
+    {
+        if (!$requestedId) {
+            return null;
+        }
+
+        $taskDefinition = TaskDefinition::with('taskArea.workStation')->find((int) $requestedId);
+        $isCurrentDefinition = $currentId && (int) $currentId === (int) $requestedId;
+
+        if (!$taskDefinition || (!$isCurrentDefinition && !$this->isTaskDefinitionActive($taskDefinition))) {
+            throw ValidationException::withMessages([
+                'task_definition_id' => ['Kategori, area, atau master task sudah tidak aktif.'],
+            ]);
+        }
+
+        return $taskDefinition;
+    }
+
+    private function isTaskDefinitionActive(TaskDefinition $taskDefinition): bool
+    {
+        return $taskDefinition->active
+            && $taskDefinition->taskArea?->active
+            && $taskDefinition->taskArea?->workStation?->active;
+    }
+
+    private function taskIdentityAttributes(TaskDefinition $taskDefinition): array
+    {
+        return [
+            'task_definition_id' => $taskDefinition->id,
+            'work_station_id' => $taskDefinition->taskArea->work_station_id,
+            'title' => $taskDefinition->title,
+        ];
+    }
+
     private function findWorkStationByRole(string $role): ?WorkStation
     {
         return WorkStation::where('active', true)
@@ -1011,6 +1381,11 @@ class TaskController extends Controller
             : $this->approvalDeadlineFor($task->createdBy, Carbon::parse($task->due_at));
 
         return $deadline->isPast();
+    }
+
+    private function usesRevisionWorkflow(Task $task): bool
+    {
+        return $task->revision_deadline_at !== null;
     }
 
     private function isTaskNotStarted(Task $task): bool
@@ -1061,11 +1436,39 @@ class TaskController extends Controller
             : $deadline;
     }
 
+    private function revisionDeadlineFor(Carbon $approvalDeadline): Carbon
+    {
+        return $approvalDeadline->copy()->subMinutes(
+            (int) config('task_review.revision_deadline_offset_minutes', 30)
+        );
+    }
+
+    private function validateRevisionWindow(User $supervisor, Carbon $dueAt): void
+    {
+        if ($supervisor->is_back_office) {
+            return;
+        }
+
+        $latestDueAt = Carbon::parse(
+            $dueAt->toDateString() . ' ' . config('task_review.normal_latest_due_time', '22:59:59')
+        );
+
+        if ($dueAt->gt($latestDueAt)) {
+            throw ValidationException::withMessages([
+                'due_at' => ['Tenggat tugas non-back-office maksimal pukul 22.59 agar tersedia waktu untuk reject dan revisi.'],
+            ]);
+        }
+    }
+
+    private function scoreForAttempt(int $attemptNo): float
+    {
+        return (float) config('task_review.attempt_scores.' . $attemptNo, 0);
+    }
+
     private function pendingApprovalCount(string $supervisorId): int
     {
         return Task::where('employer_id', $supervisorId)
-            ->whereIn('status', ['pending', 'rejected'])
-            ->whereHas('evidences')
+            ->awaitingReview()
             ->count();
     }
 

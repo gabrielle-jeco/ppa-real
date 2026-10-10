@@ -17,8 +17,10 @@ class User extends Authenticatable
         'email',
         'password',
         'job_level_id',
+        'division_id',
         'role_id',
         'initial_store',
+        'cashier_id',
         'active',
         'is_back_office',
     ];
@@ -91,6 +93,11 @@ class User extends Authenticatable
         return $this->belongsTo(JobLevel::class);
     }
 
+    public function division()
+    {
+        return $this->belongsTo(Division::class);
+    }
+
     public function accountRole()
     {
         return $this->belongsTo(Role::class, 'role_id');
@@ -146,6 +153,11 @@ class User extends Authenticatable
     public function tasksCreated()
     {
         return $this->hasMany(Task::class, 'employer_id', 'username');
+    }
+
+    public function pushSellingCampaignsCreated()
+    {
+        return $this->hasMany(PushSellingCampaign::class, 'created_by', 'username');
     }
 
     public function attendances()

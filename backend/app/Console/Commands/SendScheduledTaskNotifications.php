@@ -82,10 +82,9 @@ class SendScheduledTaskNotifications extends Command
     private function sendApprovalReminders(UserNotificationService $notifications, Carbon $now): void
     {
         Task::query()
-            ->whereIn('status', ['pending', 'rejected'])
+            ->awaitingReview()
             ->whereNotNull('approval_deadline_at')
             ->whereBetween('approval_deadline_at', [$now, $now->copy()->addHours(2)])
-            ->whereHas('evidences')
             ->orderBy('id')
             ->chunkById(200, function ($tasks) use ($notifications) {
                 foreach ($tasks as $task) {
