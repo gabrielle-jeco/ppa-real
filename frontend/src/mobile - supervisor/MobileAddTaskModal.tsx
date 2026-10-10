@@ -4,6 +4,7 @@ import { X, Check } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
 import useModalTransition from '../utils/useModalTransition';
 import { featureFlags } from '../utils/featureFlags';
+import TaskCatalogFields from '../general/TaskCatalogFields';
 
 interface MobileAddTaskModalProps {
     isOpen: boolean;
@@ -17,18 +18,19 @@ interface MobileAddTaskModalProps {
 
 export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false, initialTask, submitLabel = 'Buat Pekerjaan' }: MobileAddTaskModalProps) {
     const initializedKeyRef = useRef<string | null>(null);
-    const [title, setTitle] = useState('');
     const [date, setDate] = useState(defaultDate || '');
     const [startTime, setStartTime] = useState('');
     const [dueTime, setDueTime] = useState('');
     const [note, setNote] = useState('');
     const [workStationId, setWorkStationId] = useState('');
+    const [taskAreaId, setTaskAreaId] = useState('');
+    const [taskDefinitionId, setTaskDefinitionId] = useState('');
     const [weightLabel, setWeightLabel] = useState('mudah');
-    const [workStations, setWorkStations] = useState<any[]>([]);
     const { shouldRender, animateIn, contentRef } = useModalTransition(isOpen);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
     const isTodayTask = date === minTaskDate;
+    const shouldShowCatalog = requireCategory || Boolean(initialTask);
 
     useEffect(() => {
         const modalKey = initialTask?.id ? `edit:${initialTask.id}` : `create:${defaultDate || ''}`;
@@ -36,50 +38,39 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
             if (initializedKeyRef.current === modalKey) return;
             initializedKeyRef.current = modalKey;
             if (initialTask) {
-                setTitle(initialTask.title || '');
                 setDate(toDateFieldValue(initialTask.due_at, defaultDate || ''));
                 setStartTime(toTimeFieldValue(initialTask.start_at, toTimeFieldValue(initialTask.due_at, new Date().toTimeString().slice(0, 5))));
                 setDueTime(toTimeFieldValue(initialTask.due_at));
                 setNote(initialTask.note || initialTask.description || '');
                 setWorkStationId(initialTask.work_station_id ? String(initialTask.work_station_id) : '');
+                setTaskAreaId('');
+                setTaskDefinitionId(initialTask.task_definition_id ? String(initialTask.task_definition_id) : '');
                 setWeightLabel(initialTask.weight_label || 'mudah');
             } else {
                 if (defaultDate) setDate(defaultDate);
                 setStartTime(new Date().toTimeString().slice(0, 5));
                 setDueTime('');
+                setWorkStationId('');
+                setTaskAreaId('');
+                setTaskDefinitionId('');
                 setWeightLabel('mudah');
             }
         } else {
             initializedKeyRef.current = null;
             const resetTimer = window.setTimeout(() => {
-                setTitle('');
                 setDate(defaultDate || '');
                 setStartTime('');
                 setDueTime('');
                 setNote('');
                 setWorkStationId('');
+                setTaskAreaId('');
+                setTaskDefinitionId('');
                 setWeightLabel('mudah');
             }, 300);
 
             return () => window.clearTimeout(resetTimer);
         }
     }, [isOpen, defaultDate, initialTask]);
-
-    useEffect(() => {
-        if (!isOpen || !requireCategory) return;
-
-        const fetchWorkStations = async () => {
-            const res = await fetch('/api/work-stations', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-            });
-
-            if (res.ok) {
-                setWorkStations(await res.json());
-            }
-        };
-
-        fetchWorkStations();
-    }, [isOpen, requireCategory]);
 
     if (!shouldRender) return null;
 
@@ -110,12 +101,11 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
             return;
         }
         onSubmit({
-            title,
+            task_definition_id: taskDefinitionId || null,
             start_at: startAt,
             due_at: dueAt,
             ...(featureFlags.taskWeight ? { weight_label: weightLabel } : {}),
             note,
-            ...(requireCategory ? { work_station_id: workStationId } : {}),
         });
         handleClose();
     };
@@ -148,35 +138,19 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Judul</label>
-                        <input
-                            type="text"
-                            placeholder="Contoh: Cek Kebersihan"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-5 py-4 text-gray-800 font-medium transition-all"
-                            required
+                    {shouldShowCatalog && (
+                        <TaskCatalogFields
+                            enabled={isOpen}
+                            value={{ workStationId, taskAreaId, taskDefinitionId }}
+                            onChange={(selection) => {
+                                setWorkStationId(selection.workStationId);
+                                setTaskAreaId(selection.taskAreaId);
+                                setTaskDefinitionId(selection.taskDefinitionId);
+                            }}
+                            accent="blue"
+                            allowLegacy={Boolean(initialTask && !initialTask.task_definition_id)}
+                            legacyTitle={initialTask?.title || ''}
                         />
-                    </div>
-
-                    {requireCategory && (
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Kategori</label>
-                            <select
-                                value={workStationId}
-                                onChange={(e) => setWorkStationId(e.target.value)}
-                                className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-5 py-4 text-gray-800 font-medium transition-all capitalize"
-                                required
-                            >
-                                <option value="">Pilih work station</option>
-                                {workStations.map((station) => (
-                                    <option key={station.id} value={station.id}>
-                                        {station.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
                     )}
 
                     <div className="grid grid-cols-2 gap-4">

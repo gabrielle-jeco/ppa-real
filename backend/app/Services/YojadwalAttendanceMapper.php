@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Attendance;
 use Carbon\Carbon;
 
 class YojadwalAttendanceMapper
@@ -88,8 +89,9 @@ class YojadwalAttendanceMapper
             return 'A';
         }
 
-        if (in_array($rawStatus, ['h', 'hadir', 'present', 'masuk'], true)) {
-            return 'H';
+        $canonicalStatus = Attendance::normalizeStatusCode($rawStatus);
+        if (in_array($canonicalStatus, ['H', 'O', 'OP', 'CT'], true)) {
+            return $canonicalStatus;
         }
 
         if (in_array($rawStatus, ['t', 'tl', 'telat', 'terlambat', 'late'], true)) {
@@ -102,14 +104,6 @@ class YojadwalAttendanceMapper
 
         if (in_array($rawStatus, ['s', 'sd', 'ps', 'sakit', 'sick', 'correction'], true)) {
             return 'S';
-        }
-
-        if (in_array($rawStatus, ['c', 'ct', 'cuti', 'leave'], true)) {
-            return 'C';
-        }
-
-        if (in_array($rawStatus, ['l', 'libur', 'off', 'holiday'], true)) {
-            return 'L';
         }
 
         return strtoupper(substr($rawStatus, 0, 1));

@@ -83,7 +83,7 @@ export default function MobileCrewEvaluation({ onBack, user }: MobileCrewEvaluat
     const isCurrentSelectedMonth =
         selectedDate.getFullYear() === new Date().getFullYear() &&
         selectedDate.getMonth() === new Date().getMonth();
-    const activityMonitorTitle = `${selectedDate.toLocaleString('id-ID', { month: 'long' })} Monitoring Aktivitas${isCurrentSelectedMonth ? ' (Bulanan)' : ''}`;
+    const activityMonitorTitle = `${selectedDate.toLocaleString('id-ID', { month: 'long' })} Monitor Aktivitas${isCurrentSelectedMonth ? ' Bulanan' : ''}`;
 
     return (
         <CrewLayout

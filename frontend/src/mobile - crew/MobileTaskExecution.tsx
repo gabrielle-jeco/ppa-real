@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Camera, X, Image as ImageIcon } from 'lucide-react';
 import MobileEvidenceListModal from './MobileEvidenceListModal';
 import MobileCrewTaskPreview from './MobileCrewTaskPreview';
@@ -20,12 +20,6 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
     const isBeforeStart = isTaskNotStarted(task);
     const viewDate = task._selected_date;
     const isNonTodayView = Boolean(viewDate && viewDate !== new Date().toLocaleDateString('en-CA'));
-    const isReadOnly = readOnly || task.status === 'approved' || isPastDue || isBeforeStart || isNonTodayView;
-
-
-    // View States
-    const [showHistory, setShowHistory] = useState(false); // Acts as "Preview Mode"
-    const [showEvidenceList, setShowEvidenceList] = useState(isReadOnly); // Acts as "List Mode" (Init with ReadOnly)
 
     const getInitialPreview = (imgUrl: string | null) => {
         if (!imgUrl) return null;
@@ -34,8 +28,21 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
 
     const beforeEvidences = task.evidences?.filter((e: any) => e.type === 'before') || [];
     const afterEvidences = task.evidences?.filter((e: any) => e.type === 'after') || [];
-    const canUploadBefore = !isReadOnly && beforeEvidences.length === 0;
-    const canUploadAfter = !isReadOnly && afterEvidences.length < 3;
+    const baseReadOnly = readOnly || task.status === 'approved' || isBeforeStart || isNonTodayView;
+    const canUploadBefore = !baseReadOnly && !isPastDue && beforeEvidences.length === 0;
+    const canUploadAfter = !baseReadOnly && (task.review_summary
+        ? task.review_summary.can_upload_after
+        : !isPastDue && afterEvidences.length < 3);
+    const isReadOnly = baseReadOnly || (!canUploadBefore && !canUploadAfter);
+
+
+    // View States
+    const [showHistory, setShowHistory] = useState(false); // Acts as "Preview Mode"
+    const [showEvidenceList, setShowEvidenceList] = useState(isReadOnly); // Acts as "List Mode" (Init with ReadOnly)
+
+    useEffect(() => {
+        if (isReadOnly) setShowEvidenceList(true);
+    }, [isReadOnly]);
 
     const beforePreview = beforeEvidences.length > 0 ? getInitialPreview(beforeEvidences[beforeEvidences.length - 1].file_path) : null;
     const afterPreview = afterEvidences.length > 0 ? getInitialPreview(afterEvidences[afterEvidences.length - 1].file_path) : null;
@@ -144,6 +151,14 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                             </button>
                         </div>
 
+                        {task.review_summary?.latest_after_status === 'rejected' && (
+                            <div className="mb-5 rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-700">
+                                <p className="font-bold">Bukti after ditolak</p>
+                                <p className="mt-1">{afterEvidences[afterEvidences.length - 1]?.rejection_reason}</p>
+                                {canUploadAfter && <p className="mt-2 font-semibold">Silakan unggah revisi attempt berikutnya.</p>}
+                            </div>
+                        )}
+
                         {/* Upload Grid */}
                         <div className="grid grid-cols-2 gap-4 mb-6">
                             {/* Before Button Slot */}
@@ -249,7 +264,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                     setInitialPreviewIndex(index);
                     setShowHistory(true);
                 }}
-                onDelete={handleDeleteEvidence}
+                onDelete={task.review_summary ? undefined : handleDeleteEvidence}
                 readOnly={isReadOnly}
             />
 

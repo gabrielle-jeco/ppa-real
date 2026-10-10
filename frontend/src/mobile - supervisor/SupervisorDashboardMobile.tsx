@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, CheckSquare, FileText, BarChart2, Users, MapPin, Star } from 'lucide-react';
+import { LogOut, CheckSquare, FileText, BarChart2, Users, MapPin, ShoppingBasket, Star } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import { formatDisplayNumber } from '../general/numberFormat';
 
@@ -129,6 +129,11 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                     icon={<Users size={32} className="text-blue-600" />}
                     label="Karyawan"
                     onClick={() => onNavigate('EMPLOYEE_LIST')}
+                />
+                <MenuCard
+                    icon={<ShoppingBasket size={32} className="text-blue-600" />}
+                    label="Kasir"
+                    onClick={() => onNavigate('CASHIER')}
                 />
             </div>
 

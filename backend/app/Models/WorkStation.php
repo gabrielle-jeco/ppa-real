@@ -20,4 +20,11 @@ class WorkStation extends Model
     {
         return $this->hasMany(ActivityLog::class);
     }
+
+    public function taskAreas()
+    {
+        return $this->hasMany(TaskArea::class)
+            ->orderBy('sort_order')
+            ->orderBy('name');
+    }
 }

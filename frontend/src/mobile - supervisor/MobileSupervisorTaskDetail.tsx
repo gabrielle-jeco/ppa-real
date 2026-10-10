@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Camera, X, Image as ImageIcon } from 'lucide-react';
 import MobileEvidenceListModal from '../mobile - crew/MobileEvidenceListModal';
 import MobileCrewTaskPreview from '../mobile - crew/MobileCrewTaskPreview';
@@ -20,12 +20,6 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
     const isApproved = task.status === 'approved';
     const isPastDue = new Date(task.due_at) < new Date();
     const isBeforeStart = isTaskNotStarted(task);
-    const isReadOnly = readOnly || isApproved || isPastDue || isBeforeStart;
-
-
-    // View States
-    const [showEvidenceList, setShowEvidenceList] = useState(isReadOnly);
-    const [showHistory, setShowHistory] = useState(false); // Preview
 
     // Modal State
     const [showActionModal, setShowActionModal] = useState(false);
@@ -43,6 +37,21 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
 
     const beforeEvidences = task.evidences?.filter((e: any) => e.type === 'before') || [];
     const afterEvidences = task.evidences?.filter((e: any) => e.type === 'after') || [];
+    const baseReadOnly = readOnly || isApproved || isBeforeStart;
+    const canUploadBefore = !baseReadOnly && !isPastDue && beforeEvidences.length === 0;
+    const canUploadAfter = !baseReadOnly && (task.review_summary
+        ? task.review_summary.can_upload_after
+        : !isPastDue && afterEvidences.length < 3);
+    const isReadOnly = baseReadOnly || (!canUploadBefore && !canUploadAfter);
+
+
+    // View States
+    const [showEvidenceList, setShowEvidenceList] = useState(isReadOnly);
+    const [showHistory, setShowHistory] = useState(false); // Preview
+
+    useEffect(() => {
+        if (isReadOnly) setShowEvidenceList(true);
+    }, [isReadOnly]);
 
     const beforePreview = beforeEvidences.length > 0 ? getInitialPreview(beforeEvidences[beforeEvidences.length - 1].file_path) : null;
     const afterPreview = afterEvidences.length > 0 ? getInitialPreview(afterEvidences[afterEvidences.length - 1].file_path) : null;
@@ -53,7 +62,7 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
     const [activeTab, setActiveTab] = useState<'before' | 'after'>('before');
 
     const handleSlotClick = (type: 'before' | 'after') => {
-        if (isReadOnly) return;
+        if ((type === 'before' && !canUploadBefore) || (type === 'after' && !canUploadAfter)) return;
         setActiveUploadType(type);
         setShowActionModal(true);
     };
@@ -139,6 +148,14 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
                                 <X size={20} />
                             </button>
                         </div>
+
+                        {task.review_summary?.latest_after_status === 'rejected' && (
+                            <div className="mb-5 rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-700">
+                                <p className="font-bold">Bukti after ditolak</p>
+                                <p className="mt-1">{afterEvidences[afterEvidences.length - 1]?.rejection_reason}</p>
+                                {canUploadAfter && <p className="mt-2 font-semibold">Silakan unggah revisi attempt berikutnya.</p>}
+                            </div>
+                        )}
 
                         {/* Upload Grid */}
                         <div className="grid grid-cols-2 gap-4 mb-6">
@@ -230,7 +247,7 @@ export default function MobileSupervisorTaskDetail({ task, onClose, onUpload, on
                     setInitialPreviewIndex(index);
                     setShowHistory(true);
                 }}
-                onDelete={handleDeleteEvidence}
+                onDelete={task.review_summary ? undefined : handleDeleteEvidence}
                 readOnly={isReadOnly}
             />
 

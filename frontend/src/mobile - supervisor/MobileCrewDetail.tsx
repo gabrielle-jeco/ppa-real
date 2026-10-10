@@ -8,13 +8,23 @@ import { notifyApprovalGrace } from '../utils/browserNotifications';
 import BulkTaskModal from '../general/BulkTaskModal';
 import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
-import { getTaskApprovalDeadline, isTaskNotStarted } from '../utils/taskTiming';
+import { isTaskNotStarted } from '../utils/taskTiming';
 import { featureFlags } from '../utils/featureFlags';
+import RejectTaskModal from '../general/RejectTaskModal';
+import { canDeleteTask, canRejectTask, canToggleTaskApproval } from '../utils/taskReview';
 
 interface MobileCrewDetailProps {
     crew: any;
     onNavigate: (view: any, data?: any) => void;
 }
+
+type EvaluationAvailability = {
+    can_evaluate: boolean;
+    evaluated: boolean;
+    locked_message?: string | null;
+    evaluation_period?: string;
+    target_period?: string;
+};
 
 const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate }) => {
     const [tasks, setTasks] = useState<any[]>([]); // Crew Tasks
@@ -23,6 +33,8 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
     const [isBulkTaskModalOpen, setIsBulkTaskModalOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<any>(null);
     const [editingBatch, setEditingBatch] = useState<any>(null);
+    const [evaluationAvailability, setEvaluationAvailability] = useState<EvaluationAvailability | null>(null);
+    const [rejectTask, setRejectTask] = useState<any>(null);
 
     // Preview State
     const [previewTask, setPreviewTask] = useState<any>(null);
@@ -32,6 +44,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
     useEffect(() => {
         if (crew?.id) {
             fetchTasks();
+            fetchEvaluationAvailability();
         }
     }, [crew?.id, selectedDate]);
 
@@ -60,6 +73,21 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             }
         } catch (error) {
             console.error("Gagal mengambil tugas", error);
+        }
+    };
+
+    const fetchEvaluationAvailability = async () => {
+        setEvaluationAvailability(null);
+        try {
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch(`/api/evaluations/check/${crew.id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setEvaluationAvailability(await res.json());
+            }
+        } catch (error) {
+            console.error("Gagal memeriksa periode evaluasi", error);
         }
     };
 
@@ -135,13 +163,9 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
     // UPDATE STATUS
     const handleUpdateStatus = async (taskId: number, newStatus: string) => {
-        setTasks(tasks.map(t => t.task_id === taskId ? { ...t, status: newStatus } : t));
-        if (previewTask?.task_id === taskId) {
-            setPreviewTask({ ...previewTask, status: newStatus });
-        }
         try {
             const token = localStorage.getItem('auth_token');
-            await fetch(`/api/tasks/${taskId}/status`, {
+            const response = await fetch(`/api/tasks/${taskId}/status`, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -149,10 +173,39 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 },
                 body: JSON.stringify({ status: newStatus })
             });
-        } catch (error) {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal memperbarui status.');
+            }
+            setTasks(current => current.map(item => item.task_id === taskId ? { ...item, ...data } : item));
+            if (previewTask?.task_id === taskId) setPreviewTask({ ...previewTask, ...data });
+        } catch (error: any) {
             console.error("Gagal memperbarui status", error);
+            alert(error.message || 'Gagal memperbarui status.');
             fetchTasks();
         }
+    };
+
+    const handleRejectTask = async (note: string) => {
+        if (!rejectTask) return;
+
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(`/api/tasks/${rejectTask.task_id}/reject`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ note }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal menolak pekerjaan.');
+        }
+
+        setTasks(current => current.map(item => item.task_id === rejectTask.task_id ? { ...item, ...data } : item));
+        if (previewTask?.task_id === rejectTask.task_id) setPreviewTask({ ...previewTask, ...data });
     };
 
     // TOGGLE STATUS (Checkbox)
@@ -233,7 +286,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             date.getMonth() === today.getMonth() &&
             date.getFullYear() === today.getFullYear();
     };
-    const canApproveTask = (task: any) => (getTaskApprovalDeadline(task)?.getTime() ?? 0) >= Date.now();
+    const canApproveTask = (task: any) => canToggleTaskApproval(task);
 
     const isTaskPastDue = (task: any) => new Date(task.due_at) < new Date();
     const canEditTask = (task: any) => (
@@ -260,6 +313,13 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
     const openBatchEditor = (batch: any) => {
         setIsBulkTaskModalOpen(false);
         setEditingBatch(batch);
+    };
+
+    const openEvaluation = () => {
+        onNavigate('EVALUATION', {
+            ...crew,
+            evaluation_period: evaluationAvailability?.evaluation_period || evaluationAvailability?.target_period,
+        });
     };
 
     return (
@@ -327,10 +387,10 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                 </p>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => onNavigate('EVALUATION', crew)}
-                        className="bg-blue-600 text-white text-xs font-bold py-2 px-4 rounded-full shadow-md active:scale-95 transition-transform"
+                        onClick={openEvaluation}
+                        className="bg-blue-600 text-white text-xs font-bold py-2 px-4 rounded-full shadow-md active:scale-95 transition"
                     >
-                        Evaluasi
+                        {evaluationAvailability?.evaluated ? 'Lihat Evaluasi' : 'Evaluasi'}
                     </button>
                     <button
                         onClick={() => onNavigate('HISTORY', crew)}
@@ -440,6 +500,11 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                 </div>
 
                                 <div className="flex flex-col gap-2 items-end">
+                                    {task.review_summary && (
+                                        <span className="rounded-full bg-gray-800 px-2.5 py-1 text-[10px] font-bold text-white">
+                                            {task.review_summary.potential_score}%
+                                        </span>
+                                    )}
                                     <button
                                         onClick={() => handleViewPhoto(task)}
                                         className="bg-blue-600 text-white shadow-blue-200 text-[10px] font-bold py-2 px-4 rounded-xl shadow-md active:scale-95 transition-transform flex items-center gap-1"
@@ -447,32 +512,42 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                                         <Camera size={14} />
                                         Foto
                                     </button>
-                                    {(!isPastDue && !isApproved) && (
-                                        <button
-                                            onClick={() => handleDeleteTask(task.task_id)}
-                                            className="text-red-300 hover:text-red-500 p-1 transition"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    )}
-                                    {canEditTask(task) && (
-                                        <button
-                                            onClick={() => setEditingTask(task)}
-                                            className="text-gray-400 hover:text-blue-600 p-1 transition"
-                                            title="Edit tugas"
-                                        >
-                                            <Edit3 size={16} />
-                                        </button>
-                                    )}
-                                    {featureFlags.bulkAssignment && canEditBatchTask(task) && (
-                                        <button
-                                            onClick={() => openBatchEditor(task.assignment_batch)}
-                                            className="text-gray-400 hover:text-blue-600 p-1 transition"
-                                            title="Edit Bulk Assignment"
-                                        >
-                                            <Edit3 size={16} />
-                                        </button>
-                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => canRejectTask(task) && setRejectTask(task)}
+                                        disabled={!canRejectTask(task)}
+                                        className="rounded-xl bg-red-500 px-4 py-2 text-[10px] font-bold text-white transition disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+                                    >
+                                        Reject
+                                    </button>
+                                    <div className="flex items-center gap-1">
+                                        {canDeleteTask(task) && (
+                                            <button
+                                                onClick={() => handleDeleteTask(task.task_id)}
+                                                className="text-red-300 hover:text-red-500 p-1 transition"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                        {canEditTask(task) && (
+                                            <button
+                                                onClick={() => setEditingTask(task)}
+                                                className="text-gray-400 hover:text-blue-600 p-1 transition"
+                                                title="Edit tugas"
+                                            >
+                                                <Edit3 size={16} />
+                                            </button>
+                                        )}
+                                        {featureFlags.bulkAssignment && canEditBatchTask(task) && (
+                                            <button
+                                                onClick={() => openBatchEditor(task.assignment_batch)}
+                                                className="text-gray-400 hover:text-blue-600 p-1 transition"
+                                                title="Edit Bulk Assignment"
+                                            >
+                                                <Edit3 size={16} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -482,6 +557,12 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
                     <div className="h-10"></div>
                 </div>
             </MobileDraggableSheet>
+            <RejectTaskModal
+                task={rejectTask}
+                isOpen={Boolean(rejectTask)}
+                onClose={() => setRejectTask(null)}
+                onSubmit={handleRejectTask}
+            />
         </MobileLayout>
     );
 };

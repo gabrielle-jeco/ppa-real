@@ -12,6 +12,7 @@ use App\Services\YojadwalPresenceService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 class SupervisorController extends Controller
 {
@@ -39,6 +40,7 @@ class SupervisorController extends Controller
             ->map(function ($crew) use ($user, $today, $scoringService, $taskAccess, $backupPairs) {
                 $crewStats = $scoringService->getCrewMonthlyDetailedStats($crew, Carbon::now());
                 $score = $crewStats['active_percentage'] ?? 0;
+                $dailyScore = $scoringService->getCrewDailyScoreDisplay($crew, $today);
 
                 $reviewableTasks = Task::where('employee_id', $crew->user_id)
                     ->activeOnDate($today);
@@ -70,6 +72,11 @@ class SupervisorController extends Controller
                     'location' => $crew->locations->first() ? $crew->locations->first()->name : 'N/A',
                     'status' => 'active',
                     'score' => $score,
+                    'daily_score' => $dailyScore['score'],
+                    'daily_score_date' => $dailyScore['score_date'],
+                    'daily_score_available' => $dailyScore['available'],
+                    'daily_score_availability_mode' => $dailyScore['availability_mode'],
+                    'daily_score_unavailable_reason' => $dailyScore['unavailable_reason'],
                     'activity_percentage' => $score,
                     'task_progress' => $taskProgress,
                     'has_tasks' => $hasTasks,
@@ -326,5 +333,170 @@ class SupervisorController extends Controller
             'attendance_calendar' => $detailedStats['attendance_calendar'],
             'yearly_score' => $yearlyScore,
         ]);
+    }
+
+    public function teamDailyScores(Request $request, ScoringService $scoringService)
+    {
+        $supervisor = $this->authorizedSupervisor();
+        [$startDate, $endDate] = $this->dailyReportPeriod($request);
+
+        $members = $this->permanentTeam($supervisor)->map(function (User $crew) use ($scoringService, $startDate, $endDate) {
+            $report = $scoringService->getCrewDailyReport($crew, $startDate, $endDate);
+
+            return [
+                'id' => $crew->username,
+                'name' => $crew->full_name,
+                ...$report['summary'],
+            ];
+        });
+
+        return response()->json([
+            'mode' => 'daily',
+            'period' => [
+                'start' => $startDate->toDateString(),
+                'end' => $endDate->toDateString(),
+            ],
+            'members' => $members,
+        ]);
+    }
+
+    public function teamDailyScoreDetail(string $crew, Request $request, ScoringService $scoringService)
+    {
+        $supervisor = $this->authorizedSupervisor();
+        [$startDate, $endDate] = $this->dailyReportPeriod($request);
+        $member = $this->permanentTeamMember($supervisor, $crew);
+        $report = $scoringService->getCrewDailyReport($member, $startDate, $endDate);
+
+        return response()->json([
+            'mode' => 'daily',
+            'member' => ['id' => $member->username, 'name' => $member->full_name],
+            'period' => [
+                'start' => $startDate->toDateString(),
+                'end' => $endDate->toDateString(),
+            ],
+            ...$report,
+        ]);
+    }
+
+    public function teamMonthlyScores(Request $request, ScoringService $scoringService)
+    {
+        $supervisor = $this->authorizedSupervisor();
+        [$startMonth, $endMonth] = $this->monthlyReportPeriod($request);
+
+        $members = $this->permanentTeam($supervisor)->map(function (User $crew) use ($scoringService, $startMonth, $endMonth) {
+            $report = $scoringService->getCrewMonthlyReport($crew, $startMonth, $endMonth);
+
+            return [
+                'id' => $crew->username,
+                'name' => $crew->full_name,
+                ...$report['summary'],
+            ];
+        });
+
+        return response()->json([
+            'mode' => 'monthly',
+            'period' => [
+                'start' => $startMonth->format('Y-m'),
+                'end' => $endMonth->format('Y-m'),
+            ],
+            'members' => $members,
+        ]);
+    }
+
+    public function teamMonthlyScoreDetail(string $crew, Request $request, ScoringService $scoringService)
+    {
+        $supervisor = $this->authorizedSupervisor();
+        [$startMonth, $endMonth] = $this->monthlyReportPeriod($request);
+        $member = $this->permanentTeamMember($supervisor, $crew);
+        $report = $scoringService->getCrewMonthlyReport($member, $startMonth, $endMonth);
+
+        return response()->json([
+            'mode' => 'monthly',
+            'member' => ['id' => $member->username, 'name' => $member->full_name],
+            'period' => [
+                'start' => $startMonth->format('Y-m'),
+                'end' => $endMonth->format('Y-m'),
+            ],
+            ...$report,
+        ]);
+    }
+
+    private function authorizedSupervisor(): User
+    {
+        $user = Auth::user();
+        abort_unless($user && $user->role_type === 'supervisor', 403, 'Tidak memiliki akses.');
+
+        return $user;
+    }
+
+    private function permanentTeam(User $supervisor)
+    {
+        return $supervisor->subordinateLines()
+            ->where('status', 'active')
+            ->where('relation_type', 'permanent')
+            ->with('subordinate')
+            ->get()
+            ->pluck('subordinate')
+            ->filter(fn($crew) => $crew && $crew->active)
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+    }
+
+    private function permanentTeamMember(User $supervisor, string $crew): User
+    {
+        $member = $this->permanentTeam($supervisor)->firstWhere('username', $crew);
+        abort_unless($member, 403, 'Karyawan bukan bawahan permanen aktif Anda.');
+
+        return $member;
+    }
+
+    private function dailyReportPeriod(Request $request): array
+    {
+        $validated = $request->validate([
+            'start_date' => 'required|date_format:Y-m-d',
+            'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date|before_or_equal:today',
+        ]);
+
+        $startDate = Carbon::createFromFormat('Y-m-d', $validated['start_date'])->startOfDay();
+        $endDate = Carbon::createFromFormat('Y-m-d', $validated['end_date'])->startOfDay();
+
+        if ($startDate->diffInDays($endDate) > 30) {
+            throw ValidationException::withMessages([
+                'end_date' => 'Rentang nilai harian maksimal 31 hari kalender.',
+            ]);
+        }
+
+        return [$startDate, $endDate];
+    }
+
+    private function monthlyReportPeriod(Request $request): array
+    {
+        $validated = $request->validate([
+            'start_month' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+            'end_month' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+        ]);
+
+        $startMonth = Carbon::createFromFormat('!Y-m', $validated['start_month'])->startOfMonth();
+        $endMonth = Carbon::createFromFormat('!Y-m', $validated['end_month'])->startOfMonth();
+
+        if ($endMonth->lt($startMonth)) {
+            throw ValidationException::withMessages([
+                'end_month' => 'Bulan selesai harus sama atau setelah bulan mulai.',
+            ]);
+        }
+
+        if ($endMonth->gte(Carbon::today()->startOfMonth())) {
+            throw ValidationException::withMessages([
+                'end_month' => 'Laporan bulanan hanya tersedia untuk bulan yang sudah selesai.',
+            ]);
+        }
+
+        if ($startMonth->diffInMonths($endMonth) > 11) {
+            throw ValidationException::withMessages([
+                'end_month' => 'Rentang nilai bulanan maksimal 12 bulan.',
+            ]);
+        }
+
+        return [$startMonth, $endMonth];
     }
 }

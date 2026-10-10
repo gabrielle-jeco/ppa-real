@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, CheckCircle, Circle, Home, LayoutDashboard, UserCheck, LogOut, Store, X } from 'lucide-react';
+import { Bell, CheckCircle, Circle, Home, LayoutDashboard, UserCheck, LogOut, ShoppingBasket, Store, X } from 'lucide-react';
 
 type DashboardNotification = {
     id: number;
@@ -12,8 +12,8 @@ type DashboardNotification = {
 
 interface SupervisorLayoutProps {
     children: React.ReactNode;
-    activePage: 'dashboard' | 'monitoring' | 'performance';
-    onPageChange: (page: 'dashboard' | 'monitoring' | 'performance') => void;
+    activePage: 'dashboard' | 'monitoring' | 'performance' | 'cashier';
+    onPageChange: (page: 'dashboard' | 'monitoring' | 'performance' | 'cashier') => void;
     onLogout: () => void;
 }
 
@@ -112,6 +112,15 @@ export default function SupervisorLayout({ children, activePage, onPageChange, o
                             title="Performa Saya"
                         >
                             <UserCheck size={24} />
+                        </div>
+                    </div>
+                    <div className="flex justify-center">
+                        <div
+                            onClick={() => onPageChange('cashier')}
+                            className={`p-3 rounded-xl cursor-pointer transition hover:scale-105 ${activePage === 'cashier' ? 'bg-primary text-white shadow-lg shadow-purple-200' : 'text-gray-400 hover:bg-gray-100'}`}
+                            title="Push Selling Kasir"
+                        >
+                            <ShoppingBasket size={24} />
                         </div>
                     </div>
                     <div className="flex justify-center">

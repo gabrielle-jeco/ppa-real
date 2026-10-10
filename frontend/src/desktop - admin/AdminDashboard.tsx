@@ -1,22 +1,24 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ServerClock from './ServerClock';
-import { Activity, BookOpenCheck, Check, ChevronDown, Download, FileSpreadsheet, GitBranch, LogOut, MapPinned, PanelLeftClose, PanelLeftOpen, RefreshCcw, Save, ShieldCheck, Upload, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
+import { Activity, BookOpenCheck, Calculator, Check, ChevronDown, Download, FileSpreadsheet, GitBranch, Layers3, LogOut, MapPinned, PanelLeftClose, PanelLeftOpen, RefreshCcw, Save, ShieldCheck, Upload, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
-type Tab = 'users' | 'jobLevels' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations' | 'activity';
+type Tab = 'users' | 'jobLevels' | 'divisions' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations' | 'scoring' | 'activity';
 
 const TAB_PERMISSIONS: Record<Tab, string> = {
     users: 'users_locations',
     jobLevels: 'job_levels',
+    divisions: 'divisions',
     appRoles: 'app_roles',
     hierarchy: 'reporting_lines',
     guides: 'work_stations',
     locations: 'locations',
     regionals: 'regionals',
     evaluations: 'evaluation_masters',
+    scoring: 'scoring_masters',
     activity: 'user_activity',
 };
 
-const TAB_ORDER: Tab[] = ['users', 'jobLevels', 'appRoles', 'hierarchy', 'guides', 'locations', 'regionals', 'evaluations', 'activity'];
+const TAB_ORDER: Tab[] = ['users', 'jobLevels', 'divisions', 'appRoles', 'hierarchy', 'guides', 'locations', 'regionals', 'evaluations', 'scoring', 'activity'];
 
 type JobLevel = {
     id: number;
@@ -28,6 +30,25 @@ type JobLevel = {
     visible_in_yodaily?: boolean;
     external_active?: boolean;
     synced_at?: string | null;
+};
+
+type Division = {
+    id: number;
+    code: string;
+    name: string;
+    group_code: string;
+    parent_id?: number | null;
+    parent_name?: string | null;
+    sort_order: number;
+    visible_in_yodaily: boolean;
+};
+
+type ReportingUserOption = {
+    username: string;
+    name: string;
+    role_type: string;
+    division_name?: string | null;
+    division_group_code?: string | null;
 };
 
 type AccountRole = {
@@ -64,10 +85,14 @@ type CmsUser = {
     email?: string | null;
     initial_store?: string | null;
     job_level_id?: number | null;
+    division_id?: number | null;
     role_id?: number | null;
     account_role?: string | null;
     job_level_name?: string;
     job_level_position_code?: string | null;
+    division_code?: string | null;
+    division_name?: string | null;
+    division_group_code?: string | null;
     role_type?: string;
     active: boolean;
     is_back_office: boolean;
@@ -96,8 +121,14 @@ type ReportingLine = {
     id: number;
     leader_id: string;
     leader_name?: string;
+    leader_role_type?: string;
+    leader_division_name?: string | null;
+    leader_division_group_code?: string | null;
     subordinate_id: string;
     subordinate_name?: string;
+    subordinate_role_type?: string;
+    subordinate_division_name?: string | null;
+    subordinate_division_group_code?: string | null;
     status: 'active' | 'inactive';
 };
 
@@ -126,6 +157,24 @@ type WorkStation = {
     name: string;
     guide_content: string[];
     active: boolean;
+    task_areas?: TaskArea[];
+};
+
+type TaskDefinition = {
+    id: number;
+    task_area_id: number;
+    title: string;
+    sort_order: number;
+    active: boolean;
+};
+
+type TaskArea = {
+    id: number;
+    work_station_id: number;
+    name: string;
+    sort_order: number;
+    active: boolean;
+    task_definitions: TaskDefinition[];
 };
 
 type EvaluationMaster = {
@@ -137,6 +186,22 @@ type EvaluationMaster = {
     answers: string[];
     sort_order: number;
     active: boolean;
+};
+
+type ScoringRule = {
+    id: number;
+    effective_from: string;
+    task_weight: number;
+    attendance_weight: number;
+    evaluation_weight: number;
+    attendance_target: number;
+    attendance_included_statuses: string[];
+    task_excluded_statuses: string[];
+    cashier_task_weight: number;
+    cashier_ibop_weight: number;
+    cashier_push_selling_weight: number;
+    created_by?: string | null;
+    created_at?: string | null;
 };
 
 type UserActivityRow = {
@@ -170,7 +235,9 @@ type CmsData = {
         account_roles: number;
         app_roles: number;
         evaluation_masters: number;
+        scoring_rules: number;
         job_levels: number;
+        divisions: number;
         online_users?: number;
     };
     roles: AccountRole[];
@@ -179,11 +246,14 @@ type CmsData = {
     current_account_role?: string | null;
     current_permissions: string[];
     job_levels: JobLevel[];
+    divisions: Division[];
     locations: Location[];
     work_stations: WorkStation[];
     app_job_levels: string[];
     regionals: Regional[];
     evaluation_masters: EvaluationMaster[];
+    scoring_rules: ScoringRule[];
+    attendance_statuses: string[];
 };
 
 const emptyUserForm = {
@@ -194,6 +264,7 @@ const emptyUserForm = {
     initial_store: '',
     role_id: '',
     job_level_id: '',
+    division_id: '',
     active: true,
     is_back_office: false,
     location_ids: [] as string[],
@@ -209,6 +280,43 @@ const emptyEvaluationForm = {
     active: true,
 };
 
+const emptyScoringForm = {
+    effective_from: new Date().toISOString().slice(0, 7) + '-01',
+    task_weight: '60',
+    attendance_weight: '25',
+    evaluation_weight: '15',
+    attendance_target: '25',
+    attendance_included_statuses: ['H', 'O', 'OP', 'CT'],
+    task_excluded_statuses: ['O', 'OP', 'CT'],
+    cashier_task_weight: '33.3333',
+    cashier_ibop_weight: '33.3333',
+    cashier_push_selling_weight: '33.3334',
+};
+
+const scoringFormFromRule = (rule?: ScoringRule) => rule ? {
+    effective_from: rule.effective_from,
+    task_weight: String(rule.task_weight),
+    attendance_weight: String(rule.attendance_weight),
+    evaluation_weight: String(rule.evaluation_weight),
+    attendance_target: String(rule.attendance_target),
+    attendance_included_statuses: rule.attendance_included_statuses.filter((status) => status !== 'OFF'),
+    task_excluded_statuses: rule.task_excluded_statuses.filter((status) => status !== 'OFF'),
+    cashier_task_weight: String(rule.cashier_task_weight),
+    cashier_ibop_weight: String(rule.cashier_ibop_weight),
+    cashier_push_selling_weight: String(rule.cashier_push_selling_weight),
+} : { ...emptyScoringForm };
+
+const nextScoringEffectiveDate = (rules: ScoringRule[]) => {
+    const today = new Date();
+    const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const latestMonth = rules[0] ? new Date(`${rules[0].effective_from}T00:00:00`) : null;
+    const nextMonth = latestMonth && latestMonth >= currentMonth
+        ? new Date(latestMonth.getFullYear(), latestMonth.getMonth() + 1, 1)
+        : currentMonth;
+
+    return `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
+};
+
 const emptyRoleForm = {
     id: '',
     name: '',
@@ -222,6 +330,21 @@ const emptyAppRoleForm = {
     description: '',
     active: true,
 };
+
+function operationalRoleLabel(roleType?: string | null) {
+    const normalized = String(roleType || '').trim().toLowerCase();
+    if (normalized === 'employee' || normalized === 'sc') return 'Service Crew';
+    if (normalized === 'supervisor') return 'Supervisor';
+    if (normalized === 'manager') return 'Manager';
+    if (normalized === 'superadmin') return 'Superadmin';
+
+    return normalized ? normalized.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : '';
+}
+
+function userIdentityLabel(user: { username: string; name: string; role_type?: string | null; division_group_code?: string | null }) {
+    const roleAndGroup = [operationalRoleLabel(user.role_type), user.division_group_code].filter(Boolean).join(' ');
+    return `${user.username} - ${user.name}${roleAndGroup ? ` (${roleAndGroup})` : ''}`;
+}
 
 export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>('users');
@@ -248,6 +371,12 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     const [jobLevelsSearch, setJobLevelsSearch] = useState('');
     const [jobLevelsVisibility, setJobLevelsVisibility] = useState('');
 
+    const [divisionsData, setDivisionsData] = useState<Division[]>([]);
+    const [divisionsPage, setDivisionsPage] = useState(1);
+    const [divisionsTotalPages, setDivisionsTotalPages] = useState(1);
+    const [divisionsSearch, setDivisionsSearch] = useState('');
+    const [divisionsVisibility, setDivisionsVisibility] = useState('');
+
     const [userLocationsData, setUserLocationsData] = useState<UserLocationAssignment[]>([]);
     const [userLocationsPage, setUserLocationsPage] = useState(1);
     const [userLocationsTotalPages, setUserLocationsTotalPages] = useState(1);
@@ -265,10 +394,21 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     const [locationsSearch, setLocationsSearch] = useState('');
     const [regionalsSearch, setRegionalsSearch] = useState('');
     const [guidesSearch, setGuidesSearch] = useState('');
+    const [workStationSection, setWorkStationSection] = useState<'guides' | 'catalog'>('guides');
+    const [taskCatalog, setTaskCatalog] = useState<WorkStation[]>([]);
+    const [taskCategorySearch, setTaskCategorySearch] = useState('');
+    const [taskAreaSearch, setTaskAreaSearch] = useState('');
+    const [taskDefinitionSearch, setTaskDefinitionSearch] = useState('');
+    const [selectedCatalogStationId, setSelectedCatalogStationId] = useState('');
+    const [selectedTaskAreaId, setSelectedTaskAreaId] = useState('');
+    const [taskAreaForm, setTaskAreaForm] = useState({ id: '', name: '', sort_order: '0', active: true });
+    const [taskDefinitionForm, setTaskDefinitionForm] = useState({ id: '', title: '', sort_order: '0', active: true });
+    const [isTaskAreaFormOpen, setIsTaskAreaFormOpen] = useState(false);
+    const [isTaskDefinitionFormOpen, setIsTaskDefinitionFormOpen] = useState(false);
     const [hierarchySearch, setHierarchySearch] = useState('');
 
-    const [leadersData, setLeadersData] = useState<Array<{username: string, name: string, role_type: string}>>([]);
-    const [reportingUsersData, setReportingUsersData] = useState<Array<{username: string, name: string, role_type: string}>>([]);
+    const [leadersData, setLeadersData] = useState<ReportingUserOption[]>([]);
+    const [reportingUsersData, setReportingUsersData] = useState<ReportingUserOption[]>([]);
     const [selectedLeaderId, setSelectedLeaderId] = useState('');
     const [reportingLinesData, setReportingLinesData] = useState<ReportingLine[]>([]);
 
@@ -290,6 +430,8 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     const [lineForm, setLineForm] = useState({ leader_id: '', subordinate_ids: [] as string[], status: 'active' as 'active' | 'inactive' });
     const [guideForm, setGuideForm] = useState({ id: '', name: '', guideText: '', active: true });
     const [evaluationForm, setEvaluationForm] = useState(emptyEvaluationForm);
+    const [scoringForm, setScoringForm] = useState(emptyScoringForm);
+    const [newScoringStatus, setNewScoringStatus] = useState('');
     const [selectedLocationInitial, setSelectedLocationInitial] = useState<string | null>(null);
     const [locationForm, setLocationForm] = useState({
         initial: '',
@@ -345,6 +487,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
         if (activeTab === 'users') fetchUsers();
         else if (activeTab === 'jobLevels') fetchJobLevels();
+        else if (activeTab === 'divisions') fetchDivisions();
         else if (activeTab === 'appRoles') {
             fetchUserLocations();
         }
@@ -355,11 +498,12 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         }
         else if (activeTab === 'locations') fetchLocations();
         else if (activeTab === 'regionals') fetchRegionals();
+        else if (activeTab === 'guides' && workStationSection === 'catalog') fetchTaskCatalog();
         else if (activeTab === 'activity') {
             fetchOnlineUsers();
             fetchRecentLogins();
         }
-    }, [activeTab, usersPage, usersSearch, jobLevelsPage, jobLevelsSearch, jobLevelsVisibility, userLocationsPage, userLocationsSearch, locationsPage, locationsSearch, regionalsPage, regionalsSearch, selectedLeaderId, storeFilter, onlineUsersPage, onlineUsersSearch, onlineUsersStoreFilter, recentLoginsPage, recentLoginsSearch, recentLoginsStoreFilter, data?.stats, data?.current_account_role, currentPermissionsKey]);
+    }, [activeTab, workStationSection, usersPage, usersSearch, jobLevelsPage, jobLevelsSearch, jobLevelsVisibility, divisionsPage, divisionsSearch, divisionsVisibility, userLocationsPage, userLocationsSearch, locationsPage, locationsSearch, regionalsPage, regionalsSearch, selectedLeaderId, storeFilter, onlineUsersPage, onlineUsersSearch, onlineUsersStoreFilter, recentLoginsPage, recentLoginsSearch, recentLoginsStoreFilter, data?.stats, data?.current_account_role, currentPermissionsKey]);
 
     const fetchOverview = async () => {
         setLoading(true);
@@ -367,6 +511,10 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         try {
             const payload = await requestJson('/api/cms/overview', 'GET');
             setData(payload);
+            setScoringForm({
+                ...scoringFormFromRule(payload.scoring_rules?.[0]),
+                effective_from: nextScoringEffectiveDate(payload.scoring_rules || []),
+            });
         } catch (error: any) {
             setMessage(error.message || 'Gagal memuat data CMS.');
         } finally {
@@ -397,6 +545,19 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             setJobLevelsTotalPages(res.last_page || 1);
         } catch (error: any) {
             setMessage(error.message || 'Gagal memuat job level.');
+        }
+    };
+
+    const fetchDivisions = async () => {
+        try {
+            const query = new URLSearchParams({ page: String(divisionsPage) });
+            if (divisionsSearch) query.append('search', divisionsSearch);
+            if (divisionsVisibility) query.append('visibility', divisionsVisibility);
+            const res = await requestJson(`/api/cms/divisions?${query.toString()}`, 'GET');
+            setDivisionsData(res.data || []);
+            setDivisionsTotalPages(res.last_page || 1);
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal memuat divisi.');
         }
     };
 
@@ -434,6 +595,24 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             setRegionalsTotalPages(res.last_page || 1);
         } catch (error: any) {
             setMessage(error.message || 'Gagal memuat regional.');
+        }
+    };
+
+    const fetchTaskCatalog = async (preferredStationId = '', preferredAreaId = '') => {
+        try {
+            const catalog = await requestJson('/api/cms/task-catalog', 'GET');
+            setTaskCatalog(catalog || []);
+            const stationId = preferredStationId
+                || (catalog?.some((station: WorkStation) => String(station.id) === selectedCatalogStationId) ? selectedCatalogStationId : '')
+                || String(catalog?.[0]?.id || '');
+            const station = catalog?.find((item: WorkStation) => String(item.id) === stationId);
+            const areaId = preferredAreaId
+                || (station?.task_areas?.some((area: TaskArea) => String(area.id) === selectedTaskAreaId) ? selectedTaskAreaId : '')
+                || String(station?.task_areas?.[0]?.id || '');
+            setSelectedCatalogStationId(stationId);
+            setSelectedTaskAreaId(areaId);
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal memuat master task.');
         }
     };
 
@@ -587,6 +766,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             initial_store: user.initial_store || '',
             role_id: user.role_id ? String(user.role_id) : '',
             job_level_id: user.job_level_id ? String(user.job_level_id) : '',
+            division_id: user.division_id ? String(user.division_id) : '',
             active: user.active,
             is_back_office: user.is_back_office,
             location_ids: user.locations.map((location) => location.initial),
@@ -624,6 +804,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                 ...userForm,
                 role_id: userForm.role_id ? Number(userForm.role_id) : null,
                 job_level_id: userForm.job_level_id ? Number(userForm.job_level_id) : null,
+                division_id: userForm.division_id ? Number(userForm.division_id) : null,
                 password: userForm.password || undefined,
             };
 
@@ -843,6 +1024,160 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         }
     };
 
+    const selectCatalogStation = (station: WorkStation) => {
+        setSelectedCatalogStationId(String(station.id));
+        setSelectedTaskAreaId(String(station.task_areas?.[0]?.id || ''));
+        setTaskAreaSearch('');
+        setTaskDefinitionSearch('');
+        setTaskAreaForm({ id: '', name: '', sort_order: '0', active: true });
+        setTaskDefinitionForm({ id: '', title: '', sort_order: '0', active: true });
+        setIsTaskAreaFormOpen(false);
+        setIsTaskDefinitionFormOpen(false);
+    };
+
+    const openNewTaskAreaForm = () => {
+        const station = taskCatalog.find((item) => String(item.id) === selectedCatalogStationId);
+        const nextSortOrder = Math.min(65535, Math.max(0, ...(station?.task_areas || []).map((area) => area.sort_order)) + 10);
+        setTaskAreaForm({ id: '', name: '', sort_order: String(nextSortOrder), active: true });
+        setIsTaskAreaFormOpen(true);
+        setTaskDefinitionForm({ id: '', title: '', sort_order: '0', active: true });
+        setIsTaskDefinitionFormOpen(false);
+    };
+
+    const selectTaskArea = (area: TaskArea) => {
+        setSelectedTaskAreaId(String(area.id));
+        setTaskAreaForm({
+            id: String(area.id),
+            name: area.name,
+            sort_order: String(area.sort_order),
+            active: area.active,
+        });
+        setIsTaskAreaFormOpen(true);
+        setTaskDefinitionSearch('');
+        setTaskDefinitionForm({ id: '', title: '', sort_order: '0', active: true });
+        setIsTaskDefinitionFormOpen(false);
+    };
+
+    const closeTaskAreaForm = () => {
+        setTaskAreaForm({ id: '', name: '', sort_order: '0', active: true });
+        setIsTaskAreaFormOpen(false);
+    };
+
+    const saveTaskArea = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!selectedCatalogStationId) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            const payload = {
+                name: taskAreaForm.name,
+                sort_order: Number(taskAreaForm.sort_order),
+                active: taskAreaForm.active,
+            };
+            const area = taskAreaForm.id
+                ? await requestJson(`/api/cms/task-areas/${taskAreaForm.id}`, 'PATCH', payload)
+                : await requestJson(`/api/cms/work-stations/${selectedCatalogStationId}/task-areas`, 'POST', payload);
+            setMessage(taskAreaForm.id ? 'Area berhasil diperbarui.' : 'Area berhasil dibuat.');
+            closeTaskAreaForm();
+            await fetchTaskCatalog(selectedCatalogStationId, String(area.id));
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal menyimpan area.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const deleteTaskArea = async (area: TaskArea) => {
+        if (!window.confirm(`Hapus area "${area.name}"?`)) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson(`/api/cms/task-areas/${area.id}`, 'DELETE');
+            setTaskAreaForm({ id: '', name: '', sort_order: '0', active: true });
+            setTaskDefinitionForm({ id: '', title: '', sort_order: '0', active: true });
+            setSelectedTaskAreaId('');
+            setIsTaskAreaFormOpen(false);
+            setIsTaskDefinitionFormOpen(false);
+            setMessage('Area berhasil dihapus.');
+            await fetchTaskCatalog(selectedCatalogStationId);
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal menghapus area.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const selectTaskDefinition = (definition: TaskDefinition) => {
+        setTaskDefinitionForm({
+            id: String(definition.id),
+            title: definition.title,
+            sort_order: String(definition.sort_order),
+            active: definition.active,
+        });
+        setIsTaskDefinitionFormOpen(true);
+    };
+
+    const openNewTaskDefinitionForm = () => {
+        const station = taskCatalog.find((item) => String(item.id) === selectedCatalogStationId);
+        const area = station?.task_areas?.find((item) => String(item.id) === selectedTaskAreaId);
+        const nextSortOrder = Math.min(65535, Math.max(0, ...(area?.task_definitions || []).map((definition) => definition.sort_order)) + 10);
+        setTaskDefinitionForm({ id: '', title: '', sort_order: String(nextSortOrder), active: true });
+        setIsTaskDefinitionFormOpen(true);
+    };
+
+    const closeTaskDefinitionForm = () => {
+        setTaskDefinitionForm({ id: '', title: '', sort_order: '0', active: true });
+        setIsTaskDefinitionFormOpen(false);
+    };
+
+    const saveTaskDefinition = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!selectedTaskAreaId) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            const payload = {
+                title: taskDefinitionForm.title,
+                sort_order: Number(taskDefinitionForm.sort_order),
+                active: taskDefinitionForm.active,
+            };
+            await requestJson(
+                taskDefinitionForm.id
+                    ? `/api/cms/task-definitions/${taskDefinitionForm.id}`
+                    : `/api/cms/task-areas/${selectedTaskAreaId}/task-definitions`,
+                taskDefinitionForm.id ? 'PATCH' : 'POST',
+                payload,
+            );
+            setMessage(taskDefinitionForm.id ? 'Master task berhasil diperbarui.' : 'Master task berhasil dibuat.');
+            closeTaskDefinitionForm();
+            await fetchTaskCatalog(selectedCatalogStationId, selectedTaskAreaId);
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal menyimpan master task.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const deleteTaskDefinition = async (definition: TaskDefinition) => {
+        if (!window.confirm(`Hapus master task "${definition.title}"?`)) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson(`/api/cms/task-definitions/${definition.id}`, 'DELETE');
+            closeTaskDefinitionForm();
+            setMessage('Master task berhasil dihapus.');
+            await fetchTaskCatalog(selectedCatalogStationId, selectedTaskAreaId);
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal menghapus master task.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const selectLocation = (location: Location) => {
         setSelectedLocationInitial(location.initial);
         setLocationForm({
@@ -985,6 +1320,24 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         }
     };
 
+    const toggleDivisionVisibility = async (division: Division) => {
+        setSaving(true);
+        setMessage('');
+        try {
+            const nextVisible = !division.visible_in_yodaily;
+            await requestJson(`/api/cms/divisions/${division.id}`, 'PATCH', {
+                visible_in_yodaily: nextVisible,
+            });
+            setMessage(`${division.name} berhasil ${nextVisible ? 'ditampilkan di' : 'disembunyikan dari'} YoDaily.`);
+            await fetchDivisions();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal memperbarui divisi.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const selectEvaluation = (item: EvaluationMaster) => {
         setEvaluationForm({
             id: String(item.id),
@@ -1054,6 +1407,41 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Gagal menghapus item evaluasi.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const toggleScoringStatus = (field: 'attendance_included_statuses' | 'task_excluded_statuses', status: string) => {
+        setScoringForm((current) => ({
+            ...current,
+            [field]: current[field].includes(status)
+                ? current[field].filter((item) => item !== status)
+                : [...current[field], status],
+        }));
+    };
+
+    const saveScoringRule = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson('/api/cms/scoring-rules', 'POST', {
+                effective_from: scoringForm.effective_from,
+                task_weight: Number(scoringForm.task_weight),
+                attendance_weight: Number(scoringForm.attendance_weight),
+                evaluation_weight: Number(scoringForm.evaluation_weight),
+                attendance_target: Number(scoringForm.attendance_target),
+                attendance_included_statuses: scoringForm.attendance_included_statuses,
+                task_excluded_statuses: scoringForm.task_excluded_statuses,
+                cashier_task_weight: Number(scoringForm.cashier_task_weight),
+                cashier_ibop_weight: Number(scoringForm.cashier_ibop_weight),
+                cashier_push_selling_weight: Number(scoringForm.cashier_push_selling_weight),
+            });
+            setMessage('Versi aturan penilaian berhasil disimpan.');
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal menyimpan master penilaian.');
         } finally {
             setSaving(false);
         }
@@ -1261,6 +1649,18 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         }
     };
 
+    const normalizedCategorySearch = taskCategorySearch.trim().toLowerCase();
+    const normalizedAreaSearch = taskAreaSearch.trim().toLowerCase();
+    const normalizedTaskSearch = taskDefinitionSearch.trim().toLowerCase();
+    const selectedCatalogStation = taskCatalog.find((station) => String(station.id) === selectedCatalogStationId);
+    const selectedTaskArea = selectedCatalogStation?.task_areas?.find((area) => String(area.id) === selectedTaskAreaId);
+    const filteredCatalogStations = taskCatalog.filter((station) => !normalizedCategorySearch
+        || station.name.toLowerCase().includes(normalizedCategorySearch));
+    const filteredTaskAreas = (selectedCatalogStation?.task_areas || []).filter((area) => !normalizedAreaSearch
+        || area.name.toLowerCase().includes(normalizedAreaSearch));
+    const filteredTaskDefinitions = (selectedTaskArea?.task_definitions || []).filter((definition) => !normalizedTaskSearch
+        || definition.title.toLowerCase().includes(normalizedTaskSearch));
+
     if (loading) {
         return <div className="h-full flex items-center justify-center text-gray-400">Memuat CMS...</div>;
     }
@@ -1291,6 +1691,13 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         ...reportingImportPreview.duplicate_rows.map((row) => ({ ...row, importStatus: 'duplicate' as const })),
         ...reportingImportPreview.invalid_rows.map((row) => ({ ...row, importStatus: 'invalid' as const })),
     ].sort((first, second) => first.row - second.row) : [];
+    const scoringStatuses = Array.from(new Set([
+        ...data.attendance_statuses,
+        ...scoringForm.attendance_included_statuses,
+        ...scoringForm.task_excluded_statuses,
+    ])).sort();
+    const monthlyWeightTotal = Number(scoringForm.task_weight) + Number(scoringForm.attendance_weight) + Number(scoringForm.evaluation_weight);
+    const cashierWeightTotal = Number(scoringForm.cashier_task_weight) + Number(scoringForm.cashier_ibop_weight) + Number(scoringForm.cashier_push_selling_weight);
 
     return (
         <div className="flex h-full bg-gray-50">
@@ -1331,12 +1738,14 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                 <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3">
                     {canAccess('users_locations') && <TabButton expanded={sidebarExpanded} active={activeTab === 'users'} icon={<UsersRound size={19} />} label="User & Lokasi" onClick={() => setActiveTab('users')} />}
                     {canAccess('job_levels') && <TabButton expanded={sidebarExpanded} active={activeTab === 'jobLevels'} icon={<ShieldCheck size={19} />} label="Job Level HR" onClick={() => setActiveTab('jobLevels')} />}
+                    {canAccess('divisions') && <TabButton expanded={sidebarExpanded} active={activeTab === 'divisions'} icon={<Layers3 size={19} />} label="Master Divisi" onClick={() => setActiveTab('divisions')} />}
                     {canAccess('app_roles') && <TabButton expanded={sidebarExpanded} active={activeTab === 'appRoles'} icon={<UserCog size={19} />} label="Role Aplikasi" onClick={() => setActiveTab('appRoles')} />}
                     {canAccess('reporting_lines') && <TabButton expanded={sidebarExpanded} active={activeTab === 'hierarchy'} icon={<GitBranch size={19} />} label="Relasi Atasan" onClick={() => setActiveTab('hierarchy')} />}
                     {canAccess('work_stations') && <TabButton expanded={sidebarExpanded} active={activeTab === 'guides'} icon={<BookOpenCheck size={19} />} label="Master Work Station" onClick={() => setActiveTab('guides')} />}
                     {canAccess('locations') && <TabButton expanded={sidebarExpanded} active={activeTab === 'locations'} icon={<MapPinned size={19} />} label="Master Lokasi" onClick={() => setActiveTab('locations')} />}
                     {canAccess('regionals') && <TabButton expanded={sidebarExpanded} active={activeTab === 'regionals'} icon={<MapPinned size={19} />} label="Master Regional" onClick={() => setActiveTab('regionals')} />}
                     {canAccess('evaluation_masters') && <TabButton expanded={sidebarExpanded} active={activeTab === 'evaluations'} icon={<ShieldCheck size={19} />} label="Master Evaluasi" onClick={() => setActiveTab('evaluations')} />}
+                    {canAccess('scoring_masters') && <TabButton expanded={sidebarExpanded} active={activeTab === 'scoring'} icon={<Calculator size={19} />} label="Master Penilaian" onClick={() => setActiveTab('scoring')} />}
                     {canAccess('user_activity') && <TabButton expanded={sidebarExpanded} active={activeTab === 'activity'} icon={<Activity size={19} />} label="Aktivitas User" onClick={() => setActiveTab('activity')} />}
                 </nav>
 
@@ -1517,8 +1926,8 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                 <button key={user.username} onClick={() => { selectUser(user); setIsUserFormOpen(true); }} className={`w-full text-left px-6 py-4 hover:bg-purple-50 transition ${selectedUsername === user.username ? 'bg-purple-50' : ''}`}>
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <p className="font-black text-gray-900">{user.name}</p>
-                                            <p className="text-xs text-gray-400">{user.username} - {user.job_level_name || 'Belum ada role'}</p>
+                                            <p className="font-black text-gray-900">{userIdentityLabel(user)}</p>
+                                            <p className="text-xs font-semibold text-gray-400">{user.division_name || '-'}</p>
                                         </div>
                                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${user.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
                                             {user.active ? 'Aktif' : 'Tidak Aktif'}
@@ -1582,6 +1991,21 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                     placeholder="Pilih job level HR"
                                     options={data.job_levels.map((level) => ({ value: String(level.id), label: level.position_code ? `${level.position_code} - ${level.name}` : level.name }))}
                                     onChange={(value) => setUserForm({ ...userForm, job_level_id: value })}
+                                />
+                            </Field>
+                            <Field label="Divisi">
+                                <CustomSelect
+                                    value={userForm.division_id}
+                                    placeholder="Pilih divisi"
+                                    options={data.divisions
+                                        .filter((division) => division.visible_in_yodaily || String(division.id) === userForm.division_id)
+                                        .map((division) => ({
+                                            value: String(division.id),
+                                            label: `${division.name} (${division.group_code})`,
+                                            secondaryLabel: division.parent_name || division.name,
+                                        }))}
+                                    onChange={(value) => setUserForm({ ...userForm, division_id: value })}
+                                    searchable
                                 />
                             </Field>
                             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
@@ -1758,6 +2182,71 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                 </div>
             )}
 
+            {activeTab === 'divisions' && canAccess('divisions') && (
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                    <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+                        <div>
+                            <h2 className="font-black text-gray-900">Master Divisi</h2>
+                            <p className="text-xs text-gray-400">Atur divisi yang dapat dipilih pada data user YoDaily.</p>
+                        </div>
+                        <div className="w-52">
+                            <CustomSelect
+                                value={divisionsVisibility}
+                                placeholder="Semua visibilitas"
+                                options={[
+                                    { value: 'visible', label: 'Tampil di YoDaily' },
+                                    { value: 'hidden', label: 'Disembunyikan dari YoDaily' },
+                                ]}
+                                onChange={(value) => { setDivisionsVisibility(value); setDivisionsPage(1); }}
+                            />
+                        </div>
+                        <div className="flex-1 max-w-md relative">
+                            <input
+                                type="text"
+                                placeholder="Cari divisi, kode, atau induk..."
+                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                value={divisionsSearch}
+                                onChange={(event) => { setDivisionsSearch(event.target.value); setDivisionsPage(1); }}
+                            />
+                        </div>
+                    </div>
+                    <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
+                        {divisionsData.length === 0 ? (
+                            <div className="p-8 text-center text-gray-400 text-sm">Divisi tidak ditemukan.</div>
+                        ) : divisionsData.map((division) => (
+                            <div key={division.id} className="px-6 py-4 grid grid-cols-[1.2fr_0.7fr_0.8fr_180px] gap-4 items-center hover:bg-gray-50 transition">
+                                <div>
+                                    <p className="font-black text-gray-900">{division.name}</p>
+                                    <p className="text-xs text-gray-400">{division.code}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Grup</p>
+                                    <p className="text-sm font-bold text-gray-700">{division.group_code}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Induk</p>
+                                    <p className="text-sm font-bold text-gray-700">{division.parent_name || '-'}</p>
+                                </div>
+                                <div className="flex items-center justify-end gap-3">
+                                    <span className={`text-[10px] font-black px-2 py-1 rounded-full ${division.visible_in_yodaily ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                        {division.visible_in_yodaily ? 'Tampil' : 'Tersembunyi'}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        disabled={saving}
+                                        onClick={() => toggleDivisionVisibility(division)}
+                                        className={`px-3 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 ${division.visible_in_yodaily ? 'bg-gray-100 text-gray-500 hover:bg-gray-200' : 'bg-primary text-white shadow-md shadow-purple-100'}`}
+                                    >
+                                        {division.visible_in_yodaily ? 'Hide' : 'Show'}
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <PaginationControls page={divisionsPage} totalPages={divisionsTotalPages} onPageChange={setDivisionsPage} />
+                </div>
+            )}
+
             {activeTab === 'appRoles' && canAccess('app_roles') && (
                 <div className={`grid h-[clamp(360px,calc(100dvh-24rem),680px)] items-stretch gap-6 transition-all duration-300 ${isAppRoleFormOpen ? 'grid-cols-[1.2fr_0.8fr]' : 'grid-cols-1'}`}>
                     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
@@ -1921,7 +2410,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             <CustomSelect
                                 value={lineForm.leader_id}
                                 placeholder="Pilih atasan"
-                                options={leadersData.map((user) => ({ value: user.username, label: `${user.username} - ${user.name} (${user.role_type})` }))}
+                                options={leadersData.map((user) => ({ value: user.username, label: userIdentityLabel(user), secondaryLabel: user.division_name || '-' }))}
                                 onChange={selectReportingLeader}
                                 searchable
                             />
@@ -1932,7 +2421,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                 placeholder="Pilih bawahan"
                                 options={reportingUsersData
                                     .filter((user) => user.username !== lineForm.leader_id)
-                                    .map((user) => ({ value: user.username, label: `${user.username} - ${user.name} (${user.role_type})` }))}
+                                    .map((user) => ({ value: user.username, label: userIdentityLabel(user), secondaryLabel: user.division_name || '-' }))}
                                 onChange={(values) => setLineForm({ ...lineForm, subordinate_ids: values })}
                             />
                         </Field>
@@ -1960,7 +2449,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                 <CustomSelect
                                     value={selectedLeaderId}
                                     placeholder="Pilih atasan untuk melihat relasinya..."
-                                    options={leadersData.map((user) => ({ value: user.username, label: `${user.username} - ${user.name} (${user.role_type})` }))}
+                                    options={leadersData.map((user) => ({ value: user.username, label: userIdentityLabel(user), secondaryLabel: user.division_name || '-' }))}
                                     onChange={(value) => setSelectedLeaderId(value)}
                                     searchable
                                 />
@@ -1980,12 +2469,12 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                 <div className="p-8 text-center text-gray-400 text-sm">Pilih atasan terlebih dahulu untuk melihat daftar bawahannya.</div>
                             ) : reportingLinesData.length === 0 ? (
                                 <div className="p-8 text-center text-gray-400 text-sm">Bawahan untuk atasan ini tidak ditemukan.</div>
-                            ) : reportingLinesData.filter(line => `${line.subordinate_name || ''} ${line.subordinate_id}`.toLowerCase().includes(hierarchySearch.toLowerCase())).map((line) => (
+                            ) : reportingLinesData.filter(line => `${line.subordinate_name || ''} ${line.subordinate_id} ${line.subordinate_division_name || ''} ${line.subordinate_division_group_code || ''}`.toLowerCase().includes(hierarchySearch.toLowerCase())).map((line) => (
                                 <div key={line.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition">
                                     <div>
                                         <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-0.5">Subordinate</p>
-                                        <p className="font-black text-gray-900 text-lg">{line.subordinate_name || line.subordinate_id}</p>
-                                        <p className="mt-1 text-xs font-semibold text-gray-400">NIK: {line.subordinate_id}</p>
+                                        <p className="font-black text-gray-900 text-lg">{userIdentityLabel({ username: line.subordinate_id, name: line.subordinate_name || line.subordinate_id, role_type: line.subordinate_role_type, division_group_code: line.subordinate_division_group_code })}</p>
+                                        <p className="mt-1 text-xs font-semibold text-gray-400">{line.subordinate_division_name || '-'}</p>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${line.status === 'active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
@@ -2004,7 +2493,20 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             )}
 
             {activeTab === 'guides' && canAccess('work_stations') && (
-                <div className={`grid h-[clamp(360px,calc(100dvh-24rem),680px)] items-stretch gap-6 transition-all duration-300 ${isGuideFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
+                <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-white px-5 py-3 shadow-sm">
+                        <div>
+                            <h2 className="font-black text-gray-900">Master Work Station</h2>
+                            <p className="text-xs text-gray-400">Kelola kategori, panduan, area, dan daftar tugas.</p>
+                        </div>
+                        <div className="flex rounded-xl bg-gray-100 p-1">
+                            <button type="button" onClick={() => setWorkStationSection('guides')} className={`rounded-lg px-4 py-2 text-xs font-black transition ${workStationSection === 'guides' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}>Panduan</button>
+                            <button type="button" onClick={() => setWorkStationSection('catalog')} className={`rounded-lg px-4 py-2 text-xs font-black transition ${workStationSection === 'catalog' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}>Area & Master Task</button>
+                        </div>
+                    </div>
+
+                    {workStationSection === 'guides' ? (
+                <div className={`grid h-[clamp(360px,calc(100dvh-28rem),640px)] items-stretch gap-6 transition-all duration-300 ${isGuideFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
                     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
                             <div>
@@ -2081,6 +2583,209 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         </button>
                     </form>
                 )}
+                </div>
+                    ) : (
+                        <div className="grid h-[clamp(460px,calc(100dvh-28rem),680px)] min-h-0 grid-cols-1 gap-4 xl:grid-cols-[0.7fr_1fr_1.3fr]">
+                            <section className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+                                <div className="space-y-3 border-b border-gray-100 p-5">
+                                    <div>
+                                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Kategori</p>
+                                        <h3 className="font-black text-gray-900">Work Station</h3>
+                                    </div>
+                                    <input value={taskCategorySearch} onChange={(event) => setTaskCategorySearch(event.target.value)} className="input" placeholder="Cari kategori..." />
+                                </div>
+                                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                                    {filteredCatalogStations.map((station) => (
+                                        <button key={station.id} type="button" onClick={() => selectCatalogStation(station)} className={`w-full rounded-2xl border px-4 py-3 text-left transition ${selectedCatalogStationId === String(station.id) ? 'border-primary bg-purple-50' : 'border-gray-100 hover:border-purple-200'}`}>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="font-black capitalize text-gray-900">{station.name}</p>
+                                                <span className={`rounded-full px-2 py-1 text-[10px] font-black ${station.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>{station.active ? 'Aktif' : 'Nonaktif'}</span>
+                                            </div>
+                                            <p className="mt-1 text-xs text-gray-400">{station.task_areas?.length || 0} area</p>
+                                        </button>
+                                    ))}
+                                    {filteredCatalogStations.length === 0 && <p className="p-4 text-center text-sm text-gray-400">Kategori tidak ditemukan.</p>}
+                                </div>
+                                <p className="border-t border-gray-100 px-5 py-3 text-[11px] leading-5 text-gray-400">Kategori baru dibuat dari tab Panduan agar tetap memakai master Work Station yang sama.</p>
+                            </section>
+
+                            <section className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+                                <div className="space-y-3 border-b border-gray-100 p-5">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Area</p>
+                                            <h3 className="font-black capitalize text-gray-900">{selectedCatalogStation?.name || 'Pilih kategori'}</h3>
+                                        </div>
+                                        {selectedCatalogStation && <button type="button" onClick={openNewTaskAreaForm} className="rounded-xl bg-purple-50 px-3 py-2 text-xs font-black text-primary">Area Baru</button>}
+                                    </div>
+                                    <input value={taskAreaSearch} onChange={(event) => setTaskAreaSearch(event.target.value)} className="input" placeholder="Cari area..." disabled={!selectedCatalogStation} />
+                                </div>
+                                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                                    {filteredTaskAreas.map((area) => (
+                                        <button key={area.id} type="button" onClick={() => selectTaskArea(area)} className={`w-full rounded-2xl border px-4 py-3 text-left transition ${selectedTaskAreaId === String(area.id) ? 'border-primary bg-purple-50' : 'border-gray-100 hover:border-purple-200'}`}>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="font-bold text-gray-900">{area.name}</p>
+                                                <span className={`rounded-full px-2 py-1 text-[10px] font-black ${area.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>{area.active ? 'Aktif' : 'Nonaktif'}</span>
+                                            </div>
+                                            <p className="mt-1 text-xs text-gray-400">{area.task_definitions.length} task</p>
+                                        </button>
+                                    ))}
+                                    {selectedCatalogStation && filteredTaskAreas.length === 0 && <p className="p-4 text-center text-sm text-gray-400">{normalizedAreaSearch ? 'Area tidak ditemukan.' : 'Belum ada area pada kategori ini.'}</p>}
+                                </div>
+                                {selectedCatalogStation && isTaskAreaFormOpen && (
+                                    <form onSubmit={saveTaskArea} className="space-y-3 border-t border-gray-100 p-4">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs font-black uppercase tracking-wider text-gray-500">{taskAreaForm.id ? 'Ubah Area' : 'Area Baru'}</p>
+                                            <div className="flex items-center gap-3">
+                                                {taskAreaForm.id && <button type="button" onClick={() => selectedTaskArea && deleteTaskArea(selectedTaskArea)} className="text-xs font-bold text-red-500">Hapus</button>}
+                                                <button type="button" onClick={closeTaskAreaForm} className="p-1 text-gray-400 transition hover:text-gray-900" aria-label="Tutup form area"><X size={17} /></button>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-3">
+                                            <input value={taskAreaForm.name} onChange={(event) => setTaskAreaForm({ ...taskAreaForm, name: event.target.value })} className="input" placeholder="Nama area" required />
+                                            <CustomSelect value={taskAreaForm.active ? 'active' : 'inactive'} placeholder="Status" searchable={false} options={[{ value: 'active', label: 'Aktif' }, { value: 'inactive', label: 'Nonaktif' }]} onChange={(value) => setTaskAreaForm({ ...taskAreaForm, active: value === 'active' })} />
+                                        </div>
+                                        <button disabled={saving} className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Menyimpan...' : 'Simpan Area'}</button>
+                                    </form>
+                                )}
+                            </section>
+
+                            <section className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+                                <div className="space-y-3 border-b border-gray-100 p-5">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Master Task</p>
+                                            <h3 className="font-black text-gray-900">{selectedTaskArea?.name || 'Pilih area'}</h3>
+                                        </div>
+                                        {selectedTaskArea && <button type="button" onClick={openNewTaskDefinitionForm} className="rounded-xl bg-purple-50 px-3 py-2 text-xs font-black text-primary">Task Baru</button>}
+                                    </div>
+                                    <input value={taskDefinitionSearch} onChange={(event) => setTaskDefinitionSearch(event.target.value)} className="input" placeholder="Cari task..." disabled={!selectedTaskArea} />
+                                </div>
+                                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                                    {filteredTaskDefinitions.map((definition) => (
+                                        <button key={definition.id} type="button" onClick={() => selectTaskDefinition(definition)} className={`w-full rounded-2xl border px-4 py-3 text-left transition ${taskDefinitionForm.id === String(definition.id) ? 'border-primary bg-purple-50' : 'border-gray-100 hover:border-purple-200'}`}>
+                                            <div className="flex items-start justify-between gap-3">
+                                                <p className="font-bold leading-5 text-gray-900">{definition.title}</p>
+                                                <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${definition.active ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>{definition.active ? 'Aktif' : 'Nonaktif'}</span>
+                                            </div>
+                                        </button>
+                                    ))}
+                                    {selectedTaskArea && filteredTaskDefinitions.length === 0 && <p className="p-4 text-center text-sm text-gray-400">{normalizedTaskSearch ? 'Task tidak ditemukan.' : 'Belum ada master task pada area ini.'}</p>}
+                                </div>
+                                {selectedTaskArea && isTaskDefinitionFormOpen && (
+                                    <form onSubmit={saveTaskDefinition} className="space-y-3 border-t border-gray-100 p-4">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs font-black uppercase tracking-wider text-gray-500">{taskDefinitionForm.id ? 'Ubah Master Task' : 'Master Task Baru'}</p>
+                                            <div className="flex items-center gap-3">
+                                                {taskDefinitionForm.id && <button type="button" onClick={() => {
+                                                    const definition = selectedTaskArea.task_definitions.find((item) => String(item.id) === taskDefinitionForm.id);
+                                                    if (definition) deleteTaskDefinition(definition);
+                                                }} className="text-xs font-bold text-red-500">Hapus</button>}
+                                                <button type="button" onClick={closeTaskDefinitionForm} className="p-1 text-gray-400 transition hover:text-gray-900" aria-label="Tutup form master task"><X size={17} /></button>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-3">
+                                            <input value={taskDefinitionForm.title} onChange={(event) => setTaskDefinitionForm({ ...taskDefinitionForm, title: event.target.value })} className="input" placeholder="Judul tugas" required />
+                                            <CustomSelect value={taskDefinitionForm.active ? 'active' : 'inactive'} placeholder="Status" searchable={false} options={[{ value: 'active', label: 'Aktif' }, { value: 'inactive', label: 'Nonaktif' }]} onChange={(value) => setTaskDefinitionForm({ ...taskDefinitionForm, active: value === 'active' })} />
+                                        </div>
+                                        <button disabled={saving} className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Menyimpan...' : 'Simpan Master Task'}</button>
+                                    </form>
+                                )}
+                            </section>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'scoring' && canAccess('scoring_masters') && (
+                <div className="grid h-[clamp(460px,calc(100dvh-24rem),760px)] min-h-0 grid-cols-[1.35fr_0.65fr] gap-6">
+                    <form onSubmit={saveScoringRule} className="min-h-0 space-y-6 overflow-y-auto overscroll-contain rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Formula Penilaian</p>
+                                <h2 className="mt-1 text-xl font-black text-gray-900">Master Penilaian</h2>
+                                <p className="mt-1 text-sm text-gray-500">Simpan sebagai versi baru agar nilai periode lama tetap memakai formula sebelumnya.</p>
+                            </div>
+                            <Field label="Berlaku mulai bulan">
+                                <input type="month" value={scoringForm.effective_from.slice(0, 7)} onChange={(e) => setScoringForm({ ...scoringForm, effective_from: `${e.target.value}-01` })} className="input min-w-44" required />
+                            </Field>
+                        </div>
+
+                        <section className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                            <div className="mb-4 flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-black text-gray-900">Bobot Nilai Bulanan</h3>
+                                    <p className="text-xs text-gray-500">Tugas + absensi + evaluasi harus tepat 100%.</p>
+                                </div>
+                                <span className={`rounded-full px-3 py-1 text-xs font-black ${Math.abs(monthlyWeightTotal - 100) <= 0.01 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{monthlyWeightTotal.toFixed(2)}%</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <Field label="Tugas (%)"><input type="number" min="0" max="100" step="0.001" value={scoringForm.task_weight} onChange={(e) => setScoringForm({ ...scoringForm, task_weight: e.target.value })} className="input" required /></Field>
+                                <Field label="Absensi (%)"><input type="number" min="0" max="100" step="0.001" value={scoringForm.attendance_weight} onChange={(e) => setScoringForm({ ...scoringForm, attendance_weight: e.target.value })} className="input" required /></Field>
+                                <Field label="Evaluasi (%)"><input type="number" min="0" max="100" step="0.001" value={scoringForm.evaluation_weight} onChange={(e) => setScoringForm({ ...scoringForm, evaluation_weight: e.target.value })} className="input" required /></Field>
+                            </div>
+                        </section>
+
+                        <section className="rounded-2xl border border-gray-100 p-5">
+                            <div className="mb-4 flex items-end justify-between gap-4">
+                                <div>
+                                    <h3 className="font-black text-gray-900">Aturan Absensi & Hari Tugas</h3>
+                                    <p className="text-xs text-gray-500">Status dihitung absensi menambah capaian target. Bebas tugas mengeluarkan hari itu dari pembagi nilai tugas.</p>
+                                </div>
+                                <Field label="Target status / bulan">
+                                    <input type="number" min="1" max="999" value={scoringForm.attendance_target} onChange={(e) => setScoringForm({ ...scoringForm, attendance_target: e.target.value })} className="input w-32" required />
+                                </Field>
+                            </div>
+                            {Number(scoringForm.attendance_target) > 31 && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Target melebihi jumlah hari kalender. Nilai tetap dihitung sesuai target yang disimpan.</p>}
+                            <div className="overflow-hidden rounded-xl border border-gray-100">
+                                <div className="grid grid-cols-[1fr_150px_150px] bg-gray-50 px-4 py-2 text-xs font-black uppercase text-gray-400"><span>Status</span><span className="text-center">Dihitung Absensi</span><span className="text-center">Bebas Tugas</span></div>
+                                {scoringStatuses.map((status) => (
+                                    <div key={status} className="grid grid-cols-[1fr_150px_150px] items-center border-t border-gray-100 px-4 py-3 text-sm">
+                                        <span className="font-black text-gray-800">{status}</span>
+                                        <input type="checkbox" checked={scoringForm.attendance_included_statuses.includes(status)} onChange={() => toggleScoringStatus('attendance_included_statuses', status)} />
+                                        <input type="checkbox" checked={scoringForm.task_excluded_statuses.includes(status)} onChange={() => toggleScoringStatus('task_excluded_statuses', status)} />
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                                <input value={newScoringStatus} onChange={(e) => setNewScoringStatus(e.target.value.toUpperCase())} className="input" maxLength={20} placeholder="Tambah kode status, mis. IK" />
+                                <button type="button" onClick={() => { const status = newScoringStatus.trim(); if (!status) return; setScoringForm((current) => ({ ...current, attendance_included_statuses: current.attendance_included_statuses.includes(status) ? current.attendance_included_statuses : [...current.attendance_included_statuses, status] })); setNewScoringStatus(''); }} className="rounded-xl border border-purple-100 px-4 text-sm font-bold text-primary hover:bg-purple-50">Tambah</button>
+                            </div>
+                        </section>
+
+                        <section className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                            <div className="mb-4 flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-black text-gray-900">Komposisi Nilai Tugas Kasir</h3>
+                                    <p className="text-xs text-gray-500">Rata-rata tugas, IBOP, dan push selling. Data Beyond yang belum tersedia tidak dianggap nol.</p>
+                                </div>
+                                <span className={`rounded-full px-3 py-1 text-xs font-black ${Math.abs(cashierWeightTotal - 100) <= 0.01 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{cashierWeightTotal.toFixed(2)}%</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <Field label="Tugas reguler (%)"><input type="number" min="0" max="100" step="0.0001" value={scoringForm.cashier_task_weight} onChange={(e) => setScoringForm({ ...scoringForm, cashier_task_weight: e.target.value })} className="input" required /></Field>
+                                <Field label="IBOP (%)"><input type="number" min="0" max="100" step="0.0001" value={scoringForm.cashier_ibop_weight} onChange={(e) => setScoringForm({ ...scoringForm, cashier_ibop_weight: e.target.value })} className="input" required /></Field>
+                                <Field label="Push Selling (%)"><input type="number" min="0" max="100" step="0.0001" value={scoringForm.cashier_push_selling_weight} onChange={(e) => setScoringForm({ ...scoringForm, cashier_push_selling_weight: e.target.value })} className="input" required /></Field>
+                            </div>
+                        </section>
+
+                        <button disabled={saving || Math.abs(monthlyWeightTotal - 100) > 0.01 || Math.abs(cashierWeightTotal - 100) > 0.01} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 font-bold text-white shadow-lg shadow-purple-100 disabled:opacity-50"><Save size={16} />{saving ? 'Menyimpan...' : 'Simpan Versi Baru'}</button>
+                    </form>
+
+                    <section className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+                        <div className="border-b border-gray-100 px-5 py-4">
+                            <h2 className="font-black text-gray-900">Riwayat Formula</h2>
+                            <p className="text-xs text-gray-400">Versi terbaru yang efektif dipakai otomatis.</p>
+                        </div>
+                        <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto">
+                            {data.scoring_rules.length === 0 ? <p className="p-6 text-sm text-gray-400">Belum ada versi formula.</p> : data.scoring_rules.map((rule, index) => (
+                                <button type="button" key={rule.id} onClick={() => setScoringForm({ ...scoringFormFromRule(rule), effective_from: nextScoringEffectiveDate(data.scoring_rules) })} className="w-full p-5 text-left transition hover:bg-purple-50">
+                                    <div className="flex items-center justify-between gap-3"><p className="font-black text-gray-900">Mulai {new Date(`${rule.effective_from}T00:00:00`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>{index === 0 && <span className="rounded-full bg-green-50 px-2 py-1 text-[10px] font-black text-green-600">TERBARU</span>}</div>
+                                    <p className="mt-2 text-xs text-gray-500">Tugas {rule.task_weight}% · Absensi {rule.attendance_weight}% · Evaluasi {rule.evaluation_weight}%</p>
+                                    <p className="mt-1 text-xs text-gray-400">Target absensi {rule.attendance_target} · oleh {rule.created_by || 'sistem'}</p>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
                 </div>
             )}
 
@@ -2650,7 +3355,9 @@ function getDropdownStyle(ref: React.RefObject<HTMLDivElement | null>, preferred
     };
 }
 
-function CustomSelect({ value, placeholder, options, onChange, searchable = true }: { value: string; placeholder: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void; searchable?: boolean }) {
+type SelectOption = { value: string; label: string; secondaryLabel?: string };
+
+function CustomSelect({ value, placeholder, options, onChange, searchable = true }: { value: string; placeholder: string; options: SelectOption[]; onChange: (value: string) => void; searchable?: boolean }) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
     const selected = options.find((option) => option.value === value);
@@ -2666,7 +3373,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const filteredOptions = searchable ? options.filter(opt => opt.label.toLowerCase().includes(search.toLowerCase())) : options;
+    const filteredOptions = searchable ? options.filter((option) => `${option.label} ${option.secondaryLabel || ''}`.toLowerCase().includes(search.toLowerCase())) : options;
     const dropdownStyle = open ? getDropdownStyle(ref, 256) : undefined;
 
     return (
@@ -2676,7 +3383,10 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
                 onClick={() => { setOpen((current) => !current); setSearch(''); }}
                 className="input flex items-center justify-between text-left gap-4"
             >
-                <span className={`truncate ${selected ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>{selected?.label || placeholder}</span>
+                <span className={`flex min-w-0 flex-col ${selected ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
+                    <span className="truncate">{selected?.label || placeholder}</span>
+                    {selected?.secondaryLabel && <span className="truncate text-[11px] font-medium text-gray-400">{selected.secondaryLabel}</span>}
+                </span>
                 <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
@@ -2719,7 +3429,10 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
                             }}
                             className={`w-full rounded-lg px-3 py-2 text-left text-sm ${option.value === value ? 'bg-purple-50 font-bold text-primary' : 'text-gray-700 hover:bg-gray-50'}`}
                         >
-                            {option.label}
+                            <span className="flex min-w-0 flex-col">
+                                <span className="truncate">{option.label}</span>
+                                {option.secondaryLabel && <span className="truncate text-[11px] font-medium text-gray-400">{option.secondaryLabel}</span>}
+                            </span>
                         </button>
                     ))}
                 </div>
@@ -2728,7 +3441,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
     );
 }
 
-function CustomMultiSelect({ values, placeholder, options, onChange }: { values: string[]; placeholder: string; options: Array<{ value: string; label: string }>; onChange: (values: string[]) => void }) {
+function CustomMultiSelect({ values, placeholder, options, onChange }: { values: string[]; placeholder: string; options: SelectOption[]; onChange: (values: string[]) => void }) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
     const ref = useRef<HTMLDivElement>(null);
@@ -2744,7 +3457,7 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
     }, []);
 
     const selectedOptions = options.filter((option) => values.includes(option.value));
-    const filteredOptions = options.filter((option) => option.label.toLowerCase().includes(search.toLowerCase()));
+    const filteredOptions = options.filter((option) => `${option.label} ${option.secondaryLabel || ''}`.toLowerCase().includes(search.toLowerCase()));
     const dropdownStyle = open ? getDropdownStyle(ref, 288) : undefined;
     const summary = selectedOptions.length === 0
         ? placeholder
@@ -2807,7 +3520,10 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
                             <span className={`h-4 w-4 rounded border flex items-center justify-center ${values.includes(option.value) ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
                                 {values.includes(option.value) && <Check size={12} className="text-white" />}
                             </span>
-                            <span className="truncate">{option.label}</span>
+                            <span className="flex min-w-0 flex-col">
+                                <span className="truncate">{option.label}</span>
+                                {option.secondaryLabel && <span className="truncate text-[11px] font-medium text-gray-400">{option.secondaryLabel}</span>}
+                            </span>
                         </button>
                     ))}
                 </div>

@@ -1,6 +1,7 @@
-import React from 'react';
-import { Star, ChevronDown } from 'lucide-react';
+import React, { useState } from 'react';
+import { Star, ChevronDown, Search } from 'lucide-react';
 import { formatDisplayNumber } from '../general/numberFormat';
+import { dailyScoreAvailabilityLabel, dailyScoreColor, formatDailyScoreDate } from '../utils/dailyScore';
 
 interface CrewListProps {
     data: any;
@@ -10,7 +11,12 @@ interface CrewListProps {
 
 export default function CrewList({ data, selectedId, onSelect }: CrewListProps) {
     const { supervisor, location_name, location_avg_progress, crews } = data;
-    const maxScore = Math.max(...(crews?.map((crew: any) => crew.score || 0) ?? [0]));
+    const [searchTerm, setSearchTerm] = useState('');
+    const normalizedSearch = searchTerm.trim().toLocaleLowerCase('id-ID');
+    const filteredCrews = (crews || []).filter((crew: { name?: string; id?: string | number }) =>
+        String(crew.name || '').toLocaleLowerCase('id-ID').includes(normalizedSearch)
+        || String(crew.id || '').toLocaleLowerCase('id-ID').includes(normalizedSearch)
+    );
     const displayRole = (role?: string) => {
         const normalized = String(role || '').toLowerCase();
         if (normalized === 'employee' || normalized === 'crew' || normalized === 'sc') return 'Karyawan';
@@ -25,12 +31,6 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
         if (score > 90) return 'bg-green-500';
         if (score > 75) return 'bg-yellow-400';
         return 'bg-red-500';
-    };
-
-    const getStarColor = (score: number) => {
-        if (score > 90) return 'text-green-500';
-        if (score >= 75.5) return 'text-yellow-400';
-        return 'text-red-500';
     };
 
     return (
@@ -64,11 +64,29 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                 </div>
 
                 <div className="border-b border-gray-200 mt-4"></div>
+
+                <div className="relative mt-4">
+                    <input
+                        type="search"
+                        placeholder="Cari nama atau NIK..."
+                        className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-4 pr-11 text-sm text-gray-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-purple-100"
+                        value={searchTerm}
+                        onChange={(event) => setSearchTerm(event.target.value)}
+                    />
+                    <Search
+                        size={18}
+                        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                    />
+                </div>
             </div>
 
             {/* List Area */}
             <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4">
-                {crews?.map((crew: any, index: number) => (
+                {filteredCrews.length === 0 && (
+                    <div className="py-10 text-center text-sm text-gray-400">Service crew tidak ditemukan.</div>
+                )}
+
+                {filteredCrews.map((crew: any, index: number) => (
                     <div
                         key={crew.id}
                         onClick={() => onSelect(crew.id)}
@@ -78,14 +96,16 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                             }`}
                         style={{ boxShadow: selectedId === crew.id ? '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' : '' }}
                     >
-                        {/* Top Performer Star */}
-                        {(crew.score || 0) === maxScore && maxScore > 0 && (
-                            <div className={`absolute top-4 right-4 ${getStarColor(crew.score || 0)}`}>
-                                <Star size={18} fill="currentColor" className="drop-shadow-sm" />
-                            </div>
-                        )}
+                        <div
+                            className={`absolute right-4 top-3 flex flex-col items-center ${dailyScoreColor(crew.daily_score, crew.daily_score_available)}`}
+                            title={crew.daily_score_available ? `Nilai harian ${crew.daily_score}` : dailyScoreAvailabilityLabel(crew.daily_score_unavailable_reason)}
+                        >
+                            <Star size={18} fill="currentColor" className="drop-shadow-sm" />
+                            <span className="mt-0.5 text-[10px] font-black">{crew.daily_score_available ? formatDisplayNumber(crew.daily_score, '0') : '-'}</span>
+                            <span className="whitespace-nowrap text-[8px] font-semibold text-gray-400">{formatDailyScoreDate(crew.daily_score_date)}</span>
+                        </div>
 
-                        <div className="mb-4 pr-6">
+                        <div className="mb-4 min-h-[42px] pr-16">
                             <h3 className="text-sm font-bold text-gray-800">{index + 1}. {crew.name} - {displayRole(crew.role)}</h3>
                         </div>
 
