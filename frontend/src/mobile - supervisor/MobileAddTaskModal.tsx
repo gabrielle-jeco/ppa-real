@@ -5,6 +5,7 @@ import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValu
 import useModalTransition from '../utils/useModalTransition';
 import { featureFlags } from '../utils/featureFlags';
 import TaskCatalogFields from '../general/TaskCatalogFields';
+import { TaskDatePicker, TaskTimePicker } from '../general/TaskSchedulePickers';
 
 interface MobileAddTaskModalProps {
     isOpen: boolean;
@@ -76,6 +77,10 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!date || !startTime || !dueTime) {
+            alert('Lengkapi tanggal, jam mulai, dan tenggat pekerjaan.');
+            return;
+        }
         const now = new Date();
         let effectiveStartTime = startTime;
         let startAtDate = new Date(`${date}T${effectiveStartTime}:00`);
@@ -157,50 +162,35 @@ export default function MobileAddTaskModal({ isOpen, onClose, onSubmit, defaultD
                         {/* Date Picker */}
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tanggal</label>
-                            <div className="relative">
-                                <input
-                                    type="date"
-                                    value={date}
-                                    onChange={(e) => {
-                                        setDate(e.target.value);
-                                        if (!initialTask && e.target.value === minTaskDate) {
-                                            setStartTime(new Date().toTimeString().slice(0, 5));
-                                        }
-                                    }}
-                                    min={minTaskDate}
-                                    max={maxTaskDate}
-                                    className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
-                                    required
-                                />
-                            </div>
+                            <TaskDatePicker
+                                value={date}
+                                min={minTaskDate}
+                                max={maxTaskDate}
+                                onChange={(nextDate) => {
+                                    setDate(nextDate);
+                                    if (!initialTask && nextDate === minTaskDate) {
+                                        setStartTime(new Date().toTimeString().slice(0, 5));
+                                    }
+                                }}
+                                accent="blue"
+                            />
                         </div>
 
                         {/* Time Picker */}
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Jam Mulai</label>
-                            <div className="relative">
-                                <input
-                                    type="time"
-                                    value={startTime}
-                                    onChange={(e) => setStartTime(e.target.value)}
-                                    disabled={isTodayTask}
-                                    className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all disabled:cursor-not-allowed disabled:text-gray-500"
-                                    required
-                                />
-                            </div>
+                            <TaskTimePicker value={startTime} onChange={setStartTime} disabled={isTodayTask} accent="blue" align="end" />
                         </div>
                     </div>
 
                     <div className={featureFlags.taskWeight ? 'grid grid-cols-2 gap-4' : ''}>
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tenggat</label>
-                            <input
-                                type="time"
+                            <TaskTimePicker
                                 value={dueTime}
-                                onChange={(e) => setDueTime(e.target.value)}
+                                onChange={setDueTime}
                                 min={startTime}
-                                className="w-full bg-gray-50 border-transparent focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl px-4 py-4 text-sm text-gray-700 font-medium transition-all"
-                                required
+                                accent="blue"
                             />
                         </div>
                         {featureFlags.taskWeight && (

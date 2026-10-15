@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Clock, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { getTaskWindowEndDate, isAfterTaskWindow, isBeforeToday, toDateFieldValue, toDateInputValue, toTimeFieldValue } from '../utils/taskDateWindow';
 import useModalTransition from '../utils/useModalTransition';
 import { featureFlags } from '../utils/featureFlags';
 import TaskCatalogFields from './TaskCatalogFields';
+import { TaskDatePicker, TaskTimePicker } from './TaskSchedulePickers';
 
 type CrewOption = { id: string; name: string };
 
@@ -136,6 +137,10 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
+        if (!startDate || !endDate || !startTime || !dueTime) {
+            alert('Lengkapi rentang tanggal, jam mulai, dan tenggat pekerjaan.');
+            return;
+        }
         const startDateObject = new Date(`${startDate}T00:00:00`);
         const endDateObject = new Date(`${endDate}T00:00:00`);
         const now = new Date();
@@ -219,30 +224,29 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal mulai</label>
-                                <div className="relative">
-                                    <input type="date" value={startDate} min={minDate} max={maxDate} onChange={(e) => {
-                                        setStartDate(e.target.value);
-                                        if (!initialBatch && e.target.value === minDate) {
+                                <TaskDatePicker
+                                    value={startDate}
+                                    min={minDate}
+                                    max={maxDate}
+                                    onChange={(nextDate) => {
+                                        setStartDate(nextDate);
+                                        if (!initialBatch && nextDate === minDate) {
                                             setStartTime(new Date().toTimeString().slice(0, 5));
                                         }
-                                    }} className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} required />
-                                </div>
+                                    }}
+                                    accent={accent}
+                                />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal berakhir</label>
-                                <div className="relative">
-                                    <input type="date" value={endDate} min={startDate || minDate} max={maxDate} onChange={(e) => setEndDate(e.target.value)} className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} required />
-                                </div>
+                                <TaskDatePicker value={endDate} min={startDate || minDate} max={maxDate} onChange={setEndDate} accent={accent} align="end" />
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam mulai</label>
-                                <div className="relative">
-                                    <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} required />
-                                    <Clock size={16} className="absolute right-4 top-4 text-gray-400" />
-                                </div>
+                                <TaskTimePicker value={startTime} onChange={setStartTime} accent={accent} />
                                 {startsToday && (
                                     <p className="mt-1 text-[10px] leading-4 text-gray-400">
                                         Jika jam yang dipilih sudah lewat, pekerjaan hari ini dimulai saat disimpan.
@@ -251,10 +255,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tenggat</label>
-                                <div className="relative">
-                                    <input type="time" value={dueTime} min={startTime} onChange={(e) => setDueTime(e.target.value)} className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} required />
-                                    <Clock size={16} className="absolute right-4 top-4 text-gray-400" />
-                                </div>
+                                <TaskTimePicker value={dueTime} min={startTime} onChange={setDueTime} accent={accent} align="end" />
                             </div>
                         </div>
 
