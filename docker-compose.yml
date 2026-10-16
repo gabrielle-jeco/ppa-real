@@ -35,7 +35,7 @@ services:
       YOJADWAL_NIK_FIELD: username
       YOJADWAL_PASSWORD_FIELD: password
       YOJADWAL_SUCCESS_FIELD: success
-      YOJADWAL_ALLOW_LOCAL_SUPERADMIN_FALLBACK: "true"
+      YOJADWAL_ALLOW_LOCAL_SUPERADMIN_FALLBACK: "false"
       YODAILY_USER_MONITORING_PASSWORD: "${YODAILY_USER_MONITORING_PASSWORD:-admin1234}"
       WEB_PUSH_ENABLED: "${WEB_PUSH_ENABLED:-true}"
       WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-https://yodaily.yogya.co.id}"
@@ -49,6 +49,9 @@ services:
 
   # Laravel Scheduler for background reminders and Web Push notifications
   scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     image: yodaily-backend:local
     container_name: perf-app-scheduler
     restart: unless-stopped
