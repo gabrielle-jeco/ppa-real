@@ -59,10 +59,10 @@ prepare_laravel_writable_dirs
 sync_composer_vendor
 
 php artisan config:clear || true
-php artisan cache:clear || true
 php artisan route:clear || true
 
 php artisan migrate --force
+php artisan cache:clear || true
 
 # Seed only if there are no operational users yet. The CMS superadmin can be
 # created by migrations, so it should not mark the demo/initial data as seeded.
