@@ -5,6 +5,7 @@ import MobileCrewTaskPreview from './MobileCrewTaskPreview';
 import MobileActionModal from '../general/MobileActionModal';
 import MobileCameraCapture from '../general/MobileCameraCapture';
 import { compressImage } from '../utils/imageCompressor';
+import { formatEvidenceUploadError } from '../utils/evidenceUploadError';
 import { isTaskNotStarted } from '../utils/taskTiming';
 
 interface MobileTaskExecutionProps {
@@ -87,9 +88,9 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
             formData.append(`${activeUploadType}[]`, compressedFile);
 
             await onUpload(formData);
-        } catch (error) {
+        } catch (error: unknown) {
             console.error(error);
-            alert("Gagal mengunggah foto.");
+            alert(formatEvidenceUploadError(error, task));
         } finally {
             setIsUploading(false);
         }
