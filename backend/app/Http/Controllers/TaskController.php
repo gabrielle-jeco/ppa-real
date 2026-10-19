@@ -14,7 +14,9 @@ use App\Services\UserNotificationService;
 use App\Services\SupervisorTaskAccessService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -956,18 +958,31 @@ class TaskController extends Controller
         $task = Task::with('evidences')->findOrFail($id);
 
         if ($task->status === 'approved') {
-            return response()->json(['message' => 'Bukti pekerjaan yang sudah disetujui tidak dapat diubah. Batalkan persetujuan terlebih dahulu.'], 400);
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'TASK_ALREADY_APPROVED',
+                'Bukti pekerjaan yang sudah disetujui tidak dapat diubah. Batalkan persetujuan terlebih dahulu.',
+                400
+            );
         }
 
         if ($this->isTaskNotStarted($task)) {
-            return response()->json(['message' => 'Pekerjaan belum memasuki jam mulai.'], 423);
+            return $this->evidenceUploadError($request, $task, 'TASK_NOT_STARTED', 'Pekerjaan belum memasuki jam mulai.', 423);
         }
 
         if ($task->employee_id !== Auth::user()->username) {
-            return response()->json(['message' => 'Tidak memiliki akses. Hanya penerima tugas yang dapat mengunggah bukti.'], 403);
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'TASK_UPLOAD_FORBIDDEN',
+                'Tidak memiliki akses. Hanya penerima tugas yang dapat mengunggah bukti.',
+                403,
+                false
+            );
         }
 
-        if ($response = $this->rejectNonTodayActionDate($request, $task)) {
+        if ($response = $this->rejectNonTodayActionDate($request, $task, true)) {
             return $response;
         }
 
@@ -977,15 +992,23 @@ class TaskController extends Controller
             && in_array($authUser->role_type, ['employee', 'crew'], true)
             && !$this->hasConfirmedGuideForTask($authUser, $task)
         ) {
-            return response()->json([
-                'message' => 'Silakan konfirmasi panduan hari ini sebelum mengunggah bukti tugas.'
-            ], 423);
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'GUIDE_NOT_CONFIRMED',
+                'Silakan konfirmasi panduan hari ini sebelum mengunggah bukti tugas.',
+                423
+            );
         }
 
         if (!$request->hasFile('before') && !$request->hasFile('after')) {
-            return response()->json([
-                'message' => 'Foto tidak terdeteksi atau terlalu besar (Maks 10MB).'
-            ], 400);
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'EVIDENCE_FILE_MISSING',
+                'Foto tidak terdeteksi atau terlalu besar (Maks 10MB).',
+                400
+            );
         }
 
         if ($this->usesRevisionWorkflow($task)) {
@@ -993,24 +1016,38 @@ class TaskController extends Controller
         }
 
         if ($this->isTaskLocked($task)) {
-            return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan unggah bukti sudah dikunci.'], 400);
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'TASK_DUE_PASSED',
+                'Tugas ini sudah melewati tenggat dan unggah bukti sudah dikunci.',
+                400
+            );
         }
 
         $existingBeforeCount = $task->evidences->where('type', 'before')->count();
         $existingAfterCount = $task->evidences->where('type', 'after')->count();
 
         if ($request->hasFile('before') && $existingBeforeCount >= 1) {
-            return response()->json([
-                'message' => 'Bukti sebelum bekerja dibatasi maksimal 1 foto.'
-            ], 422);
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'BEFORE_EVIDENCE_LIMIT_REACHED',
+                'Bukti sebelum bekerja dibatasi maksimal 1 foto.',
+                422
+            );
         }
 
         if ($request->hasFile('after')) {
             $newAfterCount = count($request->file('after'));
             if (($existingAfterCount + $newAfterCount) > 3) {
-                return response()->json([
-                    'message' => 'Bukti sesudah bekerja dibatasi maksimal 3 foto per tugas.'
-                ], 422);
+                return $this->evidenceUploadError(
+                    $request,
+                    $task,
+                    'AFTER_EVIDENCE_LIMIT_REACHED',
+                    'Bukti sesudah bekerja dibatasi maksimal 3 foto per tugas.',
+                    422
+                );
             }
         }
 
@@ -1065,7 +1102,15 @@ class TaskController extends Controller
             return response()->json($task->load('evidences'));
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.'], 500);
+            report($e);
+
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'EVIDENCE_UPLOAD_FAILED',
+                'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.',
+                500
+            );
         }
     }
 
@@ -1175,14 +1220,32 @@ class TaskController extends Controller
             foreach ($storedPaths as $path) {
                 Storage::disk('public')->delete($path);
             }
-            throw $exception;
+
+            $errors = $exception->errors();
+            $message = collect($errors)->flatten()->first() ?: 'Unggah bukti ditolak.';
+
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'EVIDENCE_UPLOAD_REJECTED',
+                $message,
+                422,
+                true,
+                $errors
+            );
         } catch (Throwable $exception) {
             foreach ($storedPaths as $path) {
                 Storage::disk('public')->delete($path);
             }
             report($exception);
 
-            return response()->json(['message' => 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.'], 500);
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'EVIDENCE_UPLOAD_FAILED',
+                'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.',
+                500
+            );
         }
 
         if ($authUser->username === $task->employee_id && $request->hasFile('after')) {
@@ -1342,7 +1405,7 @@ class TaskController extends Controller
             ->first();
     }
 
-    private function rejectNonTodayActionDate(Request $request, Task $task)
+    private function rejectNonTodayActionDate(Request $request, Task $task, bool $forEvidenceUpload = false)
     {
         if (!$request->filled('action_date')) {
             return null;
@@ -1351,18 +1414,85 @@ class TaskController extends Controller
         $actionDate = Carbon::parse($request->input('action_date'));
 
         if (!$actionDate->isSameDay(Carbon::today())) {
+            if ($forEvidenceUpload) {
+                return $this->evidenceUploadError(
+                    $request,
+                    $task,
+                    'TASK_ACTION_DATE_NOT_TODAY',
+                    'Aksi pekerjaan hanya dapat dilakukan dari tampilan pekerjaan hari ini.',
+                    422
+                );
+            }
+
             return response()->json([
                 'message' => 'Aksi pekerjaan hanya dapat dilakukan dari tampilan pekerjaan hari ini.'
             ], 422);
         }
 
         if (!Task::whereKey($task->id)->activeOnDate($actionDate)->exists()) {
+            if ($forEvidenceUpload) {
+                return $this->evidenceUploadError(
+                    $request,
+                    $task,
+                    'TASK_NOT_ACTIVE_ON_DATE',
+                    'Pekerjaan ini tidak aktif pada tanggal yang dipilih.',
+                    422
+                );
+            }
+
             return response()->json([
                 'message' => 'Pekerjaan ini tidak aktif pada tanggal yang dipilih.'
             ], 422);
         }
 
         return null;
+    }
+
+    private function evidenceUploadError(
+        Request $request,
+        Task $task,
+        string $errorCode,
+        string $message,
+        int $status,
+        bool $includeTaskTiming = true,
+        array $errors = []
+    ) {
+        $referenceId = Str::upper(Str::random(10));
+        $serverNow = Carbon::now();
+        $timing = [
+            'start_at' => $task->start_at ? Carbon::parse($task->start_at)->toISOString() : null,
+            'due_at' => $task->due_at ? Carbon::parse($task->due_at)->toISOString() : null,
+        ];
+
+        Log::warning('Task evidence upload rejected', [
+            'reference_id' => $referenceId,
+            'error_code' => $errorCode,
+            'message' => $message,
+            'http_status' => $status,
+            'task_id' => $task->id,
+            'user_id' => optional(Auth::user())->username,
+            'server_time' => $serverNow->toISOString(),
+            'action_date' => $request->input('action_date'),
+            ...$timing,
+        ]);
+
+        $payload = [
+            'message' => $message,
+            'error_code' => $errorCode,
+            'reference_id' => $referenceId,
+            'task_id' => $task->id,
+            'server_time' => $serverNow->toISOString(),
+        ];
+
+        if ($includeTaskTiming) {
+            $payload = [...$payload, ...$timing];
+        }
+
+        if ($errors !== []) {
+            $payload['errors'] = $errors;
+        }
+
+        return response()->json($payload, $status);
     }
 
     private function isTaskLocked(Task $task): bool

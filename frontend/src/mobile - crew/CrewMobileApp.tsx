@@ -5,6 +5,7 @@ import MobileTaskExecution from './MobileTaskExecution';
 import MobileCrewHistory from './MobileCrewHistory';
 import MobileCrewEvaluation from './MobileCrewEvaluation';
 import MobileTaskGuide from './MobileTaskGuide';
+import { evidenceUploadErrorFromResponse } from '../utils/evidenceUploadError';
 
 
 interface CrewMobileAppProps {
@@ -126,8 +127,7 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
             });
 
             if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(errText);
+                throw await evidenceUploadErrorFromResponse(response);
             }
 
             // Successfully uploaded, get the fresh task data and update modal immediately
@@ -137,14 +137,6 @@ export default function CrewMobileApp({ user, onLogout }: CrewMobileAppProps) {
             setRefreshTrigger(prev => prev + 1);
         } catch (error: any) {
             console.error(error);
-            let errorMessage = "Gagal mengunggah foto. Silakan coba lagi.";
-            try {
-                const parsed = JSON.parse(error.message);
-                if (parsed.message) errorMessage = parsed.message;
-            } catch {
-                if (error.message) errorMessage = error.message;
-            }
-            alert(errorMessage);
             throw error;
         }
     };

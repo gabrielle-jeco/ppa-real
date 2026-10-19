@@ -244,6 +244,41 @@ class TaskReviewWorkflowTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
+    public function test_expired_evidence_upload_returns_diagnostic_context(): void
+    {
+        Storage::fake('public');
+        Carbon::setTestNow(Carbon::parse('2026-10-09 22:31:00', 'Asia/Jakarta'));
+
+        $crew = new User(['username' => 'crew-1']);
+        $crew->setRelation('accountRole', null);
+        $crew->setRelation('userLocations', collect());
+        $crew->setRelation('locations', collect());
+        $task = Task::create([
+            'employee_id' => 'crew-1',
+            'employer_id' => 'supervisor-1',
+            'title' => 'Rapikan area kasir',
+            'start_at' => '2026-10-09 08:00:00',
+            'due_at' => '2026-10-09 22:30:00',
+            'approval_deadline_at' => '2026-10-09 23:59:59',
+            'revision_deadline_at' => '2026-10-09 23:29:59',
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($crew, 'sanctum')
+            ->post('/api/tasks/' . $task->id . '/evidence', [
+                'after' => [$this->fakeImage('late-after.png')],
+            ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonPath('error_code', 'EVIDENCE_UPLOAD_REJECTED')
+            ->assertJsonPath('task_id', $task->id)
+            ->assertJsonPath('server_time', '2026-10-09T15:31:00.000000Z')
+            ->assertJsonPath('due_at', '2026-10-09T15:30:00.000000Z')
+            ->assertJsonStructure(['message', 'reference_id', 'errors']);
+
+        $this->assertSame(10, strlen($response->json('reference_id')));
+        $this->assertDatabaseMissing('task_evidences', ['task_id' => $task->id]);
+    }
+
     private function taskWithAttempt(int $attemptNo, bool $withBefore = false): array
     {
         $reviewer = new User(['username' => 'supervisor-1']);
