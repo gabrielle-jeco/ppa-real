@@ -12,6 +12,7 @@ import { isTaskNotStarted } from '../utils/taskTiming';
 import { featureFlags } from '../utils/featureFlags';
 import RejectTaskModal from '../general/RejectTaskModal';
 import { canDeleteTask, canRejectTask, canToggleTaskApproval } from '../utils/taskReview';
+import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
 interface MobileCrewDetailProps {
     crew: any;
@@ -483,7 +484,7 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
                                     <div className="flex-1 min-w-0 pr-2">
                                         <p className={`text-sm font-medium leading-tight mb-1 ${isApproved ? 'text-gray-500' : 'text-gray-700'}`}>
-                                            {task.title}
+                                            {formatTaskTitleWithArea(task)}
                                         </p>
                                         <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
                                         <TaskStartStatus

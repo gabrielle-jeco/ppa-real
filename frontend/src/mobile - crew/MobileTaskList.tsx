@@ -5,6 +5,7 @@ import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
 import { markNotificationSeen, notifyOnce, notifyUpcomingTask } from '../utils/browserNotifications';
 import { featureFlags } from '../utils/featureFlags';
+import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
 interface MobileTaskListProps {
     user: any;
@@ -155,7 +156,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
 
                                             <div className="flex-1 min-w-0 pr-2">
                                                 <p className={`text-sm font-medium leading-tight mb-1 ${isCompleted ? 'text-gray-500' : 'text-gray-700'}`}>
-                                                    {task.title}
+                                                    {formatTaskTitleWithArea(task)}
                                                 </p>
                                                 <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
                                                 <TaskStartStatus

@@ -103,7 +103,7 @@ class TaskController extends Controller
             });
         }
 
-        $tasks = $query->with(['evidences', 'workStation', 'assignmentBatch'])
+        $tasks = $query->with(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea'])
             ->orderBy('due_at', 'asc')
             ->get()
             ->unique(function (Task $task) {
@@ -228,7 +228,7 @@ class TaskController extends Controller
             'task-created-' . $task->id
         );
 
-        return response()->json($task, 201);
+        return response()->json($task->load(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea']), 201);
     }
 
     public function bulkStore(Request $request)
@@ -369,7 +369,7 @@ class TaskController extends Controller
         return response()->json([
             'message' => 'Penugasan massal berhasil dibuat.',
             'created' => $tasks->count(),
-            'tasks' => Task::with(['evidences', 'workStation', 'assignmentBatch'])
+            'tasks' => Task::with(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea'])
                 ->whereIn('id', $tasks->pluck('id'))
                 ->orderBy('due_at', 'asc')
                 ->get(),
@@ -457,7 +457,7 @@ class TaskController extends Controller
             ]
         );
 
-        return response()->json($task->load(['evidences', 'workStation', 'assignmentBatch']));
+        return response()->json($task->load(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea']));
     }
 
     public function updateBatch(Request $request, $id)
@@ -641,7 +641,7 @@ class TaskController extends Controller
                 : 'Penugasan massal berhasil diperbarui. Tugas yang sudah berjalan atau memiliki bukti tetap dipertahankan.',
             'updated' => $tasks->count(),
             'protected' => $protectedTasks->count(),
-            'tasks' => Task::with(['evidences', 'workStation', 'assignmentBatch'])
+            'tasks' => Task::with(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea'])
                 ->where('assignment_batch_id', $batch->id)
                 ->orderBy('due_at', 'asc')
                 ->get(),

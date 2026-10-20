@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import TaskStartStatus from '../general/TaskStartStatus';
+import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
 interface SubmissionHistoryProps {
     task: any;
@@ -24,7 +25,7 @@ export default function SubmissionHistory({ task, onClose }: SubmissionHistoryPr
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h2 className="font-bold text-gray-800 text-lg">Riwayat Bukti</h2>
-                    <p className="text-sm text-gray-400">{task.title}</p>
+                    <p className="text-sm text-gray-400">{formatTaskTitleWithArea(task)}</p>
                     <TaskStartStatus
                         task={task}
                         scheduleClassName="text-xs text-gray-400 mt-1"

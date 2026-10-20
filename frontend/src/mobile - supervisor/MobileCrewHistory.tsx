@@ -13,6 +13,7 @@ import { isTaskNotStarted } from '../utils/taskTiming';
 import { featureFlags } from '../utils/featureFlags';
 import RejectTaskModal from '../general/RejectTaskModal';
 import { canDeleteTask, canRejectTask, canToggleTaskApproval } from '../utils/taskReview';
+import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
 interface MobileCrewHistoryProps {
     crew: any;
@@ -511,7 +512,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
                                                     {isApproved && <Check size={14} strokeWidth={3} />}
                                                 </div>
                                                 <div className="flex-1 min-w-0 pr-2">
-                                                    <p className={`font-bold text-sm line-clamp-1 mb-0.5 ${isApproved ? 'text-gray-500' : 'text-gray-800'}`}>{task.title}</p>
+                                                    <p className={`font-bold text-sm leading-tight mb-0.5 ${isApproved ? 'text-gray-500' : 'text-gray-800'}`}>{formatTaskTitleWithArea(task)}</p>
                                                     <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
                                                     <TaskStartStatus
                                                         task={task}

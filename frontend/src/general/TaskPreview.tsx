@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import TaskStartStatus from './TaskStartStatus';
+import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
 interface TaskPreviewProps {
     task: any;
@@ -33,7 +34,7 @@ export default function TaskPreview({ task, onClose }: TaskPreviewProps) {
             <div className="flex justify-between items-center mb-4">
                 <div>
                     <h2 className="font-bold text-gray-800 text-lg">Bukti Tugas</h2>
-                    <p className="text-sm text-gray-400">{task.title}</p>
+                    <p className="text-sm text-gray-400">{formatTaskTitleWithArea(task)}</p>
                     <TaskStartStatus
                         task={task}
                         scheduleClassName="text-xs text-gray-400 mt-1"

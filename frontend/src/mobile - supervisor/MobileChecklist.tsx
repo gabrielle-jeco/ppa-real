@@ -5,6 +5,7 @@ import MobileSupervisorTaskDetail from './MobileSupervisorTaskDetail';
 import TaskStartStatus from '../general/TaskStartStatus';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 import { featureFlags } from '../utils/featureFlags';
+import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
 interface MobileChecklistProps {
     supervisor: any; // The logged-in supervisor
@@ -231,7 +232,7 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
                                         </div>
 
                                         <div className="flex-1 min-w-0 pr-2">
-                                            <p className="text-sm font-medium text-gray-700 leading-tight mb-1">{task.title}</p>
+                                            <p className="text-sm font-medium text-gray-700 leading-tight mb-1">{formatTaskTitleWithArea(task)}</p>
                                             <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
                                             <TaskStartStatus
                                                 task={task}
