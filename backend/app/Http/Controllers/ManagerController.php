@@ -172,7 +172,7 @@ class ManagerController extends Controller
             })
             ->values()
             ->map(function ($crew) use ($supervisor, $targetDate, $scoringService) {
-                $tasks = \App\Models\Task::with(['evidences', 'workStation'])
+                $tasks = \App\Models\Task::with(['evidences', 'workStation', 'taskDefinition.taskArea'])
                     ->where('employee_id', $crew->username)
                     ->where('employer_id', $supervisor->username)
                     ->activeOnDate($targetDate)

@@ -164,7 +164,8 @@ class TaskCatalogAssignmentTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('title', 'Kebersihan area display')
-            ->assertJsonPath('task_definition_id', $definition->id);
+            ->assertJsonPath('task_definition_id', $definition->id)
+            ->assertJsonPath('task_definition.task_area.name', 'FRESH');
 
         $this->assertDatabaseHas('tasks', [
             'employee_id' => 'crew-1',
@@ -208,7 +209,8 @@ class TaskCatalogAssignmentTest extends TestCase
                 'note' => 'Dikerjakan dua hari.',
             ])
             ->assertCreated()
-            ->assertJsonPath('created', 2);
+            ->assertJsonPath('created', 2)
+            ->assertJsonPath('tasks.0.task_definition.task_area.name', 'FRESH');
 
         $this->assertDatabaseHas('task_assignment_batches', [
             'task_definition_id' => $definition->id,

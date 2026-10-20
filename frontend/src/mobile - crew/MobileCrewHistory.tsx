@@ -5,6 +5,7 @@ import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 import { featureFlags } from '../utils/featureFlags';
+import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
 interface MobileCrewHistoryProps {
     user: any;
@@ -257,7 +258,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                                 {task.status === 'approved' && <Check size={14} strokeWidth={3} />}
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-gray-800 text-sm line-clamp-1 mb-0.5">{task.title}</p>
+                                                <p className="font-bold text-gray-800 text-sm leading-tight mb-0.5">{formatTaskTitleWithArea(task)}</p>
                                                 <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
                                                 <TaskStartStatus
                                                     task={task}

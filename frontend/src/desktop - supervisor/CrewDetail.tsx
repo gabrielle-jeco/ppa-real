@@ -14,6 +14,7 @@ import { featureFlags } from '../utils/featureFlags';
 import { formatDisplayNumber } from '../general/numberFormat';
 import RejectTaskModal from '../general/RejectTaskModal';
 import { canDeleteTask, canRejectTask, canToggleTaskApproval } from '../utils/taskReview';
+import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
 interface CrewDetailProps {
     crew: any;
@@ -768,7 +769,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                                 {task.status === 'approved' && <CheckCircle size={14} strokeWidth={3} />}
                                             </div>
                                             <div className="flex-1">
-                                                <p className={`text-sm font-medium ${task.status === 'approved' ? 'text-gray-800' : 'text-gray-600'}`}>{task.title}</p>
+                                                <p className={`text-sm font-medium ${task.status === 'approved' ? 'text-gray-800' : 'text-gray-600'}`}>{formatTaskTitleWithArea(task)}</p>
                                                 <p className="text-[10px] text-primary font-semibold capitalize mt-1">Kategori: {task.work_station?.name || 'Umum'}</p>
                                                 <TaskStartStatus
                                                     task={task}

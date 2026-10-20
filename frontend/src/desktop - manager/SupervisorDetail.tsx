@@ -6,6 +6,7 @@ import ManagerReviewForm from './ManagerReviewForm';
 import { getAttendanceColor as getAttendanceStatusColor, getAttendanceDay } from '../utils/attendanceCalendar';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 import { formatDisplayNumber } from '../general/numberFormat';
+import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
 interface SupervisorDetailProps {
     supervisor: any;
@@ -357,7 +358,7 @@ export default function SupervisorDetail({ supervisor, onTaskChange }: Superviso
                                                     {statusLabels[task.status] || task.status}
                                                 </div>
                                                 <div className="flex-1">
-                                                    <p className="text-sm font-semibold text-gray-700">{task.title}</p>
+                                                    <p className="text-sm font-semibold text-gray-700">{formatTaskTitleWithArea(task)}</p>
                                                     <TaskStartStatus
                                                         task={task}
                                                         scheduleClassName="text-[10px] text-gray-400 mt-1"
