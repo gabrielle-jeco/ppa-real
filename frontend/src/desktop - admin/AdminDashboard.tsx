@@ -130,6 +130,11 @@ type ReportingLine = {
     subordinate_division_name?: string | null;
     subordinate_division_group_code?: string | null;
     status: 'active' | 'inactive';
+    relation_type: 'permanent' | 'backup';
+    backup_request_id?: number | null;
+    effective_from?: string | null;
+    effective_until?: string | null;
+    is_currently_effective: boolean;
 };
 
 type ReportingImportIssue = {
@@ -691,7 +696,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             if (storeFilter) query.append('store', storeFilter);
             const lines = await requestJson(`/api/cms/reporting-lines?${query.toString()}`, 'GET');
             const activeSubordinates = (lines || [])
-                .filter((line: ReportingLine) => line.status === 'active')
+                .filter((line: ReportingLine) => line.relation_type !== 'backup' && line.status === 'active')
                 .map((line: ReportingLine) => line.subordinate_id)
                 .filter((subordinateId: string) => subordinateId !== leaderId);
 
@@ -956,6 +961,28 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             await fetchOverview();
         } catch (error: any) {
             setMessage(error.message || 'Gagal memperbarui relasi atasan.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const convertReportingLineToPermanent = async (line: ReportingLine) => {
+        const subordinate = line.subordinate_name || line.subordinate_id;
+        if (!window.confirm(`Jadikan relasi ${subordinate} sebagai bawahan permanen?`)) return;
+
+        setSaving(true);
+        setMessage('');
+        try {
+            await requestJson('/api/cms/reporting-lines', 'POST', {
+                leader_id: line.leader_id,
+                subordinate_id: line.subordinate_id,
+                status: 'active',
+            });
+            setMessage('Relasi backup berhasil dijadikan relasi permanen.');
+            await fetchReportingLines();
+            await fetchOverview();
+        } catch (error: any) {
+            setMessage(error.message || 'Gagal mengubah relasi menjadi permanen.');
         } finally {
             setSaving(false);
         }
@@ -2445,10 +2472,10 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-gray-100 bg-white flex items-center gap-4">
                             <div className="flex-1">
-                                <h2 className="font-black text-gray-900 mb-2">Filter Bawahan berdasarkan Atasan</h2>
+                                <h2 className="font-black text-gray-900 mb-2">Daftar Relasi Atasan</h2>
                                 <CustomSelect
                                     value={selectedLeaderId}
-                                    placeholder="Pilih atasan untuk melihat relasinya..."
+                                    placeholder="Semua atasan"
                                     options={leadersData.map((user) => ({ value: user.username, label: userIdentityLabel(user), secondaryLabel: user.division_name || '-' }))}
                                     onChange={(value) => setSelectedLeaderId(value)}
                                     searchable
@@ -2465,28 +2492,55 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             </div>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
-                            {!selectedLeaderId ? (
-                                <div className="p-8 text-center text-gray-400 text-sm">Pilih atasan terlebih dahulu untuk melihat daftar bawahannya.</div>
-                            ) : reportingLinesData.length === 0 ? (
-                                <div className="p-8 text-center text-gray-400 text-sm">Bawahan untuk atasan ini tidak ditemukan.</div>
-                            ) : reportingLinesData.filter(line => `${line.subordinate_name || ''} ${line.subordinate_id} ${line.subordinate_division_name || ''} ${line.subordinate_division_group_code || ''}`.toLowerCase().includes(hierarchySearch.toLowerCase())).map((line) => (
-                                <div key={line.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition">
-                                    <div>
-                                        <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-0.5">Subordinate</p>
-                                        <p className="font-black text-gray-900 text-lg">{userIdentityLabel({ username: line.subordinate_id, name: line.subordinate_name || line.subordinate_id, role_type: line.subordinate_role_type, division_group_code: line.subordinate_division_group_code })}</p>
-                                        <p className="mt-1 text-xs font-semibold text-gray-400">{line.subordinate_division_name || '-'}</p>
+                            {reportingLinesData.length === 0 ? (
+                                <div className="p-8 text-center text-gray-400 text-sm">Relasi atasan tidak ditemukan.</div>
+                            ) : reportingLinesData.filter(line => `${line.leader_name || ''} ${line.leader_id} ${line.subordinate_name || ''} ${line.subordinate_id} ${line.subordinate_division_name || ''} ${line.subordinate_division_group_code || ''} ${line.relation_type}`.toLowerCase().includes(hierarchySearch.toLowerCase())).map((line) => {
+                                const isBackup = line.relation_type === 'backup';
+                                return (
+                                    <div key={line.id} className="px-6 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition">
+                                        <div className="min-w-0">
+                                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                                                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Subordinate</p>
+                                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${isBackup ? 'bg-amber-50 text-amber-600' : 'bg-purple-50 text-primary'}`}>
+                                                    {isBackup ? 'Backup' : 'Permanen'}
+                                                </span>
+                                                {isBackup && (
+                                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${line.is_currently_effective ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
+                                                        {line.is_currently_effective ? 'Sedang berlaku' : 'Di luar periode'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="font-black text-gray-900 text-lg">{userIdentityLabel({ username: line.subordinate_id, name: line.subordinate_name || line.subordinate_id, role_type: line.subordinate_role_type, division_group_code: line.subordinate_division_group_code })}</p>
+                                            <p className="mt-1 text-xs font-semibold text-gray-400">{line.subordinate_division_name || '-'}</p>
+                                            <p className="mt-1 text-xs font-semibold text-gray-500">
+                                                Atasan: {userIdentityLabel({ username: line.leader_id, name: line.leader_name || line.leader_id, role_type: line.leader_role_type, division_group_code: line.leader_division_group_code })}
+                                            </p>
+                                            {isBackup && (
+                                                <p className="mt-1 text-xs font-semibold text-amber-600">
+                                                    Periode: {formatReportingDate(line.effective_from)} - {formatReportingDate(line.effective_until)}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                                            <span className={`text-xs font-bold px-3 py-1 rounded-full ${line.status === 'active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                                {line.status}
+                                            </span>
+                                            {isBackup ? (
+                                                <button type="button" disabled={saving} onClick={() => convertReportingLineToPermanent(line)} className="rounded-xl px-3 py-2 text-xs font-bold text-primary hover:bg-purple-50 disabled:opacity-50">
+                                                    Jadikan Permanen
+                                                </button>
+                                            ) : (
+                                                <>
+                                                    <button type="button" disabled={saving} onClick={() => toggleReportingLineStatus(line)} className="text-xs font-bold text-primary hover:bg-purple-50 px-3 py-2 rounded-xl disabled:opacity-50">
+                                                        {line.status === 'active' ? 'Deactivate' : 'Activate'}
+                                                    </button>
+                                                    <button type="button" disabled={saving} onClick={() => deleteReportingLine(line.id)} className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl disabled:opacity-50">Hapus</button>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${line.status === 'active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            {line.status}
-                                        </span>
-                                        <button onClick={() => toggleReportingLineStatus(line)} className="text-xs font-bold text-primary hover:bg-purple-50 px-3 py-2 rounded-xl">
-                                            {line.status === 'active' ? 'Deactivate' : 'Activate'}
-                                        </button>
-                                        <button onClick={() => deleteReportingLine(line.id)} className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl">Hapus</button>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -3234,6 +3288,19 @@ function formatActivityDate(value?: string | null) {
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+    });
+}
+
+function formatReportingDate(value?: string | null) {
+    if (!value) return '-';
+
+    const date = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return '-';
+
+    return date.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
     });
 }
 
