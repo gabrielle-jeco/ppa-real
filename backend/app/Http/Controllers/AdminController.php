@@ -401,7 +401,6 @@ class AdminController extends Controller
         $this->authorizePermission('reporting_lines');
         
         $query = ReportingLine::withoutGlobalScope('effective_backup_period')
-            ->where('relation_type', 'permanent')
             ->with(['leader.jobLevel', 'leader.division', 'subordinate.jobLevel', 'subordinate.division'])
             ->whereHas('leader.userLocations')
             ->whereHas('subordinate.userLocations')
@@ -696,19 +695,27 @@ class AdminController extends Controller
 
         $this->validateReportingLineHierarchy($data['leader_id'], $data['subordinate_id']);
 
-        $line = ReportingLine::withoutGlobalScope('effective_backup_period')->updateOrCreate(
-            [
+        $now = now();
+        DB::table('reporting_lines')->upsert(
+            [[
                 'leader_id' => $data['leader_id'],
                 'subordinate_id' => $data['subordinate_id'],
                 'relation_type' => 'permanent',
-            ],
-            [
                 'status' => $data['status'],
                 'backup_request_id' => null,
                 'effective_from' => null,
                 'effective_until' => null,
-            ]
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]],
+            ['leader_id', 'subordinate_id'],
+            ['relation_type', 'status', 'backup_request_id', 'effective_from', 'effective_until', 'updated_at']
         );
+
+        $line = ReportingLine::withoutGlobalScope('effective_backup_period')
+            ->where('leader_id', $data['leader_id'])
+            ->where('subordinate_id', $data['subordinate_id'])
+            ->firstOrFail();
 
         return response()->json($this->formatReportingLine($line->fresh(['leader', 'subordinate'])), 201);
     }
@@ -1598,6 +1605,14 @@ class AdminController extends Controller
             'subordinate_division_name' => $line->subordinate?->division?->name,
             'subordinate_division_group_code' => $line->subordinate?->division?->group_code,
             'status' => $line->status,
+            'relation_type' => $line->relation_type,
+            'backup_request_id' => $line->backup_request_id,
+            'effective_from' => $line->effective_from?->toDateString(),
+            'effective_until' => $line->effective_until?->toDateString(),
+            'is_currently_effective' => $line->status === 'active'
+                && ($line->relation_type === 'permanent'
+                    || ($line->effective_from?->lte(Carbon::today())
+                    && $line->effective_until?->gte(Carbon::today()))),
         ];
     }
 
