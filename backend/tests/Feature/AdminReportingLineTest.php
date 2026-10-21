@@ -228,6 +228,7 @@ class AdminReportingLineTest extends TestCase
             $table->string('position_code')->nullable();
             $table->string('grade')->nullable();
             $table->string('department')->nullable();
+            $table->boolean('visible_in_yodaily')->default(false);
             $table->timestamps();
         });
         Schema::create('divisions', function (Blueprint $table) {
