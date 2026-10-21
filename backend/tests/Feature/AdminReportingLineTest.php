@@ -129,12 +129,45 @@ class AdminReportingLineTest extends TestCase
         $this->assertSame(1, DB::table('reporting_lines')->count());
     }
 
+    public function test_user_list_exposes_permanent_and_backup_leader_relations(): void
+    {
+        [$admin, $permanentLeader, $crew] = $this->seedUsers();
+        $backupLeader = $this->createOperationalUser('leader-2', 'Backup Supervisor', 'supervisor');
+
+        ReportingLine::withoutGlobalScope('effective_backup_period')->create([
+            'leader_id' => $permanentLeader->username,
+            'subordinate_id' => $crew->username,
+            'status' => 'active',
+            'relation_type' => 'permanent',
+        ]);
+        ReportingLine::withoutGlobalScope('effective_backup_period')->create([
+            'leader_id' => $backupLeader->username,
+            'subordinate_id' => $crew->username,
+            'status' => 'active',
+            'relation_type' => 'backup',
+            'backup_request_id' => 99,
+            'effective_from' => '2026-10-01',
+            'effective_until' => '2026-10-10',
+        ]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/cms/users?search=' . $crew->username)
+            ->assertOk()
+            ->assertJsonPath('data.0.username', $crew->username)
+            ->assertJsonCount(2, 'data.0.reporting_relations')
+            ->assertJsonPath('data.0.reporting_relations.0.leader_name', $permanentLeader->name)
+            ->assertJsonPath('data.0.reporting_relations.0.relation_type', 'permanent')
+            ->assertJsonPath('data.0.reporting_relations.1.leader_name', $backupLeader->name)
+            ->assertJsonPath('data.0.reporting_relations.1.relation_type', 'backup')
+            ->assertJsonPath('data.0.reporting_relations.1.is_currently_effective', false);
+    }
+
     private function seedUsers(): array
     {
         $role = Role::create([
             'name' => 'cms reporting admin',
             'description' => 'Reporting line administrator',
-            'permissions' => ['reporting_lines'],
+            'permissions' => ['reporting_lines', 'users_locations'],
         ]);
 
         DB::table('locations')->insert([

@@ -79,6 +79,17 @@ type Location = {
     type_store?: string;
 };
 
+type UserReportingRelation = {
+    id: number;
+    leader_id: string;
+    leader_name?: string | null;
+    relation_type: 'permanent' | 'backup';
+    status: 'active' | 'inactive';
+    effective_from?: string | null;
+    effective_until?: string | null;
+    is_currently_effective: boolean;
+};
+
 type CmsUser = {
     username: string;
     name: string;
@@ -98,6 +109,7 @@ type CmsUser = {
     is_back_office: boolean;
     locations: Array<{ initial: string; name: string }>;
     leader?: { username: string; name: string } | null;
+    reporting_relations: UserReportingRelation[];
     subordinates_count: number;
 };
 
@@ -349,6 +361,24 @@ function operationalRoleLabel(roleType?: string | null) {
 function userIdentityLabel(user: { username: string; name: string; role_type?: string | null; division_group_code?: string | null }) {
     const roleAndGroup = [operationalRoleLabel(user.role_type), user.division_group_code].filter(Boolean).join(' ');
     return `${user.username} - ${user.name}${roleAndGroup ? ` (${roleAndGroup})` : ''}`;
+}
+
+function userReportingRelationsLabel(relations: UserReportingRelation[]) {
+    if (!relations?.length) return '-';
+
+    return relations.map((relation) => {
+        const leader = relation.leader_name || relation.leader_id;
+        if (relation.relation_type === 'permanent') {
+            return `${leader} (${relation.status === 'active' ? 'Permanen' : 'Permanen nonaktif'})`;
+        }
+
+        const state = relation.status !== 'active'
+            ? 'Cadangan nonaktif'
+            : relation.is_currently_effective
+                ? 'Cadangan aktif'
+                : 'Cadangan di luar periode';
+        return `${leader} (${state})`;
+    }).join(', ');
 }
 
 export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
@@ -1961,7 +1991,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                         </span>
                                     </div>
                                     <p className="text-xs text-gray-500 mt-2">
-                                        Lokasi: {user.locations.map((location) => location.initial).join(', ') || '-'} - Atasan: {user.leader?.name || '-'} - Bawahan: {user.subordinates_count}
+                                        Lokasi: {user.locations.map((location) => location.initial).join(', ') || '-'} - Atasan: {userReportingRelationsLabel(user.reporting_relations)} - Bawahan: {user.subordinates_count}
                                     </p>
                                 </button>
                             ))}
