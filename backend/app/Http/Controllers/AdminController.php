@@ -258,10 +258,18 @@ class AdminController extends Controller
                 'locations:initial,name',
                 'userLocations:user_id,job_level',
                 'leaderLines' => fn($q) => $q
-                    ->where('relation_type', 'permanent')
-                    ->where('status', 'active')
+                    ->withoutGlobalScope('effective_backup_period')
                     ->with('leader:username,name')
-                    ->select(['id', 'leader_id', 'subordinate_id', 'status']),
+                    ->select([
+                        'id',
+                        'leader_id',
+                        'subordinate_id',
+                        'status',
+                        'relation_type',
+                        'backup_request_id',
+                        'effective_from',
+                        'effective_until',
+                    ]),
             ])
             ->withCount([
                 'subordinateLines' => fn($q) => $q->where('relation_type', 'permanent'),
@@ -1323,7 +1331,12 @@ class AdminController extends Controller
 
     private function formatUser(User $user): array
     {
-        $leaderLine = $user->leaderLines->first();
+        $reportingRelations = $user->leaderLines
+            ->sortBy(fn(ReportingLine $line) => ($line->relation_type === 'permanent' ? '0-' : '1-') . $line->leader_id)
+            ->values();
+        $leaderLine = $reportingRelations->first(
+            fn(ReportingLine $line) => $line->relation_type === 'permanent' && $line->status === 'active'
+        );
 
         return [
             'username' => $user->username,
@@ -1353,6 +1366,16 @@ class AdminController extends Controller
                 'username' => $leaderLine->leader->username,
                 'name' => $leaderLine->leader->name,
             ] : null,
+            'reporting_relations' => $reportingRelations->map(fn(ReportingLine $line) => [
+                'id' => $line->id,
+                'leader_id' => $line->leader_id,
+                'leader_name' => $line->leader?->name,
+                'relation_type' => $line->relation_type,
+                'status' => $line->status,
+                'effective_from' => $line->effective_from?->toDateString(),
+                'effective_until' => $line->effective_until?->toDateString(),
+                'is_currently_effective' => $this->isReportingLineCurrentlyEffective($line),
+            ])->values(),
             'subordinates_count' => $user->subordinate_lines_count ?? $user->subordinateLines->count(),
         ];
     }
@@ -1609,11 +1632,16 @@ class AdminController extends Controller
             'backup_request_id' => $line->backup_request_id,
             'effective_from' => $line->effective_from?->toDateString(),
             'effective_until' => $line->effective_until?->toDateString(),
-            'is_currently_effective' => $line->status === 'active'
-                && ($line->relation_type === 'permanent'
-                    || ($line->effective_from?->lte(Carbon::today())
-                    && $line->effective_until?->gte(Carbon::today()))),
+            'is_currently_effective' => $this->isReportingLineCurrentlyEffective($line),
         ];
+    }
+
+    private function isReportingLineCurrentlyEffective(ReportingLine $line): bool
+    {
+        return $line->status === 'active'
+            && ($line->relation_type === 'permanent'
+                || ($line->effective_from?->lte(Carbon::today())
+                    && $line->effective_until?->gte(Carbon::today())));
     }
 
     private function validatedEvaluationMaster(Request $request): array
