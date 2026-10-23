@@ -1,5 +1,5 @@
 # Stage 1: Build the React Application
-FROM node:20-alpine as build
+FROM node:22.23.4-alpine as build
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
