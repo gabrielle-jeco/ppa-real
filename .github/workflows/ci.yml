@@ -20,7 +20,7 @@ jobs:
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
-        php-version: '8.2'
+        php-version: '8.2.35'
         extensions: mbstring, dom, fileinfo, mysql, curl, zip, xml, bcmath, intl
         coverage: none
 
@@ -52,7 +52,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '22.23.4'
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
 
