@@ -17,6 +17,16 @@ class SupervisorTaskAccessService
             return true;
         }
 
+        $isPermanentLeader = $reviewer->subordinateLines()
+            ->where('subordinate_id', $task->employee_id)
+            ->where('status', 'active')
+            ->where('relation_type', 'permanent')
+            ->exists();
+
+        if ($isPermanentLeader) {
+            return true;
+        }
+
         return $this->reviewableBackupPairs($reviewer, [$task->employee_id], $date)
             ->contains(fn (array $pair) => $pair['crew_id'] === $task->employee_id
                 && $pair['requester_id'] === $task->employer_id);
@@ -62,8 +72,19 @@ class SupervisorTaskAccessService
         User $reviewer,
         Collection $backupPairs
     ): Builder {
-        return $query->where(function (Builder $access) use ($reviewer, $backupPairs) {
+        $permanentCrewIds = $reviewer->subordinateLines()
+            ->where('status', 'active')
+            ->where('relation_type', 'permanent')
+            ->pluck('subordinate_id')
+            ->unique()
+            ->values();
+
+        return $query->where(function (Builder $access) use ($reviewer, $backupPairs, $permanentCrewIds) {
             $access->where('employer_id', $reviewer->username);
+
+            if ($permanentCrewIds->isNotEmpty()) {
+                $access->orWhereIn('employee_id', $permanentCrewIds);
+            }
 
             foreach ($backupPairs as $pair) {
                 $access->orWhere(function (Builder $backupAccess) use ($pair) {
