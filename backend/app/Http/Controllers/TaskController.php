@@ -750,7 +750,7 @@ class TaskController extends Controller
         $reviewer = Auth::user();
         if (!$reviewer || !$taskAccess->canReviewTask($reviewer, $task, Carbon::today())) {
             return response()->json([
-                'message' => 'Tidak memiliki akses. Hanya pemberi tugas atau supervisor cadangan yang sedang aktif yang dapat mengubah status tugas.'
+                'message' => 'Tidak memiliki akses. Hanya pemberi tugas, atasan permanen aktif, atau supervisor cadangan yang sedang aktif yang dapat mengubah status tugas.'
             ], 403);
         }
 
@@ -860,7 +860,7 @@ class TaskController extends Controller
 
         if (!$reviewer || !$taskAccess->canReviewTask($reviewer, $task, Carbon::today())) {
             return response()->json([
-                'message' => 'Tidak memiliki akses. Hanya pemberi tugas atau supervisor cadangan yang sedang aktif yang dapat menolak bukti tugas.'
+                'message' => 'Tidak memiliki akses. Hanya pemberi tugas, atasan permanen aktif, atau supervisor cadangan yang sedang aktif yang dapat menolak bukti tugas.'
             ], 403);
         }
 

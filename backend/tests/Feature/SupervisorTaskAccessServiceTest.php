@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\SupervisorBackupAssignment;
 use App\Models\SupervisorBackupRequest;
+use App\Models\ReportingLine;
 use App\Models\Task;
 use App\Models\User;
 use App\Models\UserLocation;
@@ -31,6 +32,17 @@ class SupervisorTaskAccessServiceTest extends TestCase
         DB::purge('sqlite');
         DB::reconnect('sqlite');
 
+        Schema::create('reporting_lines', function (Blueprint $table) {
+            $table->id();
+            $table->string('leader_id');
+            $table->string('subordinate_id');
+            $table->string('status')->default('active');
+            $table->string('relation_type')->default('permanent');
+            $table->unsignedBigInteger('backup_request_id')->nullable();
+            $table->date('effective_from')->nullable();
+            $table->date('effective_until')->nullable();
+            $table->timestamps();
+        });
         Schema::create('tasks', function (Blueprint $table) {
             $table->id();
             $table->string('employee_id');
@@ -85,6 +97,30 @@ class SupervisorTaskAccessServiceTest extends TestCase
         $task = new Task(['employee_id' => 'crew-1', 'employer_id' => 'primary']);
 
         $this->assertTrue($this->service->canReviewTask($reviewer, $task, Carbon::today()));
+    }
+
+    public function test_active_permanent_co_supervisor_can_review_another_supervisors_task(): void
+    {
+        $reviewer = $this->supervisor('co-supervisor');
+        $this->createPermanentRelation('co-supervisor', 'crew-1');
+
+        $this->assertTrue($this->service->canReviewTask(
+            $reviewer,
+            new Task(['employee_id' => 'crew-1', 'employer_id' => 'primary']),
+            Carbon::today()
+        ));
+    }
+
+    public function test_inactive_permanent_co_supervisor_cannot_review_another_supervisors_task(): void
+    {
+        $reviewer = $this->supervisor('co-supervisor');
+        $this->createPermanentRelation('co-supervisor', 'crew-1', 'inactive');
+
+        $this->assertFalse($this->service->canReviewTask(
+            $reviewer,
+            new Task(['employee_id' => 'crew-1', 'employer_id' => 'primary']),
+            Carbon::today()
+        ));
     }
 
     public function test_active_backup_can_only_review_the_requesters_assigned_crew(): void
@@ -158,6 +194,50 @@ class SupervisorTaskAccessServiceTest extends TestCase
         $this->assertSame([$own->id, $covered->id], $query->orderBy('id')->pluck('id')->all());
     }
 
+    public function test_task_scope_includes_all_tasks_for_active_permanent_crew(): void
+    {
+        $reviewer = $this->supervisor('co-supervisor');
+        $this->createPermanentRelation('co-supervisor', 'crew-1');
+
+        $own = Task::create(['employee_id' => 'crew-2', 'employer_id' => 'co-supervisor', 'title' => 'Own']);
+        $shared = Task::create(['employee_id' => 'crew-1', 'employer_id' => 'primary', 'title' => 'Shared']);
+        Task::create(['employee_id' => 'crew-2', 'employer_id' => 'primary', 'title' => 'Unrelated']);
+
+        $query = Task::query();
+        $this->service->constrainReviewableTasks($query, $reviewer, collect());
+
+        $this->assertSame([$own->id, $shared->id], $query->orderBy('id')->pluck('id')->all());
+    }
+
+    public function test_active_permanent_co_supervisor_can_approve_through_the_task_endpoint(): void
+    {
+        $reviewer = $this->supervisor('co-supervisor');
+        $this->createPermanentRelation('co-supervisor', 'crew-1');
+        $task = Task::create([
+            'employee_id' => 'crew-1',
+            'employer_id' => 'primary',
+            'title' => 'Shared permanent task',
+            'due_at' => '2026-09-15 12:00:00',
+            'approval_deadline_at' => '2026-09-15 23:59:59',
+            'status' => 'pending',
+        ]);
+
+        $notifications = Mockery::mock(UserNotificationService::class);
+        $notifications->shouldReceive('createAndPush')->once()->andReturnNull();
+        $notifications->shouldReceive('refreshAggregate')->once()->andReturnNull();
+        $this->app->instance(UserNotificationService::class, $notifications);
+
+        $this->actingAs($reviewer, 'sanctum')
+            ->patchJson('/api/tasks/' . $task->id . '/status', ['status' => 'approved'])
+            ->assertOk()
+            ->assertJsonPath('status', 'approved');
+
+        $this->assertDatabaseHas('tasks', [
+            'id' => $task->id,
+            'status' => 'approved',
+        ]);
+    }
+
     public function test_active_backup_can_approve_through_the_task_endpoint(): void
     {
         $reviewer = $this->supervisor('backup');
@@ -196,6 +276,16 @@ class SupervisorTaskAccessServiceTest extends TestCase
         ]));
 
         return $user;
+    }
+
+    private function createPermanentRelation(string $leader, string $crew, string $status = 'active'): void
+    {
+        ReportingLine::create([
+            'leader_id' => $leader,
+            'subordinate_id' => $crew,
+            'status' => $status,
+            'relation_type' => 'permanent',
+        ]);
     }
 
     private function createBackup(
