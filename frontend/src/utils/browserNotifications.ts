@@ -2,6 +2,7 @@ import { getTaskApprovalDeadline } from './taskTiming';
 
 const hasNotificationSupport = () => typeof window !== 'undefined' && 'Notification' in window;
 const webPushPublicKey = import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY;
+const webPushKeyStorageKey = 'yodaily_web_push_public_key';
 
 export async function requestNotificationPermission() {
     if (!hasNotificationSupport()) return 'unsupported';
@@ -41,6 +42,15 @@ function urlBase64ToUint8Array(base64String: string) {
     return outputArray;
 }
 
+function subscriptionUsesKey(subscription: PushSubscription, expectedKey: Uint8Array) {
+    const currentKey = subscription.options.applicationServerKey;
+    if (!currentKey) return false;
+
+    const currentBytes = new Uint8Array(currentKey);
+    return currentBytes.length === expectedKey.length
+        && currentBytes.every((value, index) => value === expectedKey[index]);
+}
+
 export async function registerPushSubscription() {
     if (!hasNotificationSupport() || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
     if (!webPushPublicKey) return;
@@ -51,11 +61,22 @@ export async function registerPushSubscription() {
     try {
         const registration = await navigator.serviceWorker.ready;
         let subscription = await registration.pushManager.getSubscription();
+        const applicationServerKey = urlBase64ToUint8Array(webPushPublicKey);
+        const storedPublicKey = localStorage.getItem(webPushKeyStorageKey);
+        const keyChanged = subscription && (storedPublicKey
+            ? storedPublicKey !== webPushPublicKey
+            : !subscriptionUsesKey(subscription, applicationServerKey));
+
+        if (subscription && keyChanged) {
+            const unsubscribed = await subscription.unsubscribe();
+            if (!unsubscribed) throw new Error('Subscription lama tidak dapat diperbarui.');
+            subscription = null;
+        }
 
         if (!subscription) {
             subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(webPushPublicKey),
+                applicationServerKey,
             });
         }
 
@@ -68,6 +89,7 @@ export async function registerPushSubscription() {
             },
             body: JSON.stringify(subscription.toJSON()),
         });
+        localStorage.setItem(webPushKeyStorageKey, webPushPublicKey);
     } catch (error) {
         console.warn('Gagal mendaftarkan push notification.', error);
     }
