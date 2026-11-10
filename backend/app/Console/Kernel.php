@@ -2,8 +2,10 @@
 
 namespace App\Console;
 
+use Carbon\Carbon;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
+use Illuminate\Support\Facades\Artisan;
 
 class Kernel extends ConsoleKernel
 {
@@ -27,6 +29,17 @@ class Kernel extends ConsoleKernel
             ->dailyAt('00:30')
             ->timezone(config('app.timezone'))
             ->withoutOverlapping(1440)
+            ->onSuccess(function () {
+                $closedDate = Carbon::yesterday();
+
+                Artisan::call('score:snapshot-daily', [
+                    '--date' => $closedDate->toDateString(),
+                ]);
+
+                if ($closedDate->isLastOfMonth()) {
+                    Artisan::call('score:snapshot', ['--previous-month' => true]);
+                }
+            })
             ->runInBackground();
     }
 
