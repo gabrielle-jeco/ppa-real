@@ -64,7 +64,9 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
     useEffect(() => {
         if (!user?.user_id) return;
 
-        const timer = window.setInterval(() => fetchTasks(true), 15000);
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') fetchTasks(true);
+        }, 60000);
         return () => window.clearInterval(timer);
     }, [selectedDate, user?.user_id, selectedRole]);
 

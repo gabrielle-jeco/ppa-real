@@ -1,8 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ServerClock from './ServerClock';
-import { Activity, BookOpenCheck, Calculator, Check, ChevronDown, Download, FileSpreadsheet, GitBranch, Layers3, LogOut, MapPinned, PanelLeftClose, PanelLeftOpen, RefreshCcw, Save, ShieldCheck, Upload, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
+import ScoreReportPanel from './ScoreReportPanel';
+import TaskUsageExportModal from './TaskUsageExportModal';
+import OrganizationChart from '../general/OrganizationChart';
+import { Activity, BarChart3, BookOpenCheck, Calculator, Check, ChevronDown, Download, FileSpreadsheet, GitBranch, Layers3, LogOut, MapPinned, PanelLeftClose, PanelLeftOpen, RefreshCcw, Save, ShieldCheck, Upload, UserCog, UserPlus, UsersRound, X } from 'lucide-react';
 
-type Tab = 'users' | 'jobLevels' | 'divisions' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations' | 'scoring' | 'activity';
+type Tab = 'users' | 'jobLevels' | 'divisions' | 'appRoles' | 'hierarchy' | 'guides' | 'locations' | 'regionals' | 'evaluations' | 'scoring' | 'scoreReport' | 'activity';
 
 const TAB_PERMISSIONS: Record<Tab, string> = {
     users: 'users_locations',
@@ -15,10 +18,11 @@ const TAB_PERMISSIONS: Record<Tab, string> = {
     regionals: 'regionals',
     evaluations: 'evaluation_masters',
     scoring: 'scoring_masters',
+    scoreReport: 'score_reports',
     activity: 'user_activity',
 };
 
-const TAB_ORDER: Tab[] = ['users', 'jobLevels', 'divisions', 'appRoles', 'hierarchy', 'guides', 'locations', 'regionals', 'evaluations', 'scoring', 'activity'];
+const TAB_ORDER: Tab[] = ['users', 'jobLevels', 'divisions', 'appRoles', 'hierarchy', 'guides', 'locations', 'regionals', 'evaluations', 'scoring', 'scoreReport', 'activity'];
 
 type JobLevel = {
     id: number;
@@ -440,7 +444,8 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     const [taskDefinitionForm, setTaskDefinitionForm] = useState({ id: '', title: '', sort_order: '0', active: true });
     const [isTaskAreaFormOpen, setIsTaskAreaFormOpen] = useState(false);
     const [isTaskDefinitionFormOpen, setIsTaskDefinitionFormOpen] = useState(false);
-    const [hierarchySearch, setHierarchySearch] = useState('');
+    const [selectedSubordinateId, setSelectedSubordinateId] = useState('');
+    const [hierarchySection, setHierarchySection] = useState<'chart' | 'list'>('chart');
 
     const [leadersData, setLeadersData] = useState<ReportingUserOption[]>([]);
     const [reportingUsersData, setReportingUsersData] = useState<ReportingUserOption[]>([]);
@@ -492,6 +497,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     const [isLocationFormOpen, setIsLocationFormOpen] = useState(false);
     const [isRegionalFormOpen, setIsRegionalFormOpen] = useState(false);
     const [isReportingImportOpen, setIsReportingImportOpen] = useState(false);
+    const [isTaskUsageExportOpen, setIsTaskUsageExportOpen] = useState(false);
     const [reportingImportFile, setReportingImportFile] = useState<File | null>(null);
     const [reportingImportPreview, setReportingImportPreview] = useState<ReportingImportPreview | null>(null);
     const [reportingImportBusy, setReportingImportBusy] = useState(false);
@@ -714,6 +720,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
     const selectReportingLeader = async (leaderId: string) => {
         setSelectedLeaderId(leaderId);
+        setSelectedSubordinateId('');
 
         if (!leaderId) {
             setLineForm((current) => ({ ...current, leader_id: '', subordinate_ids: [] }));
@@ -1755,6 +1762,19 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     ])).sort();
     const monthlyWeightTotal = Number(scoringForm.task_weight) + Number(scoringForm.attendance_weight) + Number(scoringForm.evaluation_weight);
     const cashierWeightTotal = Number(scoringForm.cashier_task_weight) + Number(scoringForm.cashier_ibop_weight) + Number(scoringForm.cashier_push_selling_weight);
+    const reportingLineSubordinateOptions = Array.from(new Map(reportingLinesData.map((line) => [line.subordinate_id, {
+        value: line.subordinate_id,
+        label: userIdentityLabel({
+            username: line.subordinate_id,
+            name: line.subordinate_name || line.subordinate_id,
+            role_type: line.subordinate_role_type,
+            division_group_code: line.subordinate_division_group_code,
+        }),
+        secondaryLabel: line.subordinate_division_name || '-',
+    }])).values());
+    const filteredReportingLines = selectedSubordinateId
+        ? reportingLinesData.filter((line) => line.subordinate_id === selectedSubordinateId)
+        : reportingLinesData;
 
     return (
         <div className="flex h-full bg-gray-50">
@@ -1803,6 +1823,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     {canAccess('regionals') && <TabButton expanded={sidebarExpanded} active={activeTab === 'regionals'} icon={<MapPinned size={19} />} label="Master Regional" onClick={() => setActiveTab('regionals')} />}
                     {canAccess('evaluation_masters') && <TabButton expanded={sidebarExpanded} active={activeTab === 'evaluations'} icon={<ShieldCheck size={19} />} label="Master Evaluasi" onClick={() => setActiveTab('evaluations')} />}
                     {canAccess('scoring_masters') && <TabButton expanded={sidebarExpanded} active={activeTab === 'scoring'} icon={<Calculator size={19} />} label="Master Penilaian" onClick={() => setActiveTab('scoring')} />}
+                    {canAccess('score_reports') && <TabButton expanded={sidebarExpanded} active={activeTab === 'scoreReport'} icon={<BarChart3 size={19} />} label="Report Penilaian" onClick={() => setActiveTab('scoreReport')} />}
                     {canAccess('user_activity') && <TabButton expanded={sidebarExpanded} active={activeTab === 'activity'} icon={<Activity size={19} />} label="Aktivitas User" onClick={() => setActiveTab('activity')} />}
                 </nav>
 
@@ -1820,7 +1841,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             </aside>
 
             <div className="min-w-0 flex-1 overflow-y-auto px-8 py-8">
-            <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
+            {activeTab !== 'scoreReport' && <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-gray-400 font-bold">YoDaily CMS</p>
                     <h1 className="text-3xl font-extrabold text-gray-900 mt-2">Panel Admin</h1>
@@ -1833,16 +1854,16 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         Muat Ulang
                     </button>
                 </div>
-            </header>
+            </header>}
 
-            <section className="grid grid-cols-6 gap-4 mb-6">
+            {activeTab !== 'scoreReport' && <section className="grid grid-cols-6 gap-4 mb-6">
                 {statCards.map(([label, value]) => (
                     <div key={label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
                         <p className="text-xs text-gray-400 font-bold uppercase">{label}</p>
                         <p className="text-2xl font-black text-gray-900 mt-2">{value}</p>
                     </div>
                 ))}
-            </section>
+            </section>}
 
             {message && (
                 <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl border border-purple-100 bg-purple-50 px-4 py-3 text-sm font-semibold text-primary">
@@ -1851,6 +1872,10 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         <X size={16} />
                     </button>
                 </div>
+            )}
+
+            {activeTab === 'scoreReport' && canAccess('score_reports') && (
+                <ScoreReportPanel locations={data.locations} regionals={data.regionals} />
             )}
 
             {activeTab === 'activity' && canAccess('user_activity') && (
@@ -2439,6 +2464,37 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             )}
 
             {activeTab === 'hierarchy' && canAccess('reporting_lines') && (
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
+                    <div className="flex items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-white px-5 py-3 shadow-sm">
+                        <div>
+                            <h2 className="font-black text-gray-900">Relasi Atasan</h2>
+                            <p className="text-xs text-gray-400">Kelola struktur secara visual atau melalui daftar relasi administratif.</p>
+                        </div>
+                        <div className="flex rounded-xl bg-gray-100 p-1">
+                            <button type="button" onClick={() => setHierarchySection('chart')} className={`rounded-lg px-4 py-2 text-xs font-black transition ${hierarchySection === 'chart' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}>Organigram</button>
+                            <button type="button" onClick={() => setHierarchySection('list')} className={`rounded-lg px-4 py-2 text-xs font-black transition ${hierarchySection === 'list' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}>Daftar Relasi</button>
+                        </div>
+                    </div>
+                    {hierarchySection === 'chart' ? <OrganizationChart /> : (
+                <div className="space-y-4 pb-4">
+                    <div className="rounded-2xl border border-gray-100 bg-white px-5 py-4 shadow-sm">
+                        <div className="max-w-md">
+                            <Field label="Cabang">
+                                <CustomSelect
+                                    value={storeFilter}
+                                    placeholder="Semua cabang"
+                                    options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
+                                    onChange={(value) => {
+                                        setStoreFilter(value);
+                                        setSelectedLeaderId('');
+                                        setSelectedSubordinateId('');
+                                        setLineForm((current) => ({ ...current, leader_id: '', subordinate_ids: [] }));
+                                    }}
+                                    searchable
+                                />
+                            </Field>
+                        </div>
+                    </div>
                 <div className="grid grid-cols-[0.9fr_1.1fr] gap-6">
                     <form onSubmit={saveReportingLine} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4">
                         <div className="flex items-start justify-between gap-3">
@@ -2454,15 +2510,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                 <Upload size={15} /> Import XLSX
                             </button>
                         </div>
-                        <Field label="Filter Toko">
-                            <CustomSelect
-                                value={storeFilter}
-                                placeholder="Filter Toko"
-                                options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))}
-                                onChange={(value) => { setStoreFilter(value); setSelectedLeaderId(''); setUsersPage(1); }}
-                                searchable
-                            />
-                        </Field>
                         <Field label="Atasan">
                             <CustomSelect
                                 value={lineForm.leader_id}
@@ -2500,31 +2547,36 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     </form>
 
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-                        <div className="px-6 py-4 border-b border-gray-100 bg-white flex items-center gap-4">
-                            <div className="flex-1">
-                                <h2 className="font-black text-gray-900 mb-2">Daftar Relasi Atasan</h2>
+                        <div className="space-y-3 border-b border-gray-100 bg-white px-6 py-4">
+                            <h2 className="font-black text-gray-900">Daftar Relasi Atasan</h2>
+                            <div className="grid grid-cols-2 gap-4">
+                                <Field label="Atasan">
                                 <CustomSelect
                                     value={selectedLeaderId}
                                     placeholder="Semua atasan"
                                     options={leadersData.map((user) => ({ value: user.username, label: userIdentityLabel(user), secondaryLabel: user.division_name || '-' }))}
-                                    onChange={(value) => setSelectedLeaderId(value)}
+                                    onChange={(value) => {
+                                        setSelectedLeaderId(value);
+                                        setSelectedSubordinateId('');
+                                    }}
                                     searchable
                                 />
-                            </div>
-                            <div className="flex-1 self-end relative">
-                                <input 
-                                    type="text" 
-                                    placeholder="Cari bawahan..." 
-                                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                                    value={hierarchySearch}
-                                    onChange={(e) => setHierarchySearch(e.target.value)}
-                                />
+                                </Field>
+                                <Field label="Bawahan">
+                                    <CustomSelect
+                                        value={selectedSubordinateId}
+                                        placeholder="Semua bawahan"
+                                        options={reportingLineSubordinateOptions}
+                                        onChange={setSelectedSubordinateId}
+                                        searchable
+                                    />
+                                </Field>
                             </div>
                         </div>
                         <div className="divide-y divide-gray-100 flex-1 overflow-y-auto max-h-[620px]">
-                            {reportingLinesData.length === 0 ? (
+                            {filteredReportingLines.length === 0 ? (
                                 <div className="p-8 text-center text-gray-400 text-sm">Relasi atasan tidak ditemukan.</div>
-                            ) : reportingLinesData.filter(line => `${line.leader_name || ''} ${line.leader_id} ${line.subordinate_name || ''} ${line.subordinate_id} ${line.subordinate_division_name || ''} ${line.subordinate_division_group_code || ''} ${line.relation_type}`.toLowerCase().includes(hierarchySearch.toLowerCase())).map((line) => {
+                            ) : filteredReportingLines.map((line) => {
                                 const isBackup = line.relation_type === 'backup';
                                 return (
                                     <div key={line.id} className="px-6 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition">
@@ -2574,6 +2626,9 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         </div>
                     </div>
                 </div>
+                </div>
+                    )}
+                </div>
             )}
 
             {activeTab === 'guides' && canAccess('work_stations') && (
@@ -2583,11 +2638,20 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             <h2 className="font-black text-gray-900">Master Work Station</h2>
                             <p className="text-xs text-gray-400">Kelola kategori, panduan, area, dan daftar tugas.</p>
                         </div>
-                        <div className="flex rounded-xl bg-gray-100 p-1">
-                            <button type="button" onClick={() => setWorkStationSection('guides')} className={`rounded-lg px-4 py-2 text-xs font-black transition ${workStationSection === 'guides' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}>Panduan</button>
-                            <button type="button" onClick={() => setWorkStationSection('catalog')} className={`rounded-lg px-4 py-2 text-xs font-black transition ${workStationSection === 'catalog' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}>Area & Master Task</button>
+                        <div className="flex flex-wrap items-center justify-end gap-3">
+                            {workStationSection === 'catalog' && (
+                                <button type="button" onClick={() => setIsTaskUsageExportOpen(true)} className="flex items-center gap-2 rounded-xl border border-primary px-4 py-2 text-xs font-black text-primary transition hover:bg-purple-50">
+                                    <FileSpreadsheet size={15} /> Export Penggunaan XLSX
+                                </button>
+                            )}
+                            <div className="flex rounded-xl bg-gray-100 p-1">
+                                <button type="button" onClick={() => setWorkStationSection('guides')} className={`rounded-lg px-4 py-2 text-xs font-black transition ${workStationSection === 'guides' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}>Panduan</button>
+                                <button type="button" onClick={() => setWorkStationSection('catalog')} className={`rounded-lg px-4 py-2 text-xs font-black transition ${workStationSection === 'catalog' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}>Area & Master Task</button>
+                            </div>
                         </div>
                     </div>
+
+                    <TaskUsageExportModal open={isTaskUsageExportOpen} locations={data.locations} onClose={() => setIsTaskUsageExportOpen(false)} />
 
                     {workStationSection === 'guides' ? (
                 <div className={`grid h-[clamp(360px,calc(100dvh-28rem),640px)] items-stretch gap-6 transition-all duration-300 ${isGuideFormOpen ? 'grid-cols-[0.8fr_1.2fr]' : 'grid-cols-1'}`}>
@@ -3478,7 +3542,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
             <button
                 type="button"
                 onClick={() => { setOpen((current) => !current); setSearch(''); }}
-                className="input flex items-center justify-between text-left gap-4"
+                className="input flex h-12 items-center justify-between gap-4 text-left"
             >
                 <span className={`flex min-w-0 flex-col ${selected ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
                     <span className="truncate">{selected?.label || placeholder}</span>
@@ -3573,7 +3637,7 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
             <button
                 type="button"
                 onClick={() => { setOpen((current) => !current); setSearch(''); }}
-                className="input flex items-center justify-between text-left gap-4"
+                className="input flex h-12 items-center justify-between gap-4 text-left"
             >
                 <span className={`truncate ${selectedOptions.length ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>{summary}</span>
                 <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />

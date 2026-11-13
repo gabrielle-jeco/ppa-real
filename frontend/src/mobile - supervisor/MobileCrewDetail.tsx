@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Check, Trash2, Camera, Edit3 } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileAddTaskModal from './MobileAddTaskModal';
@@ -36,6 +36,9 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
     const [editingBatch, setEditingBatch] = useState<any>(null);
     const [evaluationAvailability, setEvaluationAvailability] = useState<EvaluationAvailability | null>(null);
     const [rejectTask, setRejectTask] = useState<any>(null);
+    const tasksRequestRef = useRef(0);
+    const evaluationAvailabilityRequestRef = useRef(0);
+    const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<number>>(() => new Set());
 
     // Preview State
     const [previewTask, setPreviewTask] = useState<any>(null);
@@ -44,15 +47,23 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
     useEffect(() => {
         if (crew?.id) {
-            fetchTasks();
-            fetchEvaluationAvailability();
+            fetchTasks(selectedDate, crew.id);
         }
     }, [crew?.id, selectedDate]);
 
     useEffect(() => {
         if (!crew?.id) return;
+        evaluationAvailabilityRequestRef.current += 1;
+        setEvaluationAvailability(null);
+        fetchEvaluationAvailability(crew.id);
+    }, [crew?.id]);
 
-        const timer = window.setInterval(fetchTasks, 15000);
+    useEffect(() => {
+        if (!crew?.id) return;
+
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') fetchTasks(selectedDate, crew.id);
+        }, 60000);
         return () => window.clearInterval(timer);
     }, [crew?.id, selectedDate]);
 
@@ -61,33 +72,39 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
     }, [tasks]);
 
     // FETCH TASKS (CREW)
-    const fetchTasks = async () => {
+    const fetchTasks = async (date = selectedDate, crewId = crew.id) => {
+        const requestId = ++tasksRequestRef.current;
         try {
             const token = localStorage.getItem('auth_token');
-            const dateStr = selectedDate.toLocaleDateString('en-CA');
-            const res = await fetch(`/api/supervisor/${crew.id}/tasks?date=${dateStr}`, {
+            const dateStr = date.toLocaleDateString('en-CA');
+            const res = await fetch(`/api/supervisor/${crewId}/tasks?date=${dateStr}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
+                if (requestId !== tasksRequestRef.current) return;
                 setTasks(data);
             }
         } catch (error) {
+            if (requestId !== tasksRequestRef.current) return;
             console.error("Gagal mengambil tugas", error);
         }
     };
 
-    const fetchEvaluationAvailability = async () => {
-        setEvaluationAvailability(null);
+    const fetchEvaluationAvailability = async (crewId = crew.id) => {
+        const requestId = ++evaluationAvailabilityRequestRef.current;
         try {
             const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/evaluations/check/${crew.id}`, {
+            const res = await fetch(`/api/evaluations/check/${crewId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
-                setEvaluationAvailability(await res.json());
+                const payload = await res.json();
+                if (requestId !== evaluationAvailabilityRequestRef.current) return;
+                setEvaluationAvailability(payload);
             }
         } catch (error) {
+            if (requestId !== evaluationAvailabilityRequestRef.current) return;
             console.error("Gagal memeriksa periode evaluasi", error);
         }
     };
@@ -164,6 +181,8 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
     // UPDATE STATUS
     const handleUpdateStatus = async (taskId: number, newStatus: string) => {
+        if (updatingTaskIds.has(taskId)) return;
+        setUpdatingTaskIds(current => new Set(current).add(taskId));
         try {
             const token = localStorage.getItem('auth_token');
             const response = await fetch(`/api/tasks/${taskId}/status`, {
@@ -176,14 +195,25 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                throw new Error(data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal memperbarui status.');
+                const retryAfter = response.headers.get('Retry-After');
+                const error = new Error(response.status === 429
+                    ? `Terlalu banyak permintaan. Coba lagi dalam ${retryAfter || 'beberapa'} detik.`
+                    : data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal memperbarui status.');
+                (error as any).status = response.status;
+                throw error;
             }
             setTasks(current => current.map(item => item.task_id === taskId ? { ...item, ...data } : item));
             if (previewTask?.task_id === taskId) setPreviewTask({ ...previewTask, ...data });
         } catch (error: any) {
             console.error("Gagal memperbarui status", error);
             alert(error.message || 'Gagal memperbarui status.');
-            fetchTasks();
+            if (error.status !== 429) fetchTasks();
+        } finally {
+            setUpdatingTaskIds(current => {
+                const next = new Set(current);
+                next.delete(taskId);
+                return next;
+            });
         }
     };
 

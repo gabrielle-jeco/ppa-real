@@ -36,7 +36,9 @@ const MobileChecklist: React.FC<MobileChecklistProps> = ({ supervisor, onNavigat
     useEffect(() => {
         if (!supervisor?.id) return;
 
-        const timer = window.setInterval(fetchMyTasks, 15000);
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') fetchMyTasks();
+        }, 60000);
         return () => window.clearInterval(timer);
     }, [supervisor?.id, selectedDate]);
 

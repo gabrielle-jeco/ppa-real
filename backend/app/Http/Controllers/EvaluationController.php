@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EvaluationReopenRequest;
 use App\Models\MonthlyPersonalityEvaluation;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
@@ -45,7 +47,8 @@ class EvaluationController extends Controller
                 ], 422);
             }
 
-            if (!$this->isEvaluationWindowOpen($evaluationType)) {
+            $normalWindowOpen = $this->isEvaluationWindowOpen($evaluationType);
+            if (!$normalWindowOpen && !$this->hasActiveReopenRequest($evaluator, $evaluatee, $period, $evaluationType)) {
                 return response()->json([
                     'error' => $this->windowLockedMessage($evaluationType)
                 ], 422);
@@ -53,19 +56,46 @@ class EvaluationController extends Controller
 
             $totalScore = round((float) $request->total_score, 2);
 
-            $evaluation = MonthlyPersonalityEvaluation::updateOrCreate(
-                [
-                    'evaluatee_id' => $request->user_id,
-                    'evaluator_id' => $evaluator->username,
-                    'evaluation_period' => $period->toDateString(),
-                    'evaluation_type' => $evaluationType,
-                ],
-                [
-                    'score' => $totalScore,
-                    'scores' => $request->scores,
-                    'notes' => $request->notes,
-                ]
-            );
+            $evaluation = DB::transaction(function () use ($request, $evaluator, $evaluatee, $period, $evaluationType, $normalWindowOpen, $totalScore) {
+                $extension = null;
+                if (!$normalWindowOpen) {
+                    $extension = EvaluationReopenRequest::where('requester_id', $evaluator->username)
+                        ->where('evaluatee_id', $evaluatee->username)
+                        ->whereDate('evaluation_period', $period->toDateString())
+                        ->where('evaluation_type', $evaluationType)
+                        ->where('status', 'approved')
+                        ->where('expires_at', '>', now())
+                        ->lockForUpdate()
+                        ->latest('id')
+                        ->first();
+
+                    if (!$extension) {
+                        throw ValidationException::withMessages([
+                            'date' => ['Perpanjangan evaluasi sudah berakhir atau tidak tersedia.'],
+                        ]);
+                    }
+                }
+
+                $evaluation = MonthlyPersonalityEvaluation::updateOrCreate(
+                    [
+                        'evaluatee_id' => $request->user_id,
+                        'evaluator_id' => $evaluator->username,
+                        'evaluation_period' => $period->toDateString(),
+                        'evaluation_type' => $evaluationType,
+                    ],
+                    [
+                        'score' => $totalScore,
+                        'scores' => $request->scores,
+                        'notes' => $request->notes,
+                    ]
+                );
+
+                if ($extension) {
+                    $extension->update(['status' => 'completed', 'completed_at' => now()]);
+                }
+
+                return $evaluation;
+            });
 
             $evaluation->setAttribute('total_score', round((float) $evaluation->score, 2));
             $evaluation->setAttribute('user_id', $evaluation->evaluatee_id);
@@ -124,12 +154,33 @@ class EvaluationController extends Controller
 
         $isTargetPeriod = $this->isSamePeriod($requestedPeriod, $targetPeriod);
         $isWindowOpen = $this->isEvaluationWindowOpen($evaluationType);
-        $canEvaluate = $isTargetPeriod && $isWindowOpen;
+        $requestQuery = EvaluationReopenRequest::where('requester_id', $evaluator->username)
+            ->where('evaluatee_id', $evaluatee->username)
+            ->whereDate('evaluation_period', $requestedPeriod->toDateString())
+            ->where('evaluation_type', $evaluationType);
+
+        (clone $requestQuery)->where('status', 'approved')
+            ->where('expires_at', '<=', now())
+            ->update(['status' => 'expired', 'updated_at' => now()]);
+
+        $latestRequest = (clone $requestQuery)->latest('attempt')->first();
+        $attemptsUsed = (clone $requestQuery)->count();
+        $extensionActive = $latestRequest
+            && $latestRequest->status === 'approved'
+            && $latestRequest->expires_at
+            && $latestRequest->expires_at->isFuture();
+        $canEvaluate = !$evaluation && $isTargetPeriod && ($isWindowOpen || $extensionActive);
+        $canRequestReopen = !$evaluation
+            && $evaluationType === 'personality'
+            && $isTargetPeriod
+            && !$isWindowOpen
+            && $attemptsUsed < EvaluationReopenRequest::MAX_ATTEMPTS
+            && !($latestRequest && ($latestRequest->status === 'pending' || $extensionActive));
         $lockedMessage = null;
 
         if (!$isTargetPeriod) {
             $lockedMessage = $this->periodLockedMessage($evaluationType);
-        } elseif (!$isWindowOpen) {
+        } elseif (!$isWindowOpen && !$extensionActive) {
             $lockedMessage = $this->windowLockedMessage($evaluationType);
         }
 
@@ -143,6 +194,17 @@ class EvaluationController extends Controller
             'evaluation_window_starts_at' => $this->evaluationWindowStart($evaluationType)->toDateString(),
             'evaluation_window_ends_at' => $this->evaluationWindowEnd($evaluationType)->toDateString(),
             'evaluation_type' => $evaluationType,
+            'reopen_request' => $latestRequest ? [
+                'id' => $latestRequest->id,
+                'attempt' => $latestRequest->attempt,
+                'status' => $latestRequest->status,
+                'reason' => $latestRequest->reason,
+                'rejection_reason' => $latestRequest->rejection_reason,
+                'expires_at' => optional($latestRequest->expires_at)->toIso8601String(),
+            ] : null,
+            'reopen_attempts_used' => $attemptsUsed,
+            'reopen_attempts_remaining' => max(0, EvaluationReopenRequest::MAX_ATTEMPTS - $attemptsUsed),
+            'can_request_reopen' => $canRequestReopen,
             'data' => $evaluation
         ]);
     }
@@ -185,6 +247,29 @@ class EvaluationController extends Controller
             $this->evaluationWindowStart($evaluationType),
             $this->evaluationWindowEnd($evaluationType)
         );
+    }
+
+    private function hasActiveReopenRequest(User $evaluator, User $evaluatee, Carbon $period, string $evaluationType): bool
+    {
+        if ($evaluationType !== 'personality') {
+            return false;
+        }
+
+        EvaluationReopenRequest::where('requester_id', $evaluator->username)
+            ->where('evaluatee_id', $evaluatee->username)
+            ->whereDate('evaluation_period', $period->toDateString())
+            ->where('evaluation_type', $evaluationType)
+            ->where('status', 'approved')
+            ->where('expires_at', '<=', now())
+            ->update(['status' => 'expired', 'updated_at' => now()]);
+
+        return EvaluationReopenRequest::where('requester_id', $evaluator->username)
+            ->where('evaluatee_id', $evaluatee->username)
+            ->whereDate('evaluation_period', $period->toDateString())
+            ->where('evaluation_type', $evaluationType)
+            ->where('status', 'approved')
+            ->where('expires_at', '>', now())
+            ->exists();
     }
 
     private function evaluationWindowStart(string $evaluationType): Carbon

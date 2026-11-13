@@ -78,6 +78,11 @@ class User extends Authenticatable
             return 'RM';
         }
 
+        $corporateType = $this->corporateManagerType();
+        if ($corporateType) {
+            return $corporateType;
+        }
+
         if ($appRole === 'manager') {
             return 'SM';
         }
@@ -122,6 +127,14 @@ class User extends Authenticatable
             ->filter()
             ->map(fn($level) => strtolower(trim((string) $level)));
 
+        if ($levels->contains('regional_manager')) {
+            return 'regional_manager';
+        }
+
+        if ($this->corporateManagerType()) {
+            return 'manager';
+        }
+
         foreach ($priority as $level) {
             if ($levels->contains($level)) {
                 return $level;
@@ -130,6 +143,37 @@ class User extends Authenticatable
 
         if ($levels->isNotEmpty()) {
             return $levels->first();
+        }
+
+        return null;
+    }
+
+    private function corporateManagerType(): ?string
+    {
+        if (!$this->getAttribute('job_level_id')) {
+            return null;
+        }
+
+        $jobLevel = $this->relationLoaded('jobLevel') ? $this->jobLevel : $this->jobLevel()->first();
+        if (!$jobLevel) {
+            return null;
+        }
+
+        $positionCode = strtoupper(trim((string) $jobLevel->position_code));
+        $name = strtoupper(trim((string) $jobLevel->name));
+        $grade = strtoupper(trim((string) $jobLevel->grade));
+
+        if (str_starts_with($positionCode, 'CF-OPR-CAB-') || str_contains($name, 'CHIEF OPERATION')) {
+            return 'CO';
+        }
+
+        if (
+            str_starts_with($positionCode, 'SM-')
+            || str_starts_with($positionCode, 'SMP-')
+            || str_contains($name, 'STORE MANAGER')
+            || in_array($grade, ['MGR', 'MANAGER'], true)
+        ) {
+            return 'SM';
         }
 
         return null;

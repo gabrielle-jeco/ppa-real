@@ -31,6 +31,32 @@ class TaskReviewWorkflowTest extends TestCase
         DB::purge('sqlite');
         DB::reconnect('sqlite');
 
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('username')->unique();
+            $table->string('password');
+            $table->boolean('active')->default(true);
+            $table->boolean('is_back_office')->default(false);
+            $table->timestamps();
+        });
+        Schema::create('user_locations', function (Blueprint $table) {
+            $table->id();
+            $table->string('user_id');
+            $table->string('location_id')->nullable();
+            $table->string('job_level')->nullable();
+            $table->timestamps();
+        });
+        Schema::create('reporting_lines', function (Blueprint $table) {
+            $table->id();
+            $table->string('leader_id');
+            $table->string('subordinate_id');
+            $table->string('status')->default('active');
+            $table->string('relation_type')->default('permanent');
+            $table->date('effective_from')->nullable();
+            $table->date('effective_until')->nullable();
+            $table->timestamps();
+        });
         Schema::create('tasks', function (Blueprint $table) {
             $table->id();
             $table->string('employee_id');
@@ -59,6 +85,13 @@ class TaskReviewWorkflowTest extends TestCase
         });
         Schema::create('work_stations', function (Blueprint $table) {
             $table->id();
+        });
+        Schema::create('task_definitions', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('task_area_id')->nullable();
+            $table->string('title')->nullable();
+            $table->boolean('active')->default(true);
+            $table->timestamps();
         });
         Schema::create('task_assignment_batches', function (Blueprint $table) {
             $table->id();
@@ -242,6 +275,72 @@ class TaskReviewWorkflowTest extends TestCase
         );
 
         $this->addToAssertionCount(1);
+    }
+
+    public function test_manager_can_edit_and_delete_tasks_from_a_direct_supervisor_but_not_approved_tasks(): void
+    {
+        $manager = User::create(['name' => 'Manager', 'username' => 'manager-1', 'password' => 'password']);
+        $supervisor = User::create(['name' => 'Supervisor', 'username' => 'supervisor-1', 'password' => 'password']);
+        User::create(['name' => 'Crew', 'username' => 'crew-1', 'password' => 'password']);
+        DB::table('user_locations')->insert([
+            ['user_id' => $manager->username, 'job_level' => 'manager'],
+            ['user_id' => $supervisor->username, 'job_level' => 'supervisor'],
+            ['user_id' => 'crew-1', 'job_level' => 'sc'],
+        ]);
+        DB::table('reporting_lines')->insert([
+            'leader_id' => $manager->username,
+            'subordinate_id' => $supervisor->username,
+            'status' => 'active',
+            'relation_type' => 'permanent',
+        ]);
+        $manager->load('userLocations');
+
+        $task = Task::create([
+            'employee_id' => 'crew-1',
+            'employer_id' => $supervisor->username,
+            'title' => 'Rapikan display',
+            'start_at' => '2026-10-09 08:00:00',
+            'due_at' => '2026-10-09 22:30:00',
+            'status' => 'pending',
+        ]);
+        $this->mockNotifications(2);
+
+        $this->actingAs($manager, 'sanctum')
+            ->patchJson('/api/tasks/' . $task->id, ['due_at' => '2026-10-09 22:45:00', 'note' => 'Prioritas area depan'])
+            ->assertOk()
+            ->assertJsonPath('note', 'Prioritas area depan');
+
+        Carbon::setTestNow(Carbon::parse('2026-10-09 22:46:00', 'Asia/Jakarta'));
+        $this->actingAs($manager, 'sanctum')
+            ->patchJson('/api/tasks/' . $task->id, ['due_at' => '2026-10-09 23:00:00'])
+            ->assertBadRequest()
+            ->assertJsonPath('message', 'Tugas ini sudah melewati tenggat dan tidak dapat diedit.');
+        Carbon::setTestNow(Carbon::parse('2026-10-09 22:00:00', 'Asia/Jakarta'));
+
+        $this->actingAs($manager, 'sanctum')
+            ->patchJson('/api/tasks/' . $task->id . '/status', ['status' => 'approved'])
+            ->assertForbidden();
+
+        $this->actingAs($manager, 'sanctum')
+            ->deleteJson('/api/tasks/' . $task->id)
+            ->assertOk();
+        $this->assertDatabaseMissing('tasks', ['id' => $task->id]);
+
+        $approvedTask = Task::create([
+            'employee_id' => 'crew-1',
+            'employer_id' => $supervisor->username,
+            'title' => 'Tugas selesai',
+            'start_at' => '2026-10-09 08:00:00',
+            'due_at' => '2026-10-09 22:30:00',
+            'status' => 'approved',
+        ]);
+
+        $this->actingAs($manager, 'sanctum')
+            ->patchJson('/api/tasks/' . $approvedTask->id, ['note' => 'Tidak boleh'])
+            ->assertBadRequest();
+        $this->actingAs($manager, 'sanctum')
+            ->deleteJson('/api/tasks/' . $approvedTask->id)
+            ->assertBadRequest();
     }
 
     public function test_expired_evidence_upload_returns_diagnostic_context(): void

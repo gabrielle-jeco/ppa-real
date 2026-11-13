@@ -23,6 +23,7 @@ use App\Models\UserLoginEvent;
 use App\Models\UserPresence;
 use App\Models\WorkStation;
 use App\Services\ReportingLineSpreadsheetService;
+use App\Services\OrganizationChartService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,6 +35,10 @@ use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
+    public function __construct(private OrganizationChartService $organizationChartService)
+    {
+    }
+
     private const DEFAULT_APP_JOB_LEVELS = ['sc', 'supervisor', 'manager', 'regional_manager'];
     private const CMS_PERMISSIONS = [
         'users_locations' => 'User & Lokasi',
@@ -46,6 +51,7 @@ class AdminController extends Controller
         'regionals' => 'Master Regional',
         'evaluation_masters' => 'Master Evaluasi',
         'scoring_masters' => 'Master Penilaian',
+        'score_reports' => 'Report Penilaian',
         'role_management' => 'Role Akun',
         'user_activity' => 'Aktivitas User',
     ];
@@ -63,7 +69,7 @@ class AdminController extends Controller
     public function overview()
     {
         $this->authorizeSuperadmin();
-        $canUseLocations = $this->canAnyPermission(['users_locations', 'app_roles', 'reporting_lines', 'locations', 'user_activity']);
+        $canUseLocations = $this->canAnyPermission(['users_locations', 'app_roles', 'reporting_lines', 'work_stations', 'locations', 'user_activity', 'score_reports']);
 
         $workStations = $this->canPermission('work_stations') ? WorkStation::orderBy('name')->get()->map(fn(WorkStation $station) => [
             'id' => $station->id,
@@ -120,7 +126,7 @@ class AdminController extends Controller
             'work_stations' => $workStations,
             'app_roles' => $this->canPermission('app_roles') ? AppRole::orderBy('name')->get()->map(fn(AppRole $role) => $this->formatAppRole($role)) : [],
             'app_job_levels' => $this->canPermission('app_roles') ? $this->appJobLevelNames() : [],
-            'regionals' => $this->canPermission('regionals') ? Regional::orderBy('kode_regional')->get() : [],
+            'regionals' => $this->canAnyPermission(['regionals', 'score_reports']) ? Regional::orderBy('kode_regional')->get() : [],
             'evaluation_masters' => $this->canPermission('evaluation_masters') ? EvaluationMaster::orderBy('sort_order')->orderBy('id')->get()->map(fn(EvaluationMaster $master) => $this->formatEvaluationMaster($master)) : [],
             'scoring_rules' => $this->canPermission('scoring_masters') ? ScoringRule::orderByDesc('effective_from')->orderByDesc('id')->get()->map(fn(ScoringRule $rule) => $this->formatScoringRule($rule)) : [],
             'attendance_statuses' => $this->canPermission('scoring_masters') ? Attendance::query()
@@ -664,6 +670,11 @@ class AdminController extends Controller
             : $user->role_id;
         $targetRole = Role::find($roleId);
 
+        if ((int) $user->job_level_id !== (int) $data['job_level_id']) {
+            $this->assertUserHasNoReportingRelations($user->username, 'job_level_id');
+        }
+        $this->assertAccountRoleTransitionAllowed($user, $targetRole);
+
         if ($targetRole?->isCmsRole() && !$user->accountRole?->isCmsRole() && empty($data['password'])) {
             throw ValidationException::withMessages([
                 'password' => ['Password wajib diisi minimal 8 karakter saat memberikan akses CMS.'],
@@ -1021,8 +1032,13 @@ class AdminController extends Controller
             'job_level' => ['required', Rule::exists('app_roles', 'name')->where('active', true)],
         ]);
 
+        $targetJobLevel = strtolower(trim($data['job_level']));
+        if (strtolower(trim((string) $userLocation->job_level)) !== $targetJobLevel) {
+            $this->assertUserHasNoReportingRelations($userLocation->user_id, 'job_level');
+        }
+
         $userLocation->update([
-            'job_level' => strtolower(trim($data['job_level'])),
+            'job_level' => $targetJobLevel,
         ]);
 
         return response()->json($this->formatUserLocation($userLocation->fresh(['user', 'location'])));
@@ -1038,9 +1054,18 @@ class AdminController extends Controller
             'job_level' => ['required', Rule::exists('app_roles', 'name')->where('active', true)],
         ]);
 
+        $targetJobLevel = strtolower(trim($data['job_level']));
+        $existingAssignment = UserLocation::where('user_id', $data['user_id'])
+            ->where('location_id', $data['location_id'])
+            ->first();
+        if ($existingAssignment
+            && strtolower(trim((string) $existingAssignment->job_level)) !== $targetJobLevel) {
+            $this->assertUserHasNoReportingRelations($data['user_id'], 'job_level');
+        }
+
         $assignment = UserLocation::updateOrCreate(
             ['user_id' => $data['user_id'], 'location_id' => $data['location_id']],
-            ['job_level' => strtolower(trim($data['job_level']))]
+            ['job_level' => $targetJobLevel]
         );
 
         return response()->json($this->formatUserLocation($assignment->fresh(['user', 'location'])), $assignment->wasRecentlyCreated ? 201 : 200);
@@ -1058,8 +1083,14 @@ class AdminController extends Controller
                 CASE
                     WHEN LOWER(TRIM(job_levels.name)) IN ('crew', 'employee', 'sc') THEN 'sc'
                     WHEN LOWER(TRIM(job_levels.name)) = 'supervisor' THEN 'supervisor'
-                    WHEN LOWER(TRIM(job_levels.name)) = 'manager' THEN 'manager'
                     WHEN LOWER(TRIM(job_levels.name)) = 'regional_manager' THEN 'regional_manager'
+                    WHEN UPPER(TRIM(COALESCE(job_levels.grade, ''))) IN ('MGR', 'MANAGER', 'CHF')
+                        OR UPPER(TRIM(COALESCE(job_levels.position_code, ''))) LIKE 'SM-%'
+                        OR UPPER(TRIM(COALESCE(job_levels.position_code, ''))) LIKE 'SMP-%'
+                        OR UPPER(TRIM(COALESCE(job_levels.position_code, ''))) LIKE 'CF-OPR-CAB-%'
+                        OR UPPER(TRIM(COALESCE(job_levels.name, ''))) LIKE '%STORE MANAGER%'
+                        OR UPPER(TRIM(COALESCE(job_levels.name, ''))) LIKE '%CHIEF OPERATION%'
+                        OR LOWER(TRIM(job_levels.name)) = 'manager' THEN 'manager'
                     ELSE NULL
                 END AS job_level,
                 NOW(),
@@ -1076,8 +1107,14 @@ class AdminController extends Controller
                 AND CASE
                     WHEN LOWER(TRIM(job_levels.name)) IN ('crew', 'employee', 'sc') THEN 'sc'
                     WHEN LOWER(TRIM(job_levels.name)) = 'supervisor' THEN 'supervisor'
-                    WHEN LOWER(TRIM(job_levels.name)) = 'manager' THEN 'manager'
                     WHEN LOWER(TRIM(job_levels.name)) = 'regional_manager' THEN 'regional_manager'
+                    WHEN UPPER(TRIM(COALESCE(job_levels.grade, ''))) IN ('MGR', 'MANAGER', 'CHF')
+                        OR UPPER(TRIM(COALESCE(job_levels.position_code, ''))) LIKE 'SM-%'
+                        OR UPPER(TRIM(COALESCE(job_levels.position_code, ''))) LIKE 'SMP-%'
+                        OR UPPER(TRIM(COALESCE(job_levels.position_code, ''))) LIKE 'CF-OPR-CAB-%'
+                        OR UPPER(TRIM(COALESCE(job_levels.name, ''))) LIKE '%STORE MANAGER%'
+                        OR UPPER(TRIM(COALESCE(job_levels.name, ''))) LIKE '%CHIEF OPERATION%'
+                        OR LOWER(TRIM(job_levels.name)) = 'manager' THEN 'manager'
                     ELSE NULL
                 END IS NOT NULL
         SQL);
@@ -1327,6 +1364,47 @@ class AdminController extends Controller
                 ['job_level' => $this->defaultAppJobLevel($user)]
             );
         }
+    }
+
+    private function assertUserHasNoReportingRelations(string $username, string $field): void
+    {
+        $hasRelations = ReportingLine::withoutGlobalScope('effective_backup_period')
+            ->where(function ($query) use ($username) {
+                $query->where('leader_id', $username)
+                    ->orWhere('subordinate_id', $username);
+            })
+            ->exists();
+
+        if ($hasRelations) {
+            throw ValidationException::withMessages([
+                $field => ['Hapus seluruh relasi atasan dan bawahan user sebelum mengubah role.'],
+            ]);
+        }
+    }
+
+    private function assertAccountRoleTransitionAllowed(User $user, ?Role $targetRole): void
+    {
+        if ((int) $user->role_id === (int) $targetRole?->id) {
+            return;
+        }
+
+        $currentIsCms = (bool) $user->accountRole?->isCmsRole();
+        $targetIsCms = (bool) $targetRole?->isCmsRole();
+        if ($currentIsCms || !$targetIsCms) {
+            return;
+        }
+
+        $hasAppRole = UserLocation::where('user_id', $user->username)
+            ->whereNotNull('job_level')
+            ->whereRaw("TRIM(job_level) <> ''")
+            ->exists();
+        if ($hasAppRole) {
+            throw ValidationException::withMessages([
+                'role_id' => ['Hapus seluruh Role Aplikasi user sebelum memberikan akses admin.'],
+            ]);
+        }
+
+        $this->assertUserHasNoReportingRelations($user->username, 'role_id');
     }
 
     private function formatUser(User $user): array
@@ -1599,6 +1677,10 @@ class AdminController extends Controller
     {
         $role = strtolower(trim((string) $user->jobLevel?->name));
 
+        if ($user->manager_type === 'CO' || $user->manager_type === 'SM') {
+            return 'manager';
+        }
+
         return match ($role) {
             'crew', 'employee', 'sc' => 'sc',
             'supervisor' => 'supervisor',
@@ -1722,19 +1804,7 @@ class AdminController extends Controller
 
     private function validateReportingLineHierarchy(string $leaderId, string $subordinateId)
     {
-        $leader = User::where('username', $leaderId)->first();
-        $subordinate = User::where('username', $subordinateId)->first();
-
-        if (!$leader || !$subordinate) return;
-
-        $leaderRank = $this->reportingLineRank($leader);
-        $subRank = $this->reportingLineRank($subordinate);
-
-        if ($leaderRank <= $subRank) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'leader_id' => ['Leader must have a higher role level than the subordinate (e.g. Supervisor leads Employee, Manager leads Supervisor).']
-            ]);
-        }
+        $this->organizationChartService->validatePair($leaderId, $subordinateId);
     }
 
     private function reportingLineImportAnalysis(array $parsed, bool $limitDetails = true): array
@@ -1801,8 +1871,10 @@ class AdminController extends Controller
                 continue;
             }
 
-            if ($this->reportingLineRank($leader) <= $this->reportingLineRank($subordinate)) {
-                $invalid[] = [...$context, 'reason' => 'Level aplikasi atasan harus lebih tinggi daripada bawahan.'];
+            try {
+                $this->organizationChartService->validatePair($leader, $subordinate);
+            } catch (ValidationException $exception) {
+                $invalid[] = [...$context, 'reason' => collect($exception->errors())->flatten()->first() ?: 'Hierarki relasi tidak valid.'];
                 continue;
             }
 
@@ -1842,16 +1914,4 @@ class AdminController extends Controller
         ];
     }
 
-    private function reportingLineRank(User $user): float
-    {
-        $rank = match ($user->role_type) {
-            'employee' => 1,
-            'supervisor' => 2,
-            'manager' => 3,
-            'superadmin' => 4,
-            default => 0,
-        };
-
-        return $user->role_type === 'manager' && $user->manager_type === 'RM' ? 3.5 : $rank;
-    }
 }

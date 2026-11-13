@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Check, ChevronDown, Edit3, Trash2 } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import MobileAddTaskModal from './MobileAddTaskModal';
@@ -32,6 +32,7 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     const [editingTask, setEditingTask] = useState<any>(null);
     const [editingBatch, setEditingBatch] = useState<any>(null);
     const [rejectTask, setRejectTask] = useState<any>(null);
+    const dataRequestRef = useRef(0);
 
     const isFutureDate = (date: Date) => {
         return isAfterTaskWindow(date);
@@ -44,41 +45,47 @@ export default function MobileCrewHistory({ crew, onBack }: MobileCrewHistoryPro
     // Real Data State
     const [tasks, setTasks] = useState<any[]>([]); // For Task History
     const [activityLogs, setActivityLogs] = useState<any[]>([]);
-    const fetchData = async () => {
+    const fetchData = async (date = selectedDate, crewId = crew?.id) => {
         if (!crew?.id) return;
+        const requestId = ++dataRequestRef.current;
 
         try {
-            const dateStr = selectedDate.toLocaleDateString('en-CA');
+            const dateStr = date.toLocaleDateString('en-CA');
             const token = localStorage.getItem('auth_token') || '';
 
-            const taskReq = fetch(`/api/crews/${crew.id}/tasks?date=${dateStr}`, {
+            const taskReq = fetch(`/api/crews/${crewId}/tasks?date=${dateStr}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            const activityReq = fetch(`/api/crew/activity-logs?date=${dateStr}&user_id=${crew.id}`, {
+            const activityReq = fetch(`/api/crew/activity-logs?date=${dateStr}&user_id=${crewId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
             const [taskRes, activityRes] = await Promise.all([taskReq, activityReq]);
-
-            if (taskRes.ok) setTasks(await taskRes.json());
-            if (activityRes.ok) setActivityLogs(await activityRes.json());
+            const taskPayload = taskRes.ok ? await taskRes.json() : null;
+            const activityPayload = activityRes.ok ? await activityRes.json() : null;
+            if (requestId !== dataRequestRef.current) return;
+            if (taskPayload) setTasks(taskPayload);
+            if (activityPayload) setActivityLogs(activityPayload);
         } catch (error) {
+            if (requestId !== dataRequestRef.current) return;
             console.error("Gagal mengambil data riwayat", error);
         }
     };
 
     // Fetch Tasks & Activities
     useEffect(() => {
-        fetchData();
-    }, [selectedDate, viewMode, crew?.id]);
+        fetchData(selectedDate, crew?.id);
+    }, [selectedDate, crew?.id]);
 
     useEffect(() => {
         if (!crew?.id) return;
 
-        const timer = window.setInterval(fetchData, 15000);
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') fetchData(selectedDate, crew.id);
+        }, 60000);
         return () => window.clearInterval(timer);
-    }, [selectedDate, viewMode, crew?.id]);
+    }, [selectedDate, crew?.id]);
 
     useEffect(() => {
         tasks.forEach(notifyApprovalGrace);

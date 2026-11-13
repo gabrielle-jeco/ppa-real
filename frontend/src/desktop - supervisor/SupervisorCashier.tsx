@@ -17,6 +17,7 @@ import {
     type PushSellingCampaignDetail,
     type PushSellingCampaignInput,
 } from '../utils/cashier';
+import SearchableCrewSelect from '../general/SearchableCrewSelect';
 
 const today = () => {
     const date = new Date();
@@ -36,7 +37,6 @@ export default function SupervisorCashier() {
     const [overview, setOverview] = useState<CashierOverview | null>(null);
     const [selectedCrewId, setSelectedCrewId] = useState('');
     const [cashierId, setCashierId] = useState('');
-    const [crewSearch, setCrewSearch] = useState('');
     const [cashierSaving, setCashierSaving] = useState(false);
     const [campaigns, setCampaigns] = useState<CampaignPage>(emptyPage);
     const [campaignSearch, setCampaignSearch] = useState('');
@@ -53,11 +53,6 @@ export default function SupervisorCashier() {
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     const selectedCrew = overview?.crew.find((crew) => crew.id === selectedCrewId) ?? null;
-    const filteredCrew = overview?.crew.filter((crew) => {
-        const term = crewSearch.trim().toLocaleLowerCase('id-ID');
-        return !term || `${crew.id} ${crew.name}`.toLocaleLowerCase('id-ID').includes(term);
-    }) ?? [];
-
     useEffect(() => {
         fetchCashierOverview()
             .then((payload) => {
@@ -186,11 +181,7 @@ export default function SupervisorCashier() {
                 <aside className="row-span-2 min-h-0 overflow-y-auto rounded-3xl border border-gray-100 bg-white p-5 shadow-sm xl:row-span-1">
                     <div className="flex items-start gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-50 text-primary"><UserRound size={21} /></div><div><h2 className="font-black text-gray-800">ID Kasir</h2><p className="mt-1 text-xs leading-5 text-gray-400">Hubungkan karyawan dengan ID Beyond.</p></div></div>
                     <form onSubmit={submitCashierId} className="mt-5 space-y-3">
-                        <label className="relative block"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={16} /><input value={crewSearch} onChange={(event) => setCrewSearch(event.target.value)} placeholder="Cari nama atau NIK..." className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-3 text-sm outline-none focus:border-primary" /></label>
-                        <select value={selectedCrewId} onChange={(event) => selectCrew(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-700 outline-none focus:border-primary">
-                            <option value="">Pilih karyawan</option>
-                            {filteredCrew.map((crew) => <option key={crew.id} value={crew.id}>{crew.id} - {crew.name}</option>)}
-                        </select>
+                        <SearchableCrewSelect value={selectedCrewId} options={overview?.crew ?? []} onChange={selectCrew} />
                         <label className="block"><span className="mb-2 block text-[11px] font-bold uppercase tracking-wide text-gray-400">ID Kasir Beyond</span><input value={cashierId} onChange={(event) => setCashierId(event.target.value)} disabled={!selectedCrew} placeholder="Belum diatur" maxLength={64} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:border-primary disabled:opacity-50" /></label>
                         <button disabled={!selectedCrew || cashierSaving} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-black text-white disabled:opacity-50">{cashierSaving ? <LoaderCircle size={16} className="animate-spin" /> : <Check size={16} />}{cashierSaving ? 'Menyimpan...' : 'Simpan ID Kasir'}</button>
                     </form>
