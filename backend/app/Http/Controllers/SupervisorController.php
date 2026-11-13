@@ -8,7 +8,6 @@ use App\Models\Task;
 use App\Models\User;
 use App\Services\ScoringService;
 use App\Services\SupervisorTaskAccessService;
-use App\Services\YojadwalPresenceService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -98,7 +97,7 @@ class SupervisorController extends Controller
         ]);
     }
 
-    public function myStats(Request $request, ScoringService $scoringService, YojadwalPresenceService $presenceService)
+    public function myStats(Request $request, ScoringService $scoringService)
     {
         $request->validate([
             'month' => 'nullable|integer|between:1,12',
@@ -118,8 +117,6 @@ class SupervisorController extends Controller
         } catch (\Exception $e) {
             $targetDate = Carbon::now();
         }
-
-        $presenceService->syncMonthIfNeeded($user->username, (int) $targetDate->month, (int) $targetDate->year);
 
         $detailedStats = $scoringService->getSupervisorMonthlyDetailedScore($user, $targetDate);
 
@@ -290,7 +287,7 @@ class SupervisorController extends Controller
         ]);
     }
 
-    public function getCrewEvalStats($id, Request $request, ScoringService $scoringService, YojadwalPresenceService $presenceService)
+    public function getCrewEvalStats($id, Request $request, ScoringService $scoringService)
     {
         $request->validate([
             'month' => 'nullable|integer|between:1,12',
@@ -320,8 +317,6 @@ class SupervisorController extends Controller
         } catch (\Exception $e) {
             $targetDate = Carbon::now();
         }
-
-        $presenceService->syncMonthIfNeeded($crewUser->username, (int) $targetDate->month, (int) $targetDate->year);
 
         $detailedStats = $scoringService->getCrewMonthlyDetailedStats($crewUser, $targetDate);
         $yearlyScore = $scoringService->getCrewYearlyScore($crewUser, $targetDate);

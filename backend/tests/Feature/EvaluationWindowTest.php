@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\EvaluationReopenRequest;
 use App\Models\MonthlyPersonalityEvaluation;
 use App\Models\ReportingLine;
 use App\Models\User;
@@ -63,6 +64,23 @@ class EvaluationWindowTest extends TestCase
             $table->text('notes')->nullable();
             $table->timestamps();
         });
+        Schema::create('evaluation_reopen_requests', function (Blueprint $table) {
+            $table->id();
+            $table->string('requester_id');
+            $table->string('evaluatee_id');
+            $table->date('evaluation_period');
+            $table->string('evaluation_type')->default('personality');
+            $table->unsignedTinyInteger('attempt');
+            $table->string('status')->default('pending');
+            $table->text('reason')->nullable();
+            $table->string('reviewed_by')->nullable();
+            $table->text('rejection_reason')->nullable();
+            $table->timestamp('reviewed_at')->nullable();
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamp('completed_at')->nullable();
+            $table->timestamps();
+            $table->unique(['requester_id', 'evaluatee_id', 'evaluation_period', 'evaluation_type', 'attempt']);
+        });
     }
 
     protected function tearDown(): void
@@ -113,7 +131,178 @@ class EvaluationWindowTest extends TestCase
             ->assertJsonPath('is_locked', true)
             ->assertJsonPath('evaluation_period', '2026-08-01')
             ->assertJsonPath('evaluation_window_starts_at', '2026-09-01')
-            ->assertJsonPath('evaluation_window_ends_at', '2026-09-06');
+            ->assertJsonPath('evaluation_window_ends_at', '2026-09-06')
+            ->assertJsonPath('can_request_reopen', true)
+            ->assertJsonPath('reopen_attempts_remaining', 3);
+    }
+
+    public function test_manager_can_approve_reopen_request_for_twenty_four_hours_and_completion_closes_it(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-07 10:00:00', 'Asia/Jakarta'));
+        [$supervisor, $crew] = $this->supervisorAndCrew();
+        $manager = $this->createUser('manager-1', 'manager');
+        $this->createReportingLine($manager, $supervisor);
+
+        $requestId = $this->actingAs($supervisor, 'sanctum')
+            ->postJson('/api/evaluations/reopen-requests/' . $crew->username, ['reason' => 'Operasional toko'])
+            ->assertCreated()
+            ->assertJsonPath('request.status', 'pending')
+            ->assertJsonPath('request.attempt', 1)
+            ->json('request.id');
+
+        $this->actingAs($manager, 'sanctum')
+            ->patchJson('/api/manager/evaluation-reopen-requests/' . $requestId . '/review', ['decision' => 'approved'])
+            ->assertOk()
+            ->assertJsonPath('request.status', 'approved');
+
+        $this->actingAs($supervisor, 'sanctum')
+            ->getJson('/api/evaluations/check/' . $crew->username)
+            ->assertOk()
+            ->assertJsonPath('can_evaluate', true)
+            ->assertJsonPath('reopen_request.status', 'approved');
+
+        $this->actingAs($supervisor, 'sanctum')
+            ->postJson('/api/evaluations', [
+                'user_id' => $crew->username,
+                'scores' => ['teamwork' => 5],
+                'total_score' => 100,
+                'date' => '2026-08-01',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('evaluation_reopen_requests', ['id' => $requestId, 'status' => 'completed']);
+        $this->actingAs($supervisor, 'sanctum')
+            ->postJson('/api/evaluations/reopen-requests/' . $crew->username)
+            ->assertStatus(422);
+    }
+
+    public function test_rejected_requests_count_toward_three_attempt_limit_and_rejection_reason_is_required(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-07 10:00:00', 'Asia/Jakarta'));
+        [$supervisor, $crew] = $this->supervisorAndCrew();
+        $manager = $this->createUser('manager-1', 'manager');
+        $this->createReportingLine($manager, $supervisor);
+
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $requestId = $this->actingAs($supervisor, 'sanctum')
+                ->postJson('/api/evaluations/reopen-requests/' . $crew->username)
+                ->assertCreated()
+                ->assertJsonPath('request.attempt', $attempt)
+                ->json('request.id');
+
+            if ($attempt === 1) {
+                $this->actingAs($manager, 'sanctum')
+                    ->patchJson('/api/manager/evaluation-reopen-requests/' . $requestId . '/review', ['decision' => 'rejected'])
+                    ->assertStatus(422);
+            }
+
+            $this->actingAs($manager, 'sanctum')
+                ->patchJson('/api/manager/evaluation-reopen-requests/' . $requestId . '/review', [
+                    'decision' => 'rejected',
+                    'rejection_reason' => 'Data belum lengkap',
+                ])
+                ->assertOk();
+        }
+
+        $this->actingAs($supervisor, 'sanctum')
+            ->getJson('/api/evaluations/check/' . $crew->username)
+            ->assertOk()
+            ->assertJsonPath('can_request_reopen', false)
+            ->assertJsonPath('reopen_attempts_used', 3)
+            ->assertJsonPath('reopen_attempts_remaining', 0);
+
+        $this->actingAs($supervisor, 'sanctum')
+            ->postJson('/api/evaluations/reopen-requests/' . $crew->username)
+            ->assertStatus(422);
+    }
+
+    public function test_manager_request_list_supports_tabs_search_and_pagination(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-07 10:00:00', 'Asia/Jakarta'));
+        $manager = $this->createUser('manager-1', 'manager');
+        $supervisor = $this->createUser('supervisor-1', 'supervisor');
+        $crewAlpha = $this->createUser('crew-alpha', 'sc');
+        $crewBeta = $this->createUser('crew-beta', 'sc');
+        $this->createReportingLine($manager, $supervisor);
+
+        EvaluationReopenRequest::create([
+            'requester_id' => $supervisor->username,
+            'evaluatee_id' => $crewAlpha->username,
+            'evaluation_period' => '2026-08-01',
+            'evaluation_type' => 'personality',
+            'attempt' => 1,
+            'status' => 'pending',
+        ]);
+        EvaluationReopenRequest::create([
+            'requester_id' => $supervisor->username,
+            'evaluatee_id' => $crewAlpha->username,
+            'evaluation_period' => '2026-08-01',
+            'evaluation_type' => 'personality',
+            'attempt' => 2,
+            'status' => 'rejected',
+        ]);
+        EvaluationReopenRequest::create([
+            'requester_id' => $supervisor->username,
+            'evaluatee_id' => $crewBeta->username,
+            'evaluation_period' => '2026-08-01',
+            'evaluation_type' => 'personality',
+            'attempt' => 1,
+            'status' => 'completed',
+        ]);
+
+        $this->actingAs($manager, 'sanctum')
+            ->getJson('/api/manager/evaluation-reopen-requests?tab=pending&per_page=1')
+            ->assertOk()
+            ->assertJsonPath('pending_count', 1)
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonPath('requests.0.status', 'pending');
+
+        $this->actingAs($manager, 'sanctum')
+            ->getJson('/api/manager/evaluation-reopen-requests?tab=history&search=crew-beta&per_page=1')
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonPath('requests.0.evaluatee.id', 'crew-beta')
+            ->assertJsonPath('requests.0.status', 'completed');
+
+        $this->actingAs($manager, 'sanctum')
+            ->getJson('/api/manager/evaluation-reopen-requests?tab=history&per_page=1&page=2')
+            ->assertOk()
+            ->assertJsonPath('pagination.current_page', 2)
+            ->assertJsonPath('pagination.last_page', 2)
+            ->assertJsonPath('pagination.total', 2)
+            ->assertJsonCount(1, 'requests');
+    }
+
+    public function test_review_marks_pending_request_completed_when_evaluation_already_exists(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-07 10:00:00', 'Asia/Jakarta'));
+        [$supervisor, $crew] = $this->supervisorAndCrew();
+        $manager = $this->createUser('manager-1', 'manager');
+        $this->createReportingLine($manager, $supervisor);
+
+        $requestId = $this->actingAs($supervisor, 'sanctum')
+            ->postJson('/api/evaluations/reopen-requests/' . $crew->username)
+            ->assertCreated()
+            ->json('request.id');
+
+        MonthlyPersonalityEvaluation::create([
+            'evaluatee_id' => $crew->username,
+            'evaluator_id' => $supervisor->username,
+            'evaluation_period' => '2026-08-01',
+            'evaluation_type' => 'personality',
+            'score' => 80,
+            'scores' => ['teamwork' => 4],
+        ]);
+
+        $this->actingAs($manager, 'sanctum')
+            ->patchJson('/api/manager/evaluation-reopen-requests/' . $requestId . '/review', ['decision' => 'approved'])
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('evaluation_reopen_requests', [
+            'id' => $requestId,
+            'status' => 'completed',
+        ]);
+        $this->assertNotNull(EvaluationReopenRequest::findOrFail($requestId)->completed_at);
     }
 
     public function test_personality_evaluation_only_accepts_previous_month(): void

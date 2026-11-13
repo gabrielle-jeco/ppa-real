@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\WorkStation;
 use App\Services\UserNotificationService;
 use App\Services\SupervisorTaskAccessService;
+use App\Services\ManagerScopeService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -28,6 +29,10 @@ class TaskController extends Controller
         'menengah' => 6,
         'sulit' => 10,
     ];
+
+    public function __construct(private ManagerScopeService $managerScope)
+    {
+    }
 
     public function taskCatalog()
     {
@@ -77,7 +82,9 @@ class TaskController extends Controller
             }
         } else {
             if ($user->username !== $supervisorId) {
-                $isSubordinate = $user->subordinateLines()->where('subordinate_id', $supervisorId)->where('status', 'active')->exists();
+                $isSubordinate = $user->role_type === 'manager'
+                    ? $this->managerScope->canAccessSupervisor($user, $supervisorId)
+                    : $user->subordinateLines()->where('subordinate_id', $supervisorId)->where('status', 'active')->exists();
                 if (!$isSubordinate) {
                     return response()->json(['message' => 'Tidak memiliki akses. User ini bukan bawahan Anda.'], 403);
                 }
@@ -386,15 +393,21 @@ class TaskController extends Controller
             'note' => 'nullable|string|max:5000',
         ]);
 
-        $employer = Auth::user();
+        $actor = Auth::user();
         $task = Task::with('evidences')->findOrFail($id);
 
-        if ($task->employer_id !== $employer->username) {
+        if (!$actor || !$this->canManageTask($actor, $task)) {
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
+        $employer = User::where('username', $task->employer_id)->firstOrFail();
+
         if ($task->status === 'approved' || $task->evidences->isNotEmpty()) {
             return response()->json(['message' => 'Tugas yang sudah berjalan atau disetujui tidak dapat diedit.'], 400);
+        }
+
+        if ($actor->role_type === 'manager' && $this->isTaskLocked($task)) {
+            return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan tidak dapat diedit.'], 400);
         }
 
         $taskDefinition = $this->taskDefinitionForUpdate(
@@ -652,7 +665,8 @@ class TaskController extends Controller
     {
         $task = Task::with('evidences')->findOrFail($id);
 
-        if ($task->employer_id !== Auth::user()->username) {
+        $actor = Auth::user();
+        if (!$actor || !$this->canManageTask($actor, $task)) {
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
@@ -664,7 +678,7 @@ class TaskController extends Controller
             $batchId = $task->assignment_batch_id;
             $batchTitle = $task->title;
 
-            if ($batchTasks->contains(fn (Task $batchTask) => $batchTask->employer_id !== Auth::user()->username)) {
+            if ($batchTasks->contains(fn (Task $batchTask) => !$this->canManageTask($actor, $batchTask))) {
                 return response()->json(['message' => 'Tidak memiliki akses.'], 403);
             }
 
@@ -1525,6 +1539,16 @@ class TaskController extends Controller
         }
 
         return ($task->start_at instanceof Carbon ? $task->start_at : Carbon::parse($task->start_at))->isFuture();
+    }
+
+    private function canManageTask(User $actor, Task $task): bool
+    {
+        if ($task->employer_id === $actor->username) {
+            return true;
+        }
+
+        return $actor->role_type === 'manager'
+            && $this->managerScope->canAccessSupervisor($actor, $task->employer_id);
     }
 
     private function normalizeWeightLabel(?string $label): ?string

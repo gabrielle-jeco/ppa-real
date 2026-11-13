@@ -1,13 +1,15 @@
 import React from 'react';
-import { LayoutDashboard, LogOut, Store } from 'lucide-react';
+import { GitBranch, LayoutDashboard, LogOut, Store } from 'lucide-react';
 
 interface ManagerLayoutProps {
     children: React.ReactNode;
     user?: any;
+    activePage: 'dashboard' | 'organization';
+    onPageChange: (page: 'dashboard' | 'organization') => void;
     onLogout: () => void;
 }
 
-export default function ManagerLayout({ children, onLogout }: ManagerLayoutProps) {
+export default function ManagerLayout({ children, activePage, onPageChange, onLogout }: ManagerLayoutProps) {
     return (
         <div className="min-h-screen bg-gray-50 flex font-sans text-gray-800">
             {/* Slim Sidebar */}
@@ -18,12 +20,17 @@ export default function ManagerLayout({ children, onLogout }: ManagerLayoutProps
                     <Store size={24} />
                 </div>
 
-                {/* Navigation (Dashboard Only) */}
+                {/* Navigation */}
                 <nav className="flex-1 w-full px-4 space-y-4">
                     <div className="flex justify-center">
-                        <div className="p-3 bg-primary text-white rounded-xl shadow-lg shadow-purple-200 cursor-pointer transition hover:scale-105">
+                        <button type="button" onClick={() => onPageChange('dashboard')} title="Karyawan" className={`p-3 rounded-xl cursor-pointer transition hover:scale-105 ${activePage === 'dashboard' ? 'bg-primary text-white shadow-lg shadow-purple-200' : 'text-gray-400 hover:bg-purple-50 hover:text-primary'}`}>
                             <LayoutDashboard size={24} />
-                        </div>
+                        </button>
+                    </div>
+                    <div className="flex justify-center">
+                        <button type="button" onClick={() => onPageChange('organization')} title="Organigram" className={`p-3 rounded-xl cursor-pointer transition hover:scale-105 ${activePage === 'organization' ? 'bg-primary text-white shadow-lg shadow-purple-200' : 'text-gray-400 hover:bg-purple-50 hover:text-primary'}`}>
+                            <GitBranch size={24} />
+                        </button>
                     </div>
                 </nav>
 

@@ -4,14 +4,14 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Services\ManagerScopeService;
 use App\Services\ScoringService;
-use App\Services\YojadwalPresenceService;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
 class ManagerController extends Controller
 {
-    public function getSupervisors(Request $request, ScoringService $scoringService)
+    public function getSupervisors(Request $request, ScoringService $scoringService, ManagerScopeService $managerScope)
     {
         $request->validate([
             'location_id' => 'nullable|string|max:255',
@@ -23,37 +23,18 @@ class ManagerController extends Controller
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
-        $supervisorsCollection = $user->subordinateLines()->with(['subordinate.locations'])->get()
-            ->pluck('subordinate')
-            ->filter(function ($spv) {
-                return $spv && $spv->active;
-            });
-
-        $locations = $user->locations->map(function ($loc) {
+        $accessibleLocations = $managerScope->accessibleLocations($user);
+        $locations = $accessibleLocations->map(function ($loc) {
             return ['id' => $loc->initial, 'name' => $loc->name];
         });
-
-        $filterLocationName = 'Semua Lokasi';
-
-        if ($user->manager_type === 'SM') {
-            $smLocationId = $user->locations->first() ? $user->locations->first()->initial : null;
-            $filterLocationName = $user->locations->first() ? $user->locations->first()->name : 'Lokasi tidak diketahui';
-
-            if ($smLocationId) {
-                $supervisorsCollection = $supervisorsCollection->filter(function ($spv) use ($smLocationId) {
-                    return $spv->locations->contains('initial', $smLocationId);
-                });
-            }
-        } else {
-            if ($request->has('location_id') && $request->location_id) {
-                $supervisorsCollection = $supervisorsCollection->filter(function ($spv) use ($request) {
-                    return $spv->locations->contains('initial', $request->location_id);
-                });
-
-                $loc = $user->locations->firstWhere('initial', $request->location_id);
-                $filterLocationName = $loc ? $loc->name : 'Lokasi tidak diketahui';
-            }
-        }
+        $selectedLocationId = $user->manager_type === 'RM'
+            ? $request->input('location_id')
+            : $accessibleLocations->first()?->initial;
+        $selectedLocation = $selectedLocationId
+            ? $accessibleLocations->firstWhere('initial', $selectedLocationId)
+            : null;
+        $filterLocationName = $selectedLocation?->name ?? 'Semua Lokasi';
+        $supervisorsCollection = $managerScope->supervisors($user, $selectedLocationId);
 
         $supervisors = $supervisorsCollection->values()->map(function ($spv) use ($scoringService) {
             $stats = $scoringService->getSupervisorMonthlyDetailedScore($spv, Carbon::now());
@@ -77,7 +58,11 @@ class ManagerController extends Controller
         return response()->json([
             'manager' => [
                 'name' => $user->name,
-                'role' => $user->role_type === 'manager' ? ($user->manager_type === 'SM' ? 'Store Manager' : 'Regional Manager') : 'Manager',
+                'role' => match ($user->manager_type) {
+                    'CO' => 'Chief Operation',
+                    'RM' => 'Regional Manager',
+                    default => 'Store Manager',
+                },
                 'type' => $user->manager_type
             ],
             'location_name' => $filterLocationName,
@@ -87,7 +72,7 @@ class ManagerController extends Controller
         ]);
     }
 
-    public function getSupervisorStats($id, Request $request, \App\Services\ScoringService $scoringService, YojadwalPresenceService $presenceService)
+    public function getSupervisorStats($id, Request $request, \App\Services\ScoringService $scoringService, ManagerScopeService $managerScope)
     {
         $request->validate([
             'month' => 'nullable|integer|between:1,12',
@@ -101,8 +86,7 @@ class ManagerController extends Controller
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
-        $isSubordinate = $manager->subordinateLines()->where('subordinate_id', $id)->where('status', 'active')->exists();
-        if (!$isSubordinate) {
+        if (!$managerScope->canAccessSupervisor($manager, $id)) {
             return response()->json(['message' => 'Tidak memiliki akses atau supervisor tidak ditemukan.'], 403);
         }
 
@@ -125,14 +109,12 @@ class ManagerController extends Controller
             $targetDate = Carbon::now();
         }
 
-        $presenceService->syncMonthIfNeeded($supervisor->username, (int) $targetDate->month, (int) $targetDate->year);
-
         $detailedStats = $scoringService->getSupervisorMonthlyDetailedScore($supervisor, $targetDate);
 
         return response()->json($detailedStats);
     }
 
-    public function getSupervisorCrewTasks($id, Request $request, ScoringService $scoringService)
+    public function getSupervisorCrewTasks($id, Request $request, ScoringService $scoringService, ManagerScopeService $managerScope)
     {
         $request->validate([
             'date' => 'nullable|date_format:Y-m-d',
@@ -144,12 +126,7 @@ class ManagerController extends Controller
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
-        $isSubordinate = $manager->subordinateLines()
-            ->where('subordinate_id', $id)
-            ->where('status', 'active')
-            ->exists();
-
-        if (!$isSubordinate) {
+        if (!$managerScope->canAccessSupervisor($manager, $id)) {
             return response()->json(['message' => 'Tidak memiliki akses atau supervisor tidak ditemukan.'], 403);
         }
 
@@ -186,6 +163,7 @@ class ManagerController extends Controller
                 })->count();
 
                 $crewStats = $scoringService->getCrewMonthlyDetailedStats($crew, $targetDate);
+                $dailyScore = $scoringService->getCrewDailyScoreDisplay($crew, $targetDate);
 
                 return [
                     'id' => $crew->username,
@@ -193,6 +171,11 @@ class ManagerController extends Controller
                     'role' => $crew->role_type,
                     'location' => $crew->locations->first() ? $crew->locations->first()->name : 'N/A',
                     'activity_percentage' => $crewStats['active_percentage'] ?? 0,
+                    'daily_score' => $dailyScore['score'],
+                    'daily_score_date' => $dailyScore['score_date'],
+                    'daily_score_available' => $dailyScore['available'],
+                    'daily_score_availability_mode' => $dailyScore['availability_mode'],
+                    'daily_score_unavailable_reason' => $dailyScore['unavailable_reason'],
                     'tasks_total' => $tasks->count(),
                     'tasks_approved' => $approvedCount,
                     'tasks_pending' => $tasks->count() - $approvedCount,

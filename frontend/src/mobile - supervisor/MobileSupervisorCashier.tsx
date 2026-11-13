@@ -3,6 +3,8 @@ import type { FormEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays, Check, ChevronRight, Edit3, LoaderCircle, Plus, Search, ShoppingBasket, UserRound, X } from 'lucide-react';
 import MobileLayout from './MobileLayout';
+import SearchableCrewSelect from '../general/SearchableCrewSelect';
+import useModalTransition from '../utils/useModalTransition';
 import {
     createPushSellingCampaign,
     fetchCashierOverview,
@@ -40,7 +42,6 @@ export default function MobileSupervisorCashier({ onBack, onSelect }: {
     const [page, setPage] = useState(1);
     const [sheet, setSheet] = useState<'cashier' | 'campaign' | null>(null);
     const [selectedCrewId, setSelectedCrewId] = useState('');
-    const [crewSearch, setCrewSearch] = useState('');
     const [cashierId, setCashierId] = useState('');
     const [editingCampaign, setEditingCampaign] = useState<PushSellingCampaign | null>(null);
     const [campaignForm, setCampaignForm] = useState<PushSellingCampaignInput>(emptyForm);
@@ -87,18 +88,12 @@ export default function MobileSupervisorCashier({ onBack, onSelect }: {
         return () => window.clearTimeout(timeout);
     }, [search]);
 
-    const filteredCrew = overview?.crew.filter((crew) => {
-        const term = crewSearch.trim().toLocaleLowerCase('id-ID');
-        return !term || `${crew.id} ${crew.name}`.toLocaleLowerCase('id-ID').includes(term);
-    }) ?? [];
-
     const openCashierSheet = () => {
         const selected = overview?.crew.find((crew) => crew.id === selectedCrewId) || overview?.crew[0];
         if (selected) {
             setSelectedCrewId(selected.id);
             setCashierId(selected.cashier_id || '');
         }
-        setCrewSearch('');
         setSheet('cashier');
     };
 
@@ -189,8 +184,7 @@ export default function MobileSupervisorCashier({ onBack, onSelect }: {
 
             <BottomSheet open={sheet === 'cashier'} onClose={() => setSheet(null)} title="Atur ID Kasir">
                 <form onSubmit={submitCashierId} className="space-y-4">
-                    <label className="relative block"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={16} /><input value={crewSearch} onChange={(event) => setCrewSearch(event.target.value)} placeholder="Cari nama atau NIK..." className="w-full rounded-2xl border border-gray-200 py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-500" /></label>
-                    <select value={selectedCrewId} onChange={(event) => { const crew = overview?.crew.find((item) => item.id === event.target.value); setSelectedCrewId(event.target.value); setCashierId(crew?.cashier_id || ''); }} className="w-full rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500"><option value="">Pilih karyawan</option>{filteredCrew.map((crew) => <option key={crew.id} value={crew.id}>{crew.id} - {crew.name}</option>)}</select>
+                    <SearchableCrewSelect value={selectedCrewId} options={overview?.crew ?? []} accent="blue" onChange={(crewId) => { const crew = overview?.crew.find((item) => item.id === crewId); setSelectedCrewId(crewId); setCashierId(crew?.cashier_id || ''); }} />
                     <label className="block"><span className="mb-2 block text-xs font-bold text-gray-500">ID Kasir Beyond</span><input value={cashierId} onChange={(event) => setCashierId(event.target.value)} maxLength={64} placeholder="Belum diatur" className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-blue-500" /></label>
                     <button disabled={saving || !selectedCrewId} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-3.5 text-sm font-black text-white disabled:opacity-50">{saving ? <LoaderCircle size={16} className="animate-spin" /> : <Check size={16} />}{saving ? 'Menyimpan...' : 'Simpan ID Kasir'}</button>
                 </form>
@@ -210,20 +204,8 @@ export default function MobileSupervisorCashier({ onBack, onSelect }: {
 }
 
 function BottomSheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
-    const [rendered, setRendered] = useState(open);
-    const [animateIn, setAnimateIn] = useState(false);
+    const { shouldRender, animateIn, contentRef } = useModalTransition(open, { duration: 200 });
 
-    useEffect(() => {
-        if (open) {
-            setRendered(true);
-            const frame = window.requestAnimationFrame(() => setAnimateIn(true));
-            return () => window.cancelAnimationFrame(frame);
-        }
-        setAnimateIn(false);
-        const timeout = window.setTimeout(() => setRendered(false), 200);
-        return () => window.clearTimeout(timeout);
-    }, [open]);
-
-    if (!rendered) return null;
-    return createPortal(<div className={`fixed inset-0 z-[30000] flex items-end justify-center transition-colors duration-200 ${animateIn ? 'bg-black/45' : 'pointer-events-none bg-black/0'}`}><button type="button" aria-label="Tutup" onClick={onClose} className="absolute inset-0" /><div className={`relative max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 shadow-[0_-12px_30px_rgba(15,23,42,0.16)] transition-[transform,opacity] duration-200 ${animateIn ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}`}><div className="mb-5 flex items-center justify-between"><h2 className="text-lg font-black text-gray-800">{title}</h2><button type="button" onClick={onClose} className="rounded-full bg-gray-100 p-2 text-gray-500"><X size={18} /></button></div>{children}</div></div>, document.body);
+    if (!shouldRender) return null;
+    return createPortal(<div className={`fixed inset-0 z-[30000] flex items-end justify-center transition-colors duration-200 ease-out ${animateIn ? 'bg-black/45' : 'pointer-events-none bg-black/0'}`}><button type="button" aria-label="Tutup" onClick={onClose} className="absolute inset-0" /><div ref={contentRef} className={`relative max-h-[92dvh] w-full transform-gpu overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-6 shadow-[0_-12px_30px_rgba(15,23,42,0.16)] transition-[transform,opacity] duration-200 ease-out will-change-transform ${animateIn ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}`}><div className="mx-auto mb-5 h-1.5 w-12 rounded-full bg-gray-200" /><div className="mb-5 flex items-center justify-between"><h2 className="text-lg font-black text-gray-800">{title}</h2><button type="button" onClick={onClose} className="rounded-full bg-gray-100 p-2 text-gray-500"><X size={18} /></button></div>{children}</div></div>, document.body);
 }

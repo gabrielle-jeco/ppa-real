@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Ban, CheckCircle, ChevronDown, XCircle } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import { getAttendanceColor, getAttendanceDay } from '../utils/attendanceCalendar';
 import { formatDisplayNumber, roundToDisplayPrecision } from '../general/numberFormat';
+import EvaluationReopenRequestModal from '../general/EvaluationReopenRequestModal';
 
 interface MobileCrewEvaluationProps {
     crew: any;
@@ -47,6 +48,9 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
     const [scores, setScores] = useState<Record<string, number>>({});
     const [submitLoading, setSubmitLoading] = useState(false);
     const [showQuestionnaire, setShowQuestionnaire] = useState(false);
+    const [reopenModalOpen, setReopenModalOpen] = useState(false);
+    const evaluationRequestRef = useRef(0);
+    const evaluationContextRef = useRef<string | null>(null);
 
     const today = new Date();
     const currentYear = today.getFullYear();
@@ -76,47 +80,56 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
 
     // Fetch Evaluation Status & Stats
     const fetchEvaluationStatus = async () => {
-        setLoading(true);
+        const requestId = ++evaluationRequestRef.current;
+        const date = new Date(selectedDate);
+        const crewId = crew.id;
+        const requestContext = `${crewId}:${date.getFullYear()}-${date.getMonth() + 1}`;
+        if (evaluationContextRef.current !== requestContext) {
+            evaluationContextRef.current = null;
+            setEvaluationData(null);
+            setLoading(true);
+        }
         try {
             const token = localStorage.getItem('auth_token');
-            const dateStr = selectedDate.toLocaleDateString('en-CA');
-            const m = selectedDate.getMonth() + 1;
-            const y = selectedDate.getFullYear();
+            const dateStr = date.toLocaleDateString('en-CA');
+            const m = date.getMonth() + 1;
+            const y = date.getFullYear();
 
-            // 1. Check if Evaluated
-            const resEval = await fetch(`/api/evaluations/check/${crew.id}?date=${dateStr}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (resEval.ok) {
-                const data = await resEval.json();
-                setEvaluationData(data); // data.evaluated is boolean
+            const [resEval, resStats] = await Promise.all([
+                fetch(`/api/evaluations/check/${crewId}?date=${dateStr}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }),
+                fetch(`/api/crew/stats?month=${m}&year=${y}&user_id=${crewId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }),
+            ]);
+            const evaluationPayload = resEval.ok ? await resEval.json() : null;
+            const statsPayload = resStats.ok ? await resStats.json() : null;
+            if (requestId !== evaluationRequestRef.current) return;
+            if (evaluationPayload) {
+                evaluationContextRef.current = requestContext;
+                setEvaluationData(evaluationPayload);
             }
-
-            // 2. Fetch Crew Stats
-            const resStats = await fetch(`/api/crew/stats?month=${m}&year=${y}&user_id=${crew.id}`, { // Using query param user_id to fetch specific crew if API supports it, or just use `/api/evaluations` data
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            // Note: The previous logic in Crew route uses Auth::user(). We need to ensure we can fetch *another* user's stats if we are a SPV. 
-            // Wait, if it's the Supervisor doing Evaluation, they need the Crew API to expose stats by ID.
-            // Let's assume for now the API needs an update or we construct it manually. 
-            // The prompt stated "bisa disamakan aja dengan yang punya crew". Let's fetch from `/api/crew/${crew.id}/stats` or similar if it exists, otherwise `/api/crew/stats` with param.
-
-            // Let's use `/api/crew/stats?user_id` as standard fallback. We will patch the backend next if needed.
-            if (resStats.ok) {
-                const dataStats = await resStats.json();
-                setStats(dataStats);
-            }
+            if (statsPayload) setStats(statsPayload);
         } catch (error) {
+            if (requestId !== evaluationRequestRef.current) return;
             console.error("Check evaluation failed", error);
         } finally {
-            setLoading(false);
+            if (requestId === evaluationRequestRef.current) setLoading(false);
         }
     };
 
     useEffect(() => {
         fetchEvaluationStatus();
     }, [selectedDate, crew.id]);
+
+    useEffect(() => {
+        if (showQuestionnaire) return;
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') fetchEvaluationStatus();
+        }, 60000);
+        return () => window.clearInterval(timer);
+    }, [selectedDate, crew.id, showQuestionnaire]);
 
     useEffect(() => {
         const fetchEvaluationMaster = async () => {
@@ -276,6 +289,13 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
             title={crew.full_name || crew.name}
             onBack={onBack}
         >
+            <EvaluationReopenRequestModal
+                open={reopenModalOpen}
+                crewId={crew.id}
+                crewName={crew.full_name || crew.name}
+                onClose={() => setReopenModalOpen(false)}
+                onSuccess={fetchEvaluationStatus}
+            />
             <div className="flex flex-col pb-6">
 
                 {/* 1. Header (Month/Year) */}
@@ -370,14 +390,20 @@ export default function MobileCrewEvaluation({ crew, onBack }: MobileCrewEvaluat
                             )}
 
                             {!canShowQuestionnaire && EvaluationStatusIcon && evaluationStatusView && (
-                                <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
-                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${evaluationStatusView.iconWrapClass}`}>
-                                        <EvaluationStatusIcon size={28} strokeWidth={2.5} />
+                                <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${evaluationStatusView.iconWrapClass}`}>
+                                            <EvaluationStatusIcon size={28} strokeWidth={2.5} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-800">{evaluationStatusView.title}</p>
+                                            <p className="mt-1 text-xs leading-relaxed text-gray-500">{evaluationStatusView.message}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-800">{evaluationStatusView.title}</p>
-                                        <p className="text-xs text-gray-500 leading-relaxed mt-1">{evaluationStatusView.message}</p>
-                                    </div>
+                                    {evaluationData?.reopen_request?.status === 'pending' && <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-xs font-semibold text-amber-600">Pengajuan {evaluationData.reopen_attempts_used}/3 sedang menunggu keputusan.</p>}
+                                    {evaluationData?.reopen_request?.status === 'approved' && evaluationData?.reopen_request?.expires_at && <p className="mt-4 rounded-2xl bg-green-50 p-3 text-xs font-semibold text-green-600">Aktif sampai {new Date(evaluationData.reopen_request.expires_at).toLocaleString('id-ID')}.</p>}
+                                    {evaluationData?.reopen_request?.status === 'rejected' && evaluationData?.reopen_request?.rejection_reason && <p className="mt-4 rounded-2xl bg-red-50 p-3 text-xs text-red-500">Ditolak: {evaluationData.reopen_request.rejection_reason}</p>}
+                                    {evaluationData?.can_request_reopen && <button type="button" onClick={() => setReopenModalOpen(true)} className="mt-4 w-full rounded-2xl bg-blue-600 py-3 text-sm font-black text-white shadow-md">Ajukan Perpanjangan ({evaluationData.reopen_attempts_remaining} tersisa)</button>}
                                 </div>
                             )}
 

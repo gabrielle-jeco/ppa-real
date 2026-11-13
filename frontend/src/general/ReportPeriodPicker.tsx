@@ -8,7 +8,8 @@ interface ReportPeriodPickerProps {
     mode: PickerMode;
     start: string;
     end: string;
-    max: string;
+    min?: string;
+    max?: string;
     onChange: (start: string, end: string) => void;
     accent?: PickerAccent;
     inline?: boolean;
@@ -41,6 +42,7 @@ export default function ReportPeriodPicker({
     mode,
     start,
     end,
+    min,
     max,
     onChange,
     accent = 'purple',
@@ -84,12 +86,16 @@ export default function ReportPeriodPicker({
         setViewDate((current) => new Date(current.getFullYear() + offset, current.getMonth(), 1));
     };
 
-    const maxDate = parseDate(mode === 'monthly' ? `${max}-01` : max);
+    const minDate = min ? parseDate(mode === 'monthly' ? `${min}-01` : min) : null;
+    const maxDate = max ? parseDate(mode === 'monthly' ? `${max}-01` : max) : null;
+    const canMoveBackward = mode === 'daily'
+        ? !minDate || new Date(viewDate.getFullYear(), viewDate.getMonth(), 0) >= minDate
+        : !minDate || viewDate.getFullYear() > minDate.getFullYear();
     const canMoveForward = mode === 'daily'
-        ? new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1) <= maxDate
-        : viewDate.getFullYear() < maxDate.getFullYear();
+        ? !maxDate || new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1) <= maxDate
+        : !maxDate || viewDate.getFullYear() < maxDate.getFullYear();
     const yearOptions = Array.from({ length: 21 }, (_, index) => viewDate.getFullYear() - 10 + index)
-        .filter((year) => year <= maxDate.getFullYear());
+        .filter((year) => (!minDate || year >= minDate.getFullYear()) && (!maxDate || year <= maxDate.getFullYear()));
 
     const calendar = (
         <div className={`${inline ? '' : 'absolute left-0 top-[calc(100%+0.5rem)] z-30 w-[340px] max-w-[calc(100vw-2rem)] shadow-xl'} rounded-2xl border border-gray-100 bg-white p-4`}>
@@ -110,7 +116,7 @@ export default function ReportPeriodPicker({
             {mode === 'daily' ? (
                 <>
                     <div className="mb-4 flex items-center gap-2">
-                        <button type="button" onClick={() => changeViewMonth(-1)} className="rounded-xl bg-gray-50 p-2 text-gray-500"><ChevronLeft size={16} /></button>
+                        <button type="button" disabled={!canMoveBackward} onClick={() => changeViewMonth(-1)} className="rounded-xl bg-gray-50 p-2 text-gray-500 disabled:text-gray-200"><ChevronLeft size={16} /></button>
                         <div className="relative min-w-0 flex-1">
                             <select value={viewDate.getMonth()} onChange={(event) => setViewDate(new Date(viewDate.getFullYear(), Number(event.target.value), 1))} className="w-full appearance-none rounded-xl border-0 bg-gray-50 px-3 py-2 pr-8 text-xs font-black text-gray-700 outline-none">
                                 {monthNames.map((month, index) => <option key={month} value={index}>{month}</option>)}
@@ -133,7 +139,7 @@ export default function ReportPeriodPicker({
                         {Array.from({ length: new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate() }, (_, index) => {
                             const date = new Date(viewDate.getFullYear(), viewDate.getMonth(), index + 1);
                             const value = toDateValue(date);
-                            const disabled = value > max;
+                            const disabled = Boolean((min && value < min) || (max && value > max));
                             const endpoint = value === start || value === end;
                             const inRange = value >= start && value <= end;
                             return <button key={value} type="button" disabled={disabled} onClick={() => choose(value)} className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-bold transition ${endpoint ? `${accentBackground} text-white` : inRange ? `${accentSoft} ${accentText}` : 'text-gray-600 hover:bg-gray-100'} disabled:cursor-not-allowed disabled:text-gray-200`}>{index + 1}</button>;
@@ -143,7 +149,7 @@ export default function ReportPeriodPicker({
             ) : (
                 <>
                     <div className="mb-4 flex items-center justify-between">
-                        <button type="button" onClick={() => changeViewYear(-1)} className="rounded-xl bg-gray-50 p-2 text-gray-500"><ChevronLeft size={16} /></button>
+                        <button type="button" disabled={!canMoveBackward} onClick={() => changeViewYear(-1)} className="rounded-xl bg-gray-50 p-2 text-gray-500 disabled:text-gray-200"><ChevronLeft size={16} /></button>
                         <div className="relative w-28">
                             <select value={viewDate.getFullYear()} onChange={(event) => setViewDate(new Date(Number(event.target.value), 0, 1))} className="w-full appearance-none rounded-xl border-0 bg-gray-50 px-4 py-2 pr-8 text-center text-sm font-black text-gray-700 outline-none">
                                 {yearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
@@ -155,7 +161,7 @@ export default function ReportPeriodPicker({
                     <div className="grid grid-cols-3 gap-2">
                         {monthNames.map((month, index) => {
                             const value = toMonthValue(new Date(viewDate.getFullYear(), index, 1));
-                            const disabled = value > max;
+                            const disabled = Boolean((min && value < min) || (max && value > max));
                             const endpoint = value === start || value === end;
                             const inRange = value >= start && value <= end;
                             return <button key={month} type="button" disabled={disabled} onClick={() => choose(value)} className={`rounded-xl px-2 py-3 text-xs font-black transition ${endpoint ? `${accentBackground} text-white` : inRange ? `${accentSoft} ${accentText}` : 'bg-gray-50 text-gray-600 hover:bg-gray-100'} disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-200`}>{month.slice(0, 3)}</button>;

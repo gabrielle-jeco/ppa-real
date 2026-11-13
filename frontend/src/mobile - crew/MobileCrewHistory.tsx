@@ -65,7 +65,9 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
     useEffect(() => {
         if (!user?.user_id) return;
 
-        const timer = window.setInterval(() => fetchData(true), 15000);
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') fetchData(true);
+        }, 60000);
         return () => window.clearInterval(timer);
     }, [selectedDate, user?.user_id, selectedRole]);
 

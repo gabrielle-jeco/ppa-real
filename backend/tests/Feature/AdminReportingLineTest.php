@@ -162,12 +162,155 @@ class AdminReportingLineTest extends TestCase
             ->assertJsonPath('data.0.reporting_relations.1.is_currently_effective', false);
     }
 
+    public function test_app_role_change_requires_all_reporting_relations_to_be_deleted(): void
+    {
+        [$admin, $leader, $crew] = $this->seedUsers();
+        $line = ReportingLine::withoutGlobalScope('effective_backup_period')->create([
+            'leader_id' => $leader->username,
+            'subordinate_id' => $crew->username,
+            'status' => 'inactive',
+            'relation_type' => 'backup',
+            'backup_request_id' => 99,
+            'effective_from' => '2026-10-01',
+            'effective_until' => '2026-10-10',
+        ]);
+        $leaderAssignmentId = DB::table('user_locations')->where('user_id', $leader->username)->value('id');
+        $crewAssignmentId = DB::table('user_locations')->where('user_id', $crew->username)->value('id');
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/user-locations/' . $leaderAssignmentId, ['job_level' => 'manager'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('job_level');
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/user-locations/' . $crewAssignmentId, ['job_level' => 'supervisor'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('job_level');
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/cms/user-locations', [
+                'user_id' => $leader->username,
+                'location_id' => 'TEST',
+                'job_level' => 'manager',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('job_level');
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/user-locations/' . $leaderAssignmentId, ['job_level' => 'supervisor'])
+            ->assertOk();
+
+        $line->delete();
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/user-locations/' . $leaderAssignmentId, ['job_level' => 'manager'])
+            ->assertOk();
+        $this->assertDatabaseHas('user_locations', ['id' => $leaderAssignmentId, 'job_level' => 'manager']);
+    }
+
+    public function test_job_level_change_requires_all_reporting_relations_to_be_deleted(): void
+    {
+        [$admin, $leader, $crew] = $this->seedUsers();
+        $line = ReportingLine::withoutGlobalScope('effective_backup_period')->create([
+            'leader_id' => $leader->username,
+            'subordinate_id' => $crew->username,
+            'status' => 'active',
+            'relation_type' => 'permanent',
+        ]);
+        $managerJobLevelId = $this->jobLevelId('manager');
+        $payload = [
+            'name' => $leader->name,
+            'email' => $leader->email,
+            'job_level_id' => $managerJobLevelId,
+            'division_id' => null,
+            'role_id' => $leader->role_id,
+            'active' => true,
+            'is_back_office' => false,
+            'initial_store' => 'TEST',
+            'location_ids' => ['TEST'],
+        ];
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/users/' . $leader->username, $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('job_level_id');
+
+        $line->delete();
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/users/' . $leader->username, $payload)
+            ->assertOk();
+        $this->assertDatabaseHas('users', ['username' => $leader->username, 'job_level_id' => $managerJobLevelId]);
+    }
+
+    public function test_account_role_transition_enforces_operational_cleanup_and_allows_clean_downgrade(): void
+    {
+        [$admin, $leader, $crew] = $this->seedUsers();
+        $cmsRole = Role::create([
+            'name' => 'limited admin',
+            'description' => 'Limited CMS administrator',
+            'permissions' => ['users_locations'],
+        ]);
+        $userRole = Role::where('name', 'user')->firstOrFail();
+        $payload = [
+            'name' => $leader->name,
+            'email' => $leader->email,
+            'password' => 'new-password',
+            'job_level_id' => $leader->job_level_id,
+            'division_id' => null,
+            'role_id' => $cmsRole->id,
+            'active' => true,
+            'is_back_office' => false,
+            'initial_store' => 'TEST',
+            'location_ids' => ['TEST'],
+        ];
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/users/' . $leader->username, $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('role_id');
+
+        DB::table('user_locations')->where('user_id', $leader->username)->delete();
+        $line = ReportingLine::withoutGlobalScope('effective_backup_period')->create([
+            'leader_id' => $leader->username,
+            'subordinate_id' => $crew->username,
+            'status' => 'inactive',
+            'relation_type' => 'permanent',
+        ]);
+        $payload['location_ids'] = [];
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/users/' . $leader->username, $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('role_id');
+
+        $line->delete();
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/users/' . $leader->username, $payload)
+            ->assertOk();
+        $this->assertDatabaseHas('users', ['username' => $leader->username, 'role_id' => $cmsRole->id]);
+
+        $payload['role_id'] = $userRole->id;
+        unset($payload['password']);
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson('/api/cms/users/' . $leader->username, $payload)
+            ->assertOk();
+        $this->assertDatabaseHas('users', ['username' => $leader->username, 'role_id' => $userRole->id]);
+    }
+
     private function seedUsers(): array
     {
         $role = Role::create([
             'name' => 'cms reporting admin',
             'description' => 'Reporting line administrator',
-            'permissions' => ['reporting_lines', 'users_locations'],
+            'permissions' => ['reporting_lines', 'users_locations', 'app_roles', 'role_management'],
+        ]);
+        Role::create(['name' => 'user', 'description' => 'Operational user', 'permissions' => []]);
+        DB::table('app_roles')->insert([
+            ['name' => 'sc', 'description' => 'Service Crew', 'active' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'supervisor', 'description' => 'Supervisor', 'active' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'manager', 'description' => 'Manager', 'active' => true, 'created_at' => now(), 'updated_at' => now()],
         ]);
 
         DB::table('locations')->insert([
@@ -199,6 +342,9 @@ class AdminReportingLineTest extends TestCase
             'name' => $name,
             'email' => "{$username}@example.test",
             'password' => bcrypt('password'),
+            'job_level_id' => $this->jobLevelId($jobLevel),
+            'role_id' => Role::where('name', 'user')->value('id'),
+            'initial_store' => 'TEST',
             'active' => true,
         ]);
 
@@ -213,6 +359,19 @@ class AdminReportingLineTest extends TestCase
         return $user;
     }
 
+    private function jobLevelId(string $name): int
+    {
+        return (int) (DB::table('job_levels')->where('name', $name)->value('id')
+            ?: DB::table('job_levels')->insertGetId([
+                'name' => $name,
+                'position_code' => strtoupper($name),
+                'grade' => $name === 'manager' ? 'MGR' : ($name === 'supervisor' ? 'STF' : 'NST'),
+                'visible_in_yodaily' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]));
+    }
+
     private function createSchema(): void
     {
         Schema::create('roles', function (Blueprint $table) {
@@ -220,6 +379,13 @@ class AdminReportingLineTest extends TestCase
             $table->string('name')->unique();
             $table->string('description')->nullable();
             $table->json('permissions')->nullable();
+            $table->timestamps();
+        });
+        Schema::create('app_roles', function (Blueprint $table) {
+            $table->id();
+            $table->string('name')->unique();
+            $table->string('description')->nullable();
+            $table->boolean('active')->default(true);
             $table->timestamps();
         });
         Schema::create('job_levels', function (Blueprint $table) {
@@ -254,6 +420,7 @@ class AdminReportingLineTest extends TestCase
             $table->unsignedBigInteger('job_level_id')->nullable();
             $table->unsignedBigInteger('division_id')->nullable();
             $table->unsignedBigInteger('role_id')->nullable();
+            $table->string('initial_store')->nullable();
             $table->boolean('active')->default(true);
             $table->boolean('is_back_office')->default(false);
             $table->rememberToken();

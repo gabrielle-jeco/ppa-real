@@ -6,19 +6,16 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Task;
 use App\Services\ScoringService;
-use App\Services\YojadwalPresenceService;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
 class CrewController extends Controller
 {
     protected $scoringService;
-    protected $presenceService;
 
-    public function __construct(ScoringService $scoringService, YojadwalPresenceService $presenceService)
+    public function __construct(ScoringService $scoringService)
     {
         $this->scoringService = $scoringService;
-        $this->presenceService = $presenceService;
     }
 
     public function myStats(Request $request)
@@ -60,8 +57,6 @@ class CrewController extends Controller
         } catch (\Exception $e) {
             $targetDate = Carbon::now();
         }
-
-        $this->presenceService->syncMonthIfNeeded($user->username, (int) $targetDate->month, (int) $targetDate->year);
 
         $dailyScore = $this->scoringService->getCrewDailyScoreDisplay($user, Carbon::now());
         $monthlyScoreData = $this->scoringService->getCrewMonthlyScore($user, $targetDate);

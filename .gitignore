@@ -1,3 +1,5 @@
 AGENTS.md
 /.env
 /.env.bak
+PRODUCTION_HARDENING.md
+.gitignore

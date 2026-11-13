@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import CrewList from './CrewList';
 import CrewDetail from './CrewDetail';
 
@@ -6,10 +6,23 @@ export default function SupervisorDashboard() {
     const [dashboardData, setDashboardData] = useState<any>(null);
     const [selectedCrewId, setSelectedCrewId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const refreshTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         fetchDashboardData();
+
+        return () => {
+            if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+        };
     }, []);
+
+    const scheduleDashboardRefresh = () => {
+        if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = window.setTimeout(() => {
+            refreshTimerRef.current = null;
+            fetchDashboardData();
+        }, 1000);
+    };
 
     const fetchDashboardData = async () => {
         try {
@@ -59,7 +72,7 @@ export default function SupervisorDashboard() {
 
             <div className="flex-1 overflow-hidden relative flex flex-col min-h-0">
                 {selectedCrew ? (
-                    <CrewDetail crew={selectedCrew} crews={dashboardData.crews || []} onTaskChange={fetchDashboardData} />
+                    <CrewDetail crew={selectedCrew} crews={dashboardData.crews || []} onTaskChange={scheduleDashboardRefresh} />
                 ) : (
                     <div className="h-full flex items-center justify-center text-gray-400">Pilih karyawan untuk melihat detail.</div>
                 )}

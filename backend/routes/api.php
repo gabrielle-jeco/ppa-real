@@ -29,6 +29,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/manager/supervisors', [App\Http\Controllers\ManagerController::class, 'getSupervisors']);
     Route::get('/manager/supervisors/{id}/stats', [App\Http\Controllers\ManagerController::class, 'getSupervisorStats']);
     Route::get('/manager/supervisors/{id}/crews', [App\Http\Controllers\ManagerController::class, 'getSupervisorCrewTasks']);
+    Route::get('/manager/evaluation-reopen-requests', [App\Http\Controllers\EvaluationReopenRequestController::class, 'index']);
+    Route::patch('/manager/evaluation-reopen-requests/{evaluationReopenRequest}/review', [App\Http\Controllers\EvaluationReopenRequestController::class, 'review']);
+
+    Route::get('/organization-chart', [App\Http\Controllers\OrganizationChartController::class, 'index']);
+    Route::patch('/organization-chart/layout', [App\Http\Controllers\OrganizationChartController::class, 'updateLayout']);
+    Route::post('/organization-chart/relations', [App\Http\Controllers\OrganizationChartController::class, 'storeRelation']);
+    Route::patch('/organization-chart/relations/{reportingLine}', [App\Http\Controllers\OrganizationChartController::class, 'updateRelation']);
+    Route::delete('/organization-chart/relations/{reportingLine}', [App\Http\Controllers\OrganizationChartController::class, 'destroyRelation']);
+    Route::post('/organization-chart/nodes', [App\Http\Controllers\OrganizationChartController::class, 'storeNode']);
+    Route::patch('/organization-chart/nodes/{username}', [App\Http\Controllers\OrganizationChartController::class, 'updateNode']);
+    Route::delete('/organization-chart/nodes/{username}', [App\Http\Controllers\OrganizationChartController::class, 'destroyNode']);
 
     // Task Routes
     Route::get('/supervisor/{id}/tasks', [App\Http\Controllers\TaskController::class, 'index']);
@@ -46,6 +57,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Evaluation Routes
     Route::post('/evaluations', [App\Http\Controllers\EvaluationController::class, 'store']);
     Route::get('/evaluations/check/{supervisorId}', [App\Http\Controllers\EvaluationController::class, 'checkPeriod']);
+    Route::post('/evaluations/reopen-requests/{crew}', [App\Http\Controllers\EvaluationReopenRequestController::class, 'store']);
 
     // Crew Actions
     Route::post('/crew/activity', [App\Http\Controllers\ActivityController::class, 'logStationChange']);
@@ -79,6 +91,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/evaluation-masters/{evaluationMaster}', [App\Http\Controllers\AdminController::class, 'updateEvaluationMaster']);
         Route::delete('/evaluation-masters/{evaluationMaster}', [App\Http\Controllers\AdminController::class, 'destroyEvaluationMaster']);
         Route::post('/scoring-rules', [App\Http\Controllers\AdminController::class, 'storeScoringRule']);
+        Route::get('/score-reports/{mode}', [App\Http\Controllers\CmsScoreReportController::class, 'index']);
+        Route::get('/score-reports/{mode}/details', [App\Http\Controllers\CmsScoreReportController::class, 'details']);
+        Route::get('/score-reports/{mode}/export', [App\Http\Controllers\CmsScoreReportController::class, 'export'])
+            ->middleware('throttle:10,1');
         Route::post('/roles', [App\Http\Controllers\AdminController::class, 'storeRole']);
         Route::patch('/roles/{role}', [App\Http\Controllers\AdminController::class, 'updateRole']);
         Route::delete('/roles/{role}', [App\Http\Controllers\AdminController::class, 'destroyRole']);
@@ -108,6 +124,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/work-stations/{workStation}', [App\Http\Controllers\AdminController::class, 'updateWorkStation']);
         Route::delete('/work-stations/{workStation}', [App\Http\Controllers\AdminController::class, 'destroyWorkStation']);
         Route::get('/task-catalog', [App\Http\Controllers\AdminController::class, 'getTaskCatalog']);
+        Route::get('/task-usage/export', App\Http\Controllers\CmsTaskUsageExportController::class)
+            ->middleware('throttle:10,1');
         Route::post('/work-stations/{workStation}/task-areas', [App\Http\Controllers\AdminController::class, 'storeTaskArea']);
         Route::patch('/task-areas/{taskArea}', [App\Http\Controllers\AdminController::class, 'updateTaskArea']);
         Route::delete('/task-areas/{taskArea}', [App\Http\Controllers\AdminController::class, 'destroyTaskArea']);

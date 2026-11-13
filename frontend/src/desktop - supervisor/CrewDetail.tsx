@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Trash2, ChevronDown, CheckCircle, XCircle, Ban, Edit3 } from 'lucide-react';
+import { Camera, Trash2, ChevronDown, CheckCircle, XCircle, Ban, Edit3, LoaderCircle } from 'lucide-react';
 import AddTaskModal from '../general/AddTaskModal';
 import BulkTaskModal from '../general/BulkTaskModal';
 import TaskPreview from '../general/TaskPreview';
@@ -15,6 +15,7 @@ import { formatDisplayNumber } from '../general/numberFormat';
 import RejectTaskModal from '../general/RejectTaskModal';
 import { canDeleteTask, canRejectTask, canToggleTaskApproval } from '../utils/taskReview';
 import { formatTaskTitleWithArea } from '../utils/taskDisplay';
+import EvaluationReopenRequestModal from '../general/EvaluationReopenRequestModal';
 
 interface CrewDetailProps {
     crew: any;
@@ -28,6 +29,10 @@ type EvaluationAvailability = {
     locked_message?: string | null;
     evaluation_period?: string;
     target_period?: string;
+    can_request_reopen?: boolean;
+    reopen_attempts_used?: number;
+    reopen_attempts_remaining?: number;
+    reopen_request?: { status: string; rejection_reason?: string | null; expires_at?: string | null } | null;
 };
 
 export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetailProps) {
@@ -44,93 +49,133 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
     const [viewMode, setViewMode] = useState<'TASKS' | 'EVALUATION'>('TASKS');
     const [todayEvaluation, setTodayEvaluation] = useState<any>(null);
     const [evaluationAvailability, setEvaluationAvailability] = useState<EvaluationAvailability | null>(null);
+    const [evaluationAvailabilityLoading, setEvaluationAvailabilityLoading] = useState(true);
+    const [evaluationStatusError, setEvaluationStatusError] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
     const taskDateBeforeEvaluation = useRef<Date | null>(null);
+    const evaluationStatusRequestRef = useRef(0);
+    const evaluationStatusContextRef = useRef<string | null>(null);
+    const evaluationAvailabilityRequestRef = useRef(0);
+    const evalStatsRequestRef = useRef(0);
+    const tasksRequestRef = useRef(0);
+    const activityLogsRequestRef = useRef(0);
     const [activityLogs, setActivityLogs] = useState<any[]>([]);
     const [evalStats, setEvalStats] = useState<any>(null);
+    const [evalStatsLoading, setEvalStatsLoading] = useState(true);
+    const [evalStatsError, setEvalStatsError] = useState<string | null>(null);
     const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
     const [rejectTask, setRejectTask] = useState<any>(null);
+    const [reopenModalOpen, setReopenModalOpen] = useState(false);
+    const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<number>>(() => new Set());
 
     // Fetch Crew's Tasks
-    async function fetchTasks() {
+    async function fetchTasks(date = selectedDate, crewId = crew.id) {
+        const requestId = ++tasksRequestRef.current;
         try {
             const token = localStorage.getItem('auth_token');
-            const dateStr = selectedDate.toLocaleDateString('en-CA');
-            const res = await fetch(`/api/supervisor/${crew.id}/tasks?date=${dateStr}`, {
+            const dateStr = date.toLocaleDateString('en-CA');
+            const res = await fetch(`/api/supervisor/${crewId}/tasks?date=${dateStr}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
+                if (requestId !== tasksRequestRef.current) return;
                 setTasks(data);
             }
         } catch (error) {
+            if (requestId !== tasksRequestRef.current) return;
             console.error("Gagal mengambil tugas", error);
         }
     }
 
-    async function fetchEvaluationStatus() {
+    async function fetchEvaluationStatus(date = selectedDate, crewId = crew.id) {
+        const requestId = ++evaluationStatusRequestRef.current;
+        const requestContext = `${crewId}:${date.getFullYear()}-${date.getMonth() + 1}`;
+        if (evaluationStatusContextRef.current !== requestContext) {
+            evaluationStatusContextRef.current = null;
+            setTodayEvaluation(null);
+        }
+        setEvaluationStatusError(null);
         try {
             const token = localStorage.getItem('auth_token');
-            const dateStr = selectedDate.toLocaleDateString('en-CA');
-            const res = await fetch(`/api/evaluations/check/${crew.id}?date=${dateStr}`, {
+            const dateStr = date.toLocaleDateString('en-CA');
+            const res = await fetch(`/api/evaluations/check/${crewId}?date=${dateStr}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (res.ok) {
-                const data = await res.json();
-                setTodayEvaluation(data);
-            }
+            const data = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(data?.error || data?.message || 'Status evaluasi tidak dapat dimuat.');
+            if (requestId !== evaluationStatusRequestRef.current) return;
+            evaluationStatusContextRef.current = requestContext;
+            setTodayEvaluation(data);
         } catch (error) {
+            if (requestId !== evaluationStatusRequestRef.current) return;
             console.error("Gagal memeriksa evaluasi", error);
+            setEvaluationStatusError(error instanceof Error ? error.message : 'Status evaluasi tidak dapat dimuat.');
         }
     }
 
-    async function fetchEvaluationAvailability() {
-        setEvaluationAvailability(null);
+    async function fetchEvaluationAvailability(crewId = crew.id) {
+        const requestId = ++evaluationAvailabilityRequestRef.current;
+        setEvaluationAvailabilityLoading(true);
         try {
             const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/evaluations/check/${crew.id}`, {
+            const res = await fetch(`/api/evaluations/check/${crewId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (res.ok) {
-                setEvaluationAvailability(await res.json());
-            }
+            const data = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(data?.error || data?.message || 'Periode evaluasi tidak dapat dimuat.');
+            if (requestId !== evaluationAvailabilityRequestRef.current) return;
+            setEvaluationAvailability(data);
         } catch (error) {
+            if (requestId !== evaluationAvailabilityRequestRef.current) return;
             console.error("Gagal memeriksa periode evaluasi", error);
+        } finally {
+            if (requestId === evaluationAvailabilityRequestRef.current) setEvaluationAvailabilityLoading(false);
         }
     }
 
     // Fetch Activity Logs for this crew on selected date
-    async function fetchActivityLogs() {
+    async function fetchActivityLogs(date = selectedDate, crewId = crew.id) {
+        const requestId = ++activityLogsRequestRef.current;
         try {
             const token = localStorage.getItem('auth_token');
-            const dateStr = selectedDate.toLocaleDateString('en-CA');
-            const res = await fetch(`/api/crew/activity-logs?user_id=${crew.id}&date=${dateStr}`, {
+            const dateStr = date.toLocaleDateString('en-CA');
+            const res = await fetch(`/api/crew/activity-logs?user_id=${crewId}&date=${dateStr}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
+                if (requestId !== activityLogsRequestRef.current) return;
                 setActivityLogs(data);
             }
         } catch (error) {
+            if (requestId !== activityLogsRequestRef.current) return;
             console.error("Gagal mengambil log aktivitas", error);
         }
     }
 
     // Fetch Crew Eval Stats (Activity Monitor, Personality, Yearly Score)
-    async function fetchEvalStats() {
+    async function fetchEvalStats(date = selectedDate, crewId = crew.id) {
+        const requestId = ++evalStatsRequestRef.current;
+        setEvalStatsLoading(true);
+        setEvalStatsError(null);
         try {
             const token = localStorage.getItem('auth_token');
-            const m = selectedDate.getMonth() + 1;
-            const y = selectedDate.getFullYear();
-            const res = await fetch(`/api/supervisor/crew/${crew.id}/eval-stats?month=${m}&year=${y}`, {
+            const m = date.getMonth() + 1;
+            const y = date.getFullYear();
+            const res = await fetch(`/api/supervisor/crew/${crewId}/eval-stats?month=${m}&year=${y}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (res.ok) {
-                const data = await res.json();
-                setEvalStats(data);
-            }
+            const data = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(data?.message || 'Monitor aktivitas tidak dapat dimuat.');
+            if (requestId !== evalStatsRequestRef.current) return;
+            setEvalStats(data);
         } catch (error) {
+            if (requestId !== evalStatsRequestRef.current) return;
             console.error("Gagal mengambil statistik evaluasi", error);
+            setEvalStatsError(error instanceof Error ? error.message : 'Monitor aktivitas tidak dapat dimuat.');
+        } finally {
+            if (requestId === evalStatsRequestRef.current) setEvalStatsLoading(false);
         }
     };
 
@@ -202,30 +247,45 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
 
     useEffect(() => {
         if (crew?.id) {
-            fetchTasks();
-            fetchEvaluationStatus();
-            fetchEvaluationAvailability();
-            fetchActivityLogs();
+            evaluationStatusRequestRef.current += 1;
+            evaluationAvailabilityRequestRef.current += 1;
+            tasksRequestRef.current += 1;
+            activityLogsRequestRef.current += 1;
+            evaluationStatusContextRef.current = null;
+            setTodayEvaluation(null);
+            setEvaluationAvailability(null);
+            setEvaluationAvailabilityLoading(true);
+            fetchEvaluationAvailability(crew.id);
             setRightPanelMode('ACTIVITY');
             setViewMode('TASKS');
         }
     }, [crew?.id]);
 
     useEffect(() => {
-        fetchTasks();
-        fetchEvaluationStatus();
-        fetchActivityLogs();
-    }, [selectedDate]);
+        if (!crew?.id) return;
+        fetchTasks(selectedDate, crew.id);
+        fetchActivityLogs(selectedDate, crew.id);
+    }, [crew?.id, selectedDate]);
+
+    useEffect(() => {
+        if (!crew?.id || viewMode !== 'EVALUATION') return;
+        fetchEvaluationStatus(selectedDate, crew.id);
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') fetchEvaluationStatus(selectedDate, crew.id);
+        }, 60000);
+        return () => window.clearInterval(timer);
+    }, [crew?.id, selectedDate, viewMode]);
 
     useEffect(() => {
         if (!crew?.id) return;
 
         const timer = window.setInterval(() => {
-            fetchTasks();
+            if (document.visibilityState !== 'visible') return;
+            fetchTasks(selectedDate, crew.id);
             if (rightPanelMode === 'ACTIVITY') {
-                fetchActivityLogs();
+                fetchActivityLogs(selectedDate, crew.id);
             }
-        }, 15000);
+        }, 60000);
 
         return () => window.clearInterval(timer);
     }, [crew?.id, selectedDate, rightPanelMode]);
@@ -240,10 +300,11 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
     }, []);
 
     useEffect(() => {
-        if (crew?.id) {
-            fetchEvalStats();
+        if (crew?.id && viewMode === 'EVALUATION') {
+            setEvalStats(null);
+            fetchEvalStats(selectedDate, crew.id);
         }
-    }, [crew?.id, selectedDate]);
+    }, [crew?.id, selectedDate, viewMode]);
 
     const handleUpdateTask = async (taskData: any) => {
         if (!editingTask) return;
@@ -286,12 +347,13 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
     };
 
     const handleToggleStatus = async (task: any) => {
-        if (!canApproveTask(task)) {
+        if (!canApproveTask(task) || updatingTaskIds.has(task.task_id)) {
             return;
         }
 
         const newStatus = task.status === 'approved' ? 'pending' : 'approved';
 
+        setUpdatingTaskIds(current => new Set(current).add(task.task_id));
         try {
             const token = localStorage.getItem('auth_token');
             const response = await fetch(`/api/tasks/${task.task_id}/status`, {
@@ -304,7 +366,12 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                throw new Error(data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal memperbarui status.');
+                const retryAfter = response.headers.get('Retry-After');
+                const error = new Error(response.status === 429
+                    ? `Terlalu banyak permintaan. Coba lagi dalam ${retryAfter || 'beberapa'} detik.`
+                    : data.message || Object.values(data.errors || {}).flat()[0] || 'Gagal memperbarui status.');
+                (error as any).status = response.status;
+                throw error;
             }
 
             setTasks(current => current.map(item => item.task_id === task.task_id ? { ...item, ...data } : item));
@@ -313,7 +380,13 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         } catch (error: any) {
             console.error("Gagal memperbarui status", error);
             alert(error.message || 'Gagal memperbarui status.');
-            fetchTasks();
+            if (error.status !== 429) fetchTasks();
+        } finally {
+            setUpdatingTaskIds(current => {
+                const next = new Set(current);
+                next.delete(task.task_id);
+                return next;
+            });
         }
     };
 
@@ -385,11 +458,16 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
 
     const handleSetViewMode = (mode: 'TASKS' | 'EVALUATION') => {
         if (mode === 'EVALUATION') {
+            if (!evaluationAvailability) return;
             taskDateBeforeEvaluation.current = new Date(selectedDate);
             const evaluationPeriod = evaluationAvailability?.evaluation_period || evaluationAvailability?.target_period;
             if (evaluationPeriod) {
-                setSelectedDate(new Date(`${evaluationPeriod}T12:00:00`));
+                const evaluationDate = new Date(`${evaluationPeriod}T12:00:00`);
+                evaluationStatusRequestRef.current += 1;
+                evaluationStatusContextRef.current = `${crew.id}:${evaluationDate.getFullYear()}-${evaluationDate.getMonth() + 1}`;
+                setSelectedDate(evaluationDate);
             }
+            setEvaluationStatusError(null);
             setTodayEvaluation(evaluationAvailability);
         } else if (taskDateBeforeEvaluation.current) {
             setSelectedDate(taskDateBeforeEvaluation.current);
@@ -428,10 +506,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         setEditingBatch(batch);
     };
 
-    const isCurrentSelectedMonth =
-        selectedDate.getFullYear() === new Date().getFullYear() &&
-        selectedDate.getMonth() === new Date().getMonth();
-    const activityMonitorTitle = `${selectedDate.toLocaleDateString('id-ID', { month: 'long' })} (Monitor Aktivitas${isCurrentSelectedMonth ? ' Bulanan)' : ''}`;
+    const activityMonitorTitle = `${selectedDate.toLocaleDateString('id-ID', { month: 'long' })} (Monitor Aktivitas Bulanan)`;
 
     const getAttendancePeriodLabel = () => {
         const startDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
@@ -499,6 +574,16 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
     const currentList = tasks;
     const canAssignOnSelectedDate = canAssignTaskOnDate(selectedDate);
     const getEvaluationStatusView = () => {
+        if (!todayEvaluation) {
+            return {
+                Icon: evaluationStatusError ? Ban : LoaderCircle,
+                iconWrapClass: evaluationStatusError ? 'bg-red-100 text-red-500' : 'bg-purple-100 text-primary',
+                iconClass: evaluationStatusError ? 'text-red-500' : 'animate-spin text-primary',
+                title: evaluationStatusError ? 'Status Evaluasi Tidak Tersedia' : 'Memeriksa Status Evaluasi',
+                message: evaluationStatusError || 'Mohon tunggu sebentar.',
+            };
+        }
+
         if (todayEvaluation?.evaluated) {
             return {
                 Icon: CheckCircle,
@@ -561,6 +646,16 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                 initialBatch={editingBatch}
                 submitLabel={editingBatch ? 'Simpan Perubahan' : 'Buat Penugasan'}
             />
+            <EvaluationReopenRequestModal
+                open={reopenModalOpen}
+                crewId={crew.id}
+                crewName={crew.name}
+                onClose={() => setReopenModalOpen(false)}
+                onSuccess={() => {
+                    fetchEvaluationStatus(selectedDate, crew.id);
+                    fetchEvaluationAvailability(crew.id);
+                }}
+            />
 
             <div className="items-center justify-between hidden lg:flex mb-6"></div>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 h-full flex-1 min-h-0">
@@ -576,12 +671,15 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                         </p>
                         <button
                             onClick={() => handleSetViewMode('EVALUATION')}
+                            disabled={evaluationAvailabilityLoading || !evaluationAvailability}
                             className={`text-xs font-bold py-2 px-6 rounded-full transition w-full ${viewMode === 'EVALUATION'
                                 ? 'bg-purple-100 text-primary border-2 border-primary'
-                                : 'bg-primary text-white border-2 border-transparent hover:bg-purple-700 shadow-md'
+                                : evaluationAvailabilityLoading || !evaluationAvailability
+                                    ? 'bg-gray-100 text-gray-400 border-2 border-transparent cursor-not-allowed'
+                                    : 'bg-primary text-white border-2 border-transparent hover:bg-purple-700 shadow-md'
                                 }`}
                         >
-                            {evaluationAvailability?.evaluated ? 'Lihat Evaluasi' : 'Evaluasi'}
+                            {evaluationAvailabilityLoading ? 'Memeriksa...' : !evaluationAvailability ? 'Tidak Tersedia' : evaluationAvailability.evaluated ? 'Lihat Evaluasi' : 'Evaluasi'}
                         </button>
                     </div>
 
@@ -827,19 +925,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                         </>
                     ) : (
                         /* Evaluation Mode View */
-                        (todayEvaluation?.evaluated || todayEvaluation?.is_locked || todayEvaluation?.can_evaluate === false) ? (
-                            <div className="flex flex-col items-center justify-center h-full bg-white rounded-2xl p-8 border border-gray-100 text-center">
-                                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${evaluationStatusView.iconWrapClass}`}>
-                                    <EvaluationStatusIcon size={46} strokeWidth={2.5} className={evaluationStatusView.iconClass} />
-                                </div>
-                                <h3 className="text-xl font-bold text-gray-800 mb-2">{evaluationStatusView.title}</h3>
-                                <p className="text-gray-500 mb-6">{evaluationStatusView.message}</p>
-                                <div className="bg-purple-50 p-4 rounded-xl w-full max-w-xs mb-6">
-                                    <p className="text-xs text-gray-500 uppercase tracking-wide">Total Nilai</p>
-                                    <p className="text-4xl font-bold text-primary">{formatDisplayNumber(todayEvaluation.data?.total_score)}</p>
-                                </div>
-                            </div>
-                        ) : (
+                        todayEvaluation?.can_evaluate === true && !todayEvaluation?.evaluated ? (
                             <EvaluationForm
                                 supervisor={crew}
                                 targetDate={selectedDate}
@@ -848,6 +934,30 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                     fetchEvaluationAvailability();
                                 }}
                             />
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full bg-white rounded-2xl p-8 border border-gray-100 text-center">
+                                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${evaluationStatusView.iconWrapClass}`}>
+                                    <EvaluationStatusIcon size={46} strokeWidth={2.5} className={evaluationStatusView.iconClass} />
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">{evaluationStatusView.title}</h3>
+                                <p className="text-gray-500 mb-6">{evaluationStatusView.message}</p>
+                                <div className="bg-purple-50 p-4 rounded-xl w-full max-w-xs mb-6">
+                                    <p className="text-xs text-gray-500 uppercase tracking-wide">Total Nilai</p>
+                                    <p className="text-4xl font-bold text-primary">{formatDisplayNumber(todayEvaluation?.data?.total_score)}</p>
+                                </div>
+                                {!todayEvaluation?.evaluated && todayEvaluation?.reopen_request?.status === 'pending' && (
+                                    <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-600">Pengajuan {todayEvaluation.reopen_attempts_used}/3 sedang menunggu keputusan.</p>
+                                )}
+                                {!todayEvaluation?.evaluated && todayEvaluation?.reopen_request?.status === 'approved' && todayEvaluation?.reopen_request?.expires_at && (
+                                    <p className="mb-4 rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-600">Perpanjangan aktif sampai {new Date(todayEvaluation.reopen_request.expires_at).toLocaleString('id-ID')}.</p>
+                                )}
+                                {!todayEvaluation?.evaluated && todayEvaluation?.reopen_request?.status === 'rejected' && todayEvaluation?.reopen_request?.rejection_reason && (
+                                    <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-500">Ditolak: {todayEvaluation.reopen_request.rejection_reason}</p>
+                                )}
+                                {!todayEvaluation?.evaluated && todayEvaluation?.can_request_reopen && (
+                                    <button type="button" onClick={() => setReopenModalOpen(true)} className="rounded-full bg-primary px-6 py-3 text-sm font-bold text-white shadow-lg hover:bg-purple-700">Ajukan Perpanjangan ({todayEvaluation.reopen_attempts_remaining} tersisa)</button>
+                                )}
+                            </div>
                         )
                     )}
                 </div>
@@ -866,7 +976,11 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
                                         <h3 className="text-sm font-semibold text-gray-600 mb-4">{activityMonitorTitle}</h3>
 
-                                        {evalStats?.activity_monitor && evalStats.activity_monitor.length > 0 ? (
+                                        {evalStatsLoading ? (
+                                            <p className="text-xs italic text-gray-400">Memuat monitor aktivitas...</p>
+                                        ) : evalStatsError ? (
+                                            <p className="text-xs italic text-red-500">{evalStatsError}</p>
+                                        ) : evalStats?.activity_monitor && evalStats.activity_monitor.length > 0 ? (
                                             <>
                                                 <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex mb-4">
                                                     {evalStats.activity_monitor.map((item: any, idx: number) => (
@@ -884,7 +998,10 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                                 </div>
                                             </>
                                         ) : (
-                                            <p className="text-xs text-gray-400 italic">Belum ada data aktivitas bulan ini.</p>
+                                            <>
+                                                <div className="mb-4 h-3 w-full overflow-hidden rounded-full bg-gray-100" />
+                                                <p className="text-xs italic text-gray-400">Belum ada konfirmasi panduan pada bulan ini.</p>
+                                            </>
                                         )}
                                     </div>
 
