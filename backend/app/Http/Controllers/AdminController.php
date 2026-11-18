@@ -69,7 +69,7 @@ class AdminController extends Controller
     public function overview()
     {
         $this->authorizeSuperadmin();
-        $canUseLocations = $this->canAnyPermission(['users_locations', 'app_roles', 'reporting_lines', 'work_stations', 'locations', 'user_activity', 'score_reports']);
+        $canUseLocations = $this->canAnyPermission(['users_locations', 'app_roles', 'reporting_lines', 'work_stations', 'locations', 'regionals', 'user_activity', 'score_reports']);
 
         $workStations = $this->canPermission('work_stations') ? WorkStation::orderBy('name')->get()->map(fn(WorkStation $station) => [
             'id' => $station->id,
@@ -1129,8 +1129,8 @@ class AdminController extends Controller
         $data = $request->validate([
             'kode_regional' => ['required', 'string', 'max:255', 'unique:regional,kode_regional'],
             'nama_regional' => ['required', 'string', 'max:255'],
-            'cabang' => ['nullable', 'string', 'max:255'],
-        ]);
+            'cabang' => $this->regionalBranchRules(),
+        ], ['cabang.max' => 'Daftar cabang terlalu panjang. Kurangi pilihan cabang sebelum menyimpan.']);
 
         return response()->json(Regional::create($data), 201);
     }
@@ -1142,12 +1142,34 @@ class AdminController extends Controller
         $data = $request->validate([
             'kode_regional' => ['required', 'string', 'max:255', Rule::unique('regional', 'kode_regional')->ignore($regional->id)],
             'nama_regional' => ['required', 'string', 'max:255'],
-            'cabang' => ['nullable', 'string', 'max:255'],
-        ]);
+            'cabang' => $this->regionalBranchRules($regional),
+        ], ['cabang.max' => 'Daftar cabang terlalu panjang. Kurangi pilihan cabang sebelum menyimpan.']);
 
         $regional->update($data);
 
         return response()->json($regional->fresh());
+    }
+
+    private function regionalBranchRules(?Regional $regional = null): array
+    {
+        return ['bail', 'nullable', 'string', 'max:255', function ($attribute, $value, $fail) use ($regional) {
+            if ($regional && $value === $regional->cabang) {
+                return;
+            }
+
+            $branches = array_map('trim', explode(',', $value));
+            if (in_array('', $branches, true) || count($branches) !== count(array_unique($branches))) {
+                $fail('Pilih cabang yang berbeda dari Master Lokasi.');
+                return;
+            }
+
+            $existingBranches = $regional ? array_map('trim', explode(',', (string) $regional->cabang)) : [];
+            $newBranches = array_values(array_diff($branches, $existingBranches));
+            $validBranches = Location::whereIn('initial', $newBranches)->pluck('initial')->all();
+            if (array_diff($newBranches, $validBranches)) {
+                $fail('Cabang baru harus dipilih dari Master Lokasi.');
+            }
+        }];
     }
 
     public function destroyRegional(Regional $regional)
