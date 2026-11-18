@@ -486,6 +486,17 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     });
     const [selectedRegionalId, setSelectedRegionalId] = useState<number | null>(null);
     const [regionalForm, setRegionalForm] = useState({ kode_regional: '', nama_regional: '', cabang: '' });
+    const originalRegionalCabang = useRef('');
+    const selectedRegionalBranches = regionalForm.cabang.split(',').map((branch) => branch.trim()).filter(Boolean);
+    const regionalBranchOptions = (data?.locations || []).map((location) => ({
+        value: location.initial,
+        label: `${location.initial} · ${location.name}`,
+    }));
+    const legacyRegionalBranches = Array.from(new Set(selectedRegionalBranches.filter((branch) => !regionalBranchOptions.some((option) => option.value === branch))));
+    const regionalBranchChoices = [
+        ...regionalBranchOptions,
+        ...legacyRegionalBranches.map((branch) => ({ value: branch, label: branch, secondaryLabel: 'Data lama · tidak ditemukan di Master Lokasi' })),
+    ];
     const [roleForm, setRoleForm] = useState(emptyRoleForm);
     const [appRoleForm, setAppRoleForm] = useState(emptyAppRoleForm);
 
@@ -1652,6 +1663,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
     const selectRegional = (regional: Regional) => {
         setSelectedRegionalId(regional.id);
+        originalRegionalCabang.current = regional.cabang || '';
         setRegionalForm({
             kode_regional: regional.kode_regional,
             nama_regional: regional.nama_regional,
@@ -1677,11 +1689,13 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         setSaving(true);
         setMessage('');
         try {
+            const { cabang, ...regionalFields } = regionalForm;
+            const payload = selectedRegionalId && cabang === originalRegionalCabang.current ? regionalFields : regionalForm;
             if (selectedRegionalId) {
-                await requestJson(`/api/cms/regionals/${selectedRegionalId}`, 'PATCH', regionalForm);
+                await requestJson(`/api/cms/regionals/${selectedRegionalId}`, 'PATCH', payload);
                 setMessage('Regional berhasil diperbarui.');
             } else {
-                await requestJson('/api/cms/regionals', 'POST', regionalForm);
+                await requestJson('/api/cms/regionals', 'POST', payload);
                 setMessage('Regional berhasil dibuat.');
             }
 
@@ -3209,7 +3223,32 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             <input value={regionalForm.nama_regional} onChange={(e) => setRegionalForm({ ...regionalForm, nama_regional: e.target.value })} className="input" required />
                         </Field>
                         <Field label="Cabang">
-                            <input value={regionalForm.cabang} onChange={(e) => setRegionalForm({ ...regionalForm, cabang: e.target.value })} className="input" placeholder="Initial toko atau catatan cabang" />
+                            <CustomMultiSelect
+                                key={selectedRegionalId ?? 'new-regional'}
+                                values={selectedRegionalBranches}
+                                placeholder="Pilih cabang"
+                                options={regionalBranchChoices}
+                                onChange={(values) => {
+                                    const cabang = values.join(', ');
+                                    if (cabang.length > 255) {
+                                        setMessage('Daftar cabang terlalu panjang. Kurangi pilihan cabang sebelum menyimpan.');
+                                        return;
+                                    }
+                                    setRegionalForm({ ...regionalForm, cabang });
+                                }}
+                            />
+                            {selectedRegionalBranches.length > 0 && (
+                                <div className="mt-2 flex max-h-28 flex-wrap gap-2 overflow-y-auto">
+                                    {Array.from(new Set(selectedRegionalBranches)).map((branch) => (
+                                        <span key={branch} className="rounded-lg bg-purple-50 px-2 py-1 text-xs font-bold text-primary">
+                                            {branch}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                            {legacyRegionalBranches.length > 0 && (
+                                <p className="mt-2 text-xs text-amber-700">Cabang lama yang tidak ditemukan di Master Lokasi tetap dipertahankan sampai pilihan tersebut dilepas.</p>
+                            )}
                         </Field>
                         <button disabled={saving} className="w-full bg-primary text-white rounded-xl py-3 font-bold shadow-lg shadow-purple-100 disabled:opacity-50">
                             {saving ? 'Menyimpan...' : 'Simpan Regional'}
