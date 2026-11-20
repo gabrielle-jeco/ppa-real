@@ -31,7 +31,7 @@ class OrganizationChartService
     {
     }
 
-    public function chart(User $actor, ?string $locationId): array
+    public function chart(User $actor, ?string $locationId, ?string $supervisorId = null, bool $requireSupervisor = false): array
     {
         $locations = $this->accessibleLocations($actor);
         abort_if($locations->isEmpty(), 403, 'Tidak memiliki akses cabang.');
@@ -59,14 +59,32 @@ class OrganizationChartService
             ->unique();
         $descendants = $this->descendantIds($actor, $lines);
 
-        $nodes = $users
-            ->filter(fn(User $user) => $memberIds->contains($user->username))
+        $nodeUsers = $users->filter(fn(User $user) => $memberIds->contains($user->username));
+        $parentNodes = $nodeUsers->filter(fn(User $user) => $this->tier($user) !== self::SERVICE_CREW)
             ->map(fn(User $user) => $this->formatNode($actor, $user, $location->initial, $lines, $descendants))
+            ->values();
+        $supervisors = $users->filter(fn(User $user) => $this->tier($user) === self::SUPERVISOR)
+            ->map(fn(User $user) => $this->formatCandidate($user))->values();
+        $storedLayout = OrganizationChartLayout::where('location_id', $location->initial)->value('layout') ?? [];
+        $layout = ['nodes' => $storedLayout['nodes'] ?? [], 'edges' => $storedLayout['edges'] ?? []];
+        if ($supervisorId !== null) {
+            $focusedIds = $this->supervisorMemberIds($users, $visibleLines, $supervisorId);
+            $nodeUsers = $users->filter(fn(User $user) => $focusedIds->contains($user->username));
+            $visibleLines = $visibleLines->filter(fn(ReportingLine $line) => $focusedIds->contains($line->leader_id)
+                && $focusedIds->contains($line->subordinate_id));
+            $layout = $storedLayout['views'][$supervisorId] ?? ['nodes' => [], 'edges' => []];
+        } elseif ($requireSupervisor) {
+            $nodeUsers = collect();
+            $visibleLines = collect();
+            $layout = ['nodes' => [], 'edges' => []];
+        }
+
+        $nodes = $nodeUsers->map(fn(User $user) => $this->formatNode($actor, $user, $location->initial, $lines, $descendants))
             ->sortBy(fn(array $node) => array_search($node['tier'], array_keys(self::TIER_LABELS), true) . '|' . $node['name'])
             ->values();
 
         $candidates = $users
-            ->reject(fn(User $user) => $memberIds->contains($user->username) || $this->tier($user) === self::STORE_MANAGER)
+            ->reject(fn(User $user) => $memberIds->contains($user->username) || $user->username === $supervisorId || $this->tier($user) === self::STORE_MANAGER)
             ->filter(fn(User $user) => $this->canManageUser($actor, $user, $location->initial, $descendants, true))
             ->map(fn(User $user) => $this->formatCandidate($user))
             ->sortBy('name')
@@ -76,6 +94,8 @@ class OrganizationChartService
             'location' => $this->formatLocation($location),
             'locations' => $locations->map(fn(Location $item) => $this->formatLocation($item))->values(),
             'nodes' => $nodes,
+            'parent_nodes' => $parentNodes,
+            'supervisors' => $supervisors,
             'edges' => $visibleLines->map(fn(ReportingLine $line) => $this->formatEdge($actor, $line, $location->initial, $descendants))->values(),
             'candidates' => $candidates,
             'job_levels' => JobLevel::query()
@@ -89,8 +109,7 @@ class OrganizationChartService
                     'tier' => $this->identifiedTierForJobLevel($jobLevel),
                 ])
                 ->values(),
-            'layout' => OrganizationChartLayout::where('location_id', $location->initial)->value('layout')
-                ?? ['nodes' => [], 'edges' => []],
+            'layout' => $layout,
             'actor' => [
                 'username' => $actor->username,
                 'tier' => $actor->role_type === 'superadmin' ? 'superadmin' : $this->tier($actor),
@@ -99,11 +118,52 @@ class OrganizationChartService
         ];
     }
 
-    public function saveLayout(User $actor, string $locationId, array $nodes, array $edges): array
+    private function supervisorMemberIds(Collection $users, Collection $lines, string $supervisorId): Collection
+    {
+        $byId = $users->keyBy('username');
+        $supervisor = $byId->get($supervisorId);
+        if (!$supervisor || $this->tier($supervisor) !== self::SUPERVISOR) {
+            throw ValidationException::withMessages(['supervisor_id' => ['Pilih supervisor dari cabang yang sedang dibuka.']]);
+        }
+
+        $members = collect([$supervisorId]);
+        $lines->where('leader_id', $supervisorId)->each(function (ReportingLine $line) use ($byId, $members) {
+            $crew = $byId->get($line->subordinate_id);
+            if ($crew && $this->tier($crew) === self::SERVICE_CREW) {
+                $members->push($crew->username);
+            }
+        });
+
+        // Trace upwards only from this supervisor, not from shared crew.
+        $queue = collect([$supervisorId]);
+        while ($queue->isNotEmpty()) {
+            $childId = $queue->shift();
+            foreach ($lines->where('subordinate_id', $childId) as $line) {
+                $leader = $byId->get($line->leader_id);
+                $child = $byId->get($childId);
+                if ($leader && $child && $this->isValidTierPair($this->tier($leader), $this->tier($child))
+                    && !$members->contains($leader->username)) {
+                    $members->push($leader->username);
+                    $queue->push($leader->username);
+                }
+            }
+        }
+
+        return $members->unique()->values();
+    }
+
+    public function saveLayout(User $actor, string $locationId, array $nodes, array $edges, ?string $supervisorId = null): array
     {
         $this->assertLocationAccess($actor, $locationId);
         $users = $this->usersAtLocation($locationId)->keyBy('username');
         $lines = $this->linesForUsers($users->keys())->keyBy(fn(ReportingLine $line) => (string) $line->id);
+        if ($supervisorId !== null) {
+            $visibleLines = $lines->filter(fn(ReportingLine $line) => $line->relation_type === 'permanent' || $this->isCurrentlyEffective($line));
+            $focusedIds = $this->supervisorMemberIds($users, $visibleLines, $supervisorId);
+            $users = $users->filter(fn(User $user) => $focusedIds->contains($user->username));
+            $lines = $visibleLines->filter(fn(ReportingLine $line) => $focusedIds->contains($line->leader_id)
+                && $focusedIds->contains($line->subordinate_id));
+        }
 
         $cleanNodes = [];
         foreach ($nodes as $username => $position) {
@@ -135,10 +195,20 @@ class OrganizationChartService
         }
 
         $layout = ['nodes' => $cleanNodes, 'edges' => $cleanEdges];
-        OrganizationChartLayout::updateOrCreate(
-            ['location_id' => $locationId],
-            ['layout' => $layout, 'updated_by' => $actor->username]
-        );
+        DB::transaction(function () use ($actor, $locationId, $supervisorId, $layout) {
+            $record = OrganizationChartLayout::firstOrCreate(
+                ['location_id' => $locationId],
+                ['layout' => ['nodes' => [], 'edges' => []], 'updated_by' => $actor->username]
+            );
+            $record = OrganizationChartLayout::whereKey($record->id)->lockForUpdate()->firstOrFail();
+            $stored = $record->layout;
+            if ($supervisorId !== null) {
+                $stored['views'][$supervisorId] = $layout;
+            } else {
+                $stored = array_replace($stored, $layout);
+            }
+            $record->update(['layout' => $stored, 'updated_by' => $actor->username]);
+        });
 
         return $layout;
     }

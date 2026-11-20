@@ -51,6 +51,8 @@ type ChartData = {
     location: LocationOption;
     locations: LocationOption[];
     nodes: ChartNode[];
+    parent_nodes: ChartNode[];
+    supervisors: Candidate[];
     edges: ChartEdge[];
     candidates: Candidate[];
     job_levels: JobLevelOption[];
@@ -88,6 +90,7 @@ const CARD_WIDTH = 230;
 const CARD_HEIGHT = 132;
 const CANVAS_HEIGHT = 760;
 const CANVAS_PADDING = 24;
+const ALL_SUPERVISORS = '__all__';
 const clamp = (value: number, minimum: number, maximum: number) => Math.min(maximum, Math.max(minimum, value));
 
 const authHeaders = (json = false): HeadersInit => ({
@@ -109,20 +112,48 @@ const responseMessage = async (response: Response) => {
     throw new Error(validation || payload?.message || 'Permintaan tidak dapat diproses.');
 };
 
-function SearchSelect({ value, options, placeholder, onChange }: {
+function SearchSelect({ value, options, placeholder, onChange, disabled = false }: {
     value: string;
     options: SelectOption[];
     placeholder: string;
     onChange: (value: string) => void;
+    disabled?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
+    const rootRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const listId = React.useId();
+    React.useEffect(() => {
+        if (!open) return;
+        const closeOutside = (event: PointerEvent) => {
+            if (!rootRef.current?.contains(event.target as Node)) {
+                setOpen(false);
+                setSearch('');
+            }
+        };
+        document.addEventListener('pointerdown', closeOutside, true);
+        return () => document.removeEventListener('pointerdown', closeOutside, true);
+    }, [open]);
     const selected = options.find((option) => option.value === value);
     const filtered = options.filter((option) => `${option.label} ${option.secondary || ''}`.toLowerCase().includes(search.toLowerCase()));
 
     return (
-        <div className="relative">
-            <button type="button" onClick={() => setOpen(!open)} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left text-sm font-bold text-gray-700 transition hover:border-primary/40">
+        <div className="relative" ref={rootRef} onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setOpen(false);
+                setSearch('');
+            }
+        }} onKeyDown={(event) => {
+            if (event.key === 'Escape' && open) {
+                event.preventDefault();
+                event.stopPropagation();
+                setOpen(false);
+                setSearch('');
+                buttonRef.current?.focus();
+            }
+        }}>
+            <button ref={buttonRef} type="button" disabled={disabled} aria-label={placeholder} aria-expanded={open} aria-controls={listId} aria-haspopup="listbox" onClick={() => { setOpen(!open); setSearch(''); }} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left text-sm font-bold text-gray-700 transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50">
                 <span className="min-w-0 truncate">{selected?.label || placeholder}</span>
                 <ChevronDown size={16} className={`shrink-0 text-gray-400 transition ${open ? 'rotate-180' : ''}`} />
             </button>
@@ -130,11 +161,11 @@ function SearchSelect({ value, options, placeholder, onChange }: {
                 <div className="absolute z-[80] mt-2 w-full min-w-[260px] overflow-hidden rounded-2xl border border-gray-100 bg-white p-2 shadow-2xl">
                     <div className="flex items-center gap-2 rounded-xl bg-gray-50 px-3">
                         <Search size={15} className="text-gray-400" />
-                        <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari..." className="w-full bg-transparent py-2.5 text-sm outline-none" />
+                        <input autoFocus aria-label={`Cari ${placeholder.toLowerCase()}`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari..." className="w-full bg-transparent py-2.5 text-sm outline-none" />
                     </div>
-                    <div className="mt-2 max-h-56 overflow-y-auto">
+                    <div id={listId} role="listbox" aria-label={placeholder} className="mt-2 max-h-56 overflow-y-auto">
                         {filtered.length === 0 ? <p className="px-3 py-4 text-center text-xs text-gray-400">Tidak ditemukan.</p> : filtered.map((option) => (
-                            <button key={option.value} type="button" onClick={() => { onChange(option.value); setOpen(false); setSearch(''); }} className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-purple-50 ${option.value === value ? 'bg-purple-50 text-primary' : 'text-gray-700'}`}>
+                            <button key={option.value} type="button" role="option" aria-selected={option.value === value} onClick={() => { onChange(option.value); setOpen(false); setSearch(''); }} className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-purple-50 ${option.value === value ? 'bg-purple-50 text-primary' : 'text-gray-700'}`}>
                                 <span className="min-w-0">
                                     <span className="block truncate text-sm font-bold">{option.label}</span>
                                     {option.secondary && <span className="block truncate text-[11px] text-gray-400">{option.secondary}</span>}
@@ -169,7 +200,7 @@ function NodeModal({ data, node, onClose, onSaved }: {
     const [error, setError] = useState('');
     const selectedJobLevel = data.job_levels.find((jobLevel) => String(jobLevel.id) === jobLevelId);
     const targetTier = selectedJobLevel?.tier || selectedUser?.tier || 'service_crew';
-    const parentOptions = data.nodes.filter((parent) => parent.username !== selectedUser?.username && validPair(parent.tier, targetTier));
+    const parentOptions = data.parent_nodes.filter((parent) => parent.username !== selectedUser?.username && validPair(parent.tier, targetTier));
     const visibleParents = parentOptions.filter((parent) => `${parent.name} ${parent.username} ${parent.job_level_name || ''}`.toLowerCase().includes(parentSearch.toLowerCase()));
 
     const save = async (event: React.FormEvent) => {
@@ -279,6 +310,8 @@ export default function OrganizationChart() {
     const [layoutSaving, setLayoutSaving] = useState(false);
     const [error, setError] = useState('');
     const [locationId, setLocationId] = useState('');
+    const [supervisorId, setSupervisorId] = useState('');
+    const loadRevisionRef = useRef(0);
     const [layoutNodes, setLayoutNodes] = useState<Record<string, NormalizedPoint>>({});
     const [edgeRoutes, setEdgeRoutes] = useState<Record<string, { points: NormalizedPoint[] }>>({});
     const [movingCard, setMovingCard] = useState<{ username: string; offsetX: number; offsetY: number } | null>(null);
@@ -305,21 +338,32 @@ export default function OrganizationChart() {
     const largestTier = data ? Math.max(1, ...activeTiers.map((tier) => data.nodes.filter((node) => node.tier === tier).length)) : 1;
     const requiredCanvasWidth = Math.max(900, largestTier * (CARD_WIDTH + 32) + CANVAS_PADDING * 2);
 
-    const load = async (requestedLocation?: string) => {
+    const load = async (requestedLocation?: string, requestedSupervisor = supervisorId) => {
+        const revision = ++loadRevisionRef.current;
+        layoutSaveRevisionRef.current += 1;
         setLoading(true);
         setError('');
         try {
-            const query = requestedLocation ? `?location_id=${encodeURIComponent(requestedLocation)}` : '';
-            const response = await fetch(`/api/organization-chart${query}`, { headers: authHeaders() });
+            const query = new URLSearchParams({ view: requestedSupervisor === ALL_SUPERVISORS ? 'all' : 'supervisor' });
+            if (requestedLocation) query.set('location_id', requestedLocation);
+            if (requestedSupervisor && requestedSupervisor !== ALL_SUPERVISORS) query.set('supervisor_id', requestedSupervisor);
+            const response = await fetch(`/api/organization-chart?${query}`, { headers: authHeaders() });
             const payload = await responseMessage(response) as ChartData;
+            if (revision !== loadRevisionRef.current) return;
             const nodes = payload.layout?.nodes || {};
             const edges = payload.layout?.edges || {};
             cardDragPreviewRef.current = null;
             setCardDragPreview(null);
             setMovingCard(null);
+            setMovingWaypoint(null);
+            setDraggingId(null);
+            setDropTargetId(null);
+            setDragPoint(null);
+            setModalNode(undefined);
             setGeometryReady(false);
             setData(payload);
             setLocationId(payload.location.initial);
+            setSupervisorId(requestedSupervisor);
             setLayoutNodes(nodes);
             setEdgeRoutes(edges);
             layoutNodesRef.current = nodes;
@@ -327,13 +371,15 @@ export default function OrganizationChart() {
             setSelectedEdgeId(null);
             setHoveredEdgeId(null);
         } catch (requestError) {
+            if (revision !== loadRevisionRef.current) return;
             setError(requestError instanceof Error ? requestError.message : 'Organigram tidak dapat dimuat.');
         } finally {
-            setLoading(false);
+            if (revision === loadRevisionRef.current) setLoading(false);
         }
     };
 
-    React.useEffect(() => { void load(); }, []);
+    const loadInitialChart = React.useEffectEvent(() => { void load(undefined, ''); });
+    React.useEffect(() => { loadInitialChart(); }, []);
 
     useLayoutEffect(() => {
         if (!data || !canvasRef.current) {
@@ -374,7 +420,7 @@ export default function OrganizationChart() {
         nodeRefs.current.forEach((element) => observer.observe(element));
         window.addEventListener('resize', update);
         return () => { observer.disconnect(); window.removeEventListener('resize', update); };
-    }, [data, layoutNodes, boardSize.width, boardSize.height]);
+    }, [data, layoutNodes, boardSize.width, boardSize.height, loading, supervisorId]);
 
     const persistLayout = (
         nodes: Record<string, NormalizedPoint> = layoutNodesRef.current,
@@ -382,6 +428,8 @@ export default function OrganizationChart() {
     ) => {
         const revision = ++layoutSaveRevisionRef.current;
         const requestedLocation = locationId;
+        const requestedSupervisor = supervisorId && supervisorId !== ALL_SUPERVISORS ? supervisorId : undefined;
+        const loadRevision = loadRevisionRef.current;
         setLayoutSaving(true);
         setError('');
         const save = layoutSaveQueueRef.current
@@ -391,10 +439,10 @@ export default function OrganizationChart() {
                     const response = await fetch('/api/organization-chart/layout', {
                         method: 'PATCH',
                         headers: authHeaders(true),
-                        body: JSON.stringify({ location_id: requestedLocation, nodes, edges }),
+                        body: JSON.stringify({ location_id: requestedLocation, supervisor_id: requestedSupervisor, nodes, edges }),
                     });
                     const payload = await responseMessage(response) as { layout: ChartLayout };
-                    if (revision !== layoutSaveRevisionRef.current) return;
+                    if (revision !== layoutSaveRevisionRef.current || loadRevision !== loadRevisionRef.current) return;
                     const savedNodes = payload.layout?.nodes || {};
                     const savedEdges = payload.layout?.edges || {};
                     setLayoutNodes(savedNodes);
@@ -808,17 +856,28 @@ export default function OrganizationChart() {
                     <h2 className="mt-1 text-xl font-black text-gray-900">Organigram Karyawan</h2>
                     <p className="mt-1 text-xs text-gray-400">Geser card dalam areanya. Tarik handle rantai ke card atasan untuk membuat relasi.</p>
                 </div>
-                <div className="flex min-w-[320px] flex-wrap items-center justify-end gap-3">
-                    <div className="min-w-[280px] flex-1"><SearchSelect value={locationId} placeholder="Pilih cabang" onChange={(value) => { setLocationId(value); void load(value); }} options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))} /></div>
-                    <button type="button" onClick={() => { layoutNodesRef.current = {}; edgeRoutesRef.current = {}; setLayoutNodes({}); setEdgeRoutes({}); void persistLayout({}, {}); }} disabled={layoutSaving} className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-3 text-xs font-black text-gray-500 transition hover:border-primary hover:text-primary disabled:opacity-50" title="Rapikan posisi dan jalur"><RotateCcw size={17} /> Rapikan</button>
-                    <button type="button" onClick={() => void load(locationId)} disabled={loading} className="rounded-xl border border-gray-200 p-3 text-gray-500 transition hover:border-primary hover:text-primary disabled:opacity-50" title="Muat ulang"><RefreshCcw size={18} className={loading ? 'animate-spin' : ''} /></button>
-                    <button type="button" onClick={() => setModalNode(null)} disabled={data.candidates.length === 0} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-white shadow-lg shadow-purple-200 disabled:cursor-not-allowed disabled:opacity-40"><Plus size={17} /> Tambah Card</button>
+                <div className="flex w-full flex-wrap items-center justify-end gap-3 lg:w-auto">
+                    {data.locations.length > 1 ? (
+                        <div className="min-w-0 flex-1 sm:min-w-[240px]"><SearchSelect value={locationId} placeholder="Pilih cabang" disabled={loading || busy || layoutSaving} onChange={(value) => { void load(value, ''); }} options={data.locations.map((location) => ({ value: location.initial, label: `${location.initial} - ${location.name}` }))} /></div>
+                    ) : <p className="text-sm font-bold text-gray-600">{data.location.initial} - {data.location.name}</p>}
+                    <div className="min-w-0 flex-1 sm:min-w-[260px]"><SearchSelect value={supervisorId} placeholder="Pilih supervisor" disabled={loading || busy || layoutSaving} onChange={(value) => { void load(locationId, value); }} options={[
+                        { value: '', label: 'Pilih supervisor' },
+                        ...data.supervisors.map((supervisor) => ({ value: supervisor.username, label: `${supervisor.username} - ${supervisor.name}`, secondary: supervisor.job_level_name || 'Supervisor' })),
+                        { value: ALL_SUPERVISORS, label: 'Seluruh cabang', secondary: 'Tampilkan semua anggota organigram' },
+                    ]} /></div>
+                    <button type="button" onClick={() => { layoutNodesRef.current = {}; edgeRoutesRef.current = {}; setLayoutNodes({}); setEdgeRoutes({}); void persistLayout({}, {}); }} disabled={!supervisorId || loading || busy || layoutSaving} className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-3 text-xs font-black text-gray-500 transition hover:border-primary hover:text-primary disabled:opacity-50" title="Rapikan posisi dan jalur"><RotateCcw size={17} /> Rapikan</button>
+                    <button type="button" onClick={() => void load(locationId)} disabled={loading || busy || layoutSaving} className="rounded-xl border border-gray-200 p-3 text-gray-500 transition hover:border-primary hover:text-primary disabled:opacity-50" title="Muat ulang"><RefreshCcw size={18} className={loading ? 'animate-spin' : ''} /></button>
+                    <button type="button" onClick={() => setModalNode(null)} disabled={loading || busy || layoutSaving || data.candidates.length === 0} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-white shadow-lg shadow-purple-200 disabled:cursor-not-allowed disabled:opacity-40"><Plus size={17} /> Tambah Card</button>
                 </div>
             </section>
 
             {error && <div className="flex items-center justify-between gap-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-600"><span className="flex items-center gap-2"><AlertTriangle size={17} />{error}</span><button type="button" onClick={() => setError('')}><X size={16} /></button></div>}
 
-            <section className="relative shrink-0 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+            {loading || !supervisorId ? (
+                <div className="flex min-h-[300px] items-center justify-center rounded-3xl border border-gray-100 bg-white p-8 text-center text-sm font-bold text-gray-400">
+                    {loading ? 'Memuat organigram...' : 'Pilih supervisor untuk menampilkan crew dan rantai atasannya, atau pilih Seluruh cabang.'}
+                </div>
+            ) : <section className="relative shrink-0 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
                 <div className="flex h-16 min-h-16 flex-nowrap items-center justify-between gap-3 overflow-x-auto overflow-y-hidden border-b border-gray-100 bg-white px-5 py-3">
                     <div className="flex shrink-0 items-center gap-4 text-[11px] font-bold text-gray-500">
                         <span className="flex items-center gap-2"><span className="h-0.5 w-8 bg-primary" /> Permanen aktif</span>
@@ -906,7 +965,7 @@ export default function OrganizationChart() {
                         })}
                     </div>
                 </div>
-            </section>
+            </section>}
 
             {modalNode !== undefined && <NodeModal data={data} node={modalNode} onClose={() => setModalNode(undefined)} onSaved={() => load(locationId)} />}
         </div>
