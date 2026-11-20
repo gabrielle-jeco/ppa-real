@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Location;
+use App\Models\Regional;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -75,9 +76,23 @@ class CmsScoreReportService
 
     public function locations(array $filters): Collection
     {
-        return Location::query()
-            ->where('is_active', true)
-            ->when($filters['regional'] ?? null, fn($query, $regional) => $query->where('region_code', (int) $regional))
+        $query = Location::query()->where('is_active', true);
+        if (!empty($filters['regional'])) {
+            $regional = Regional::where('kode_regional', $filters['regional'])->first();
+            if (!$regional) {
+                return collect();
+            }
+            $branches = $regional->branchInitials();
+            if ($branches !== []) {
+                $query->whereIn('initial', $branches);
+            } elseif (ctype_digit((string) $regional->kode_regional)) {
+                $query->where('region_code', (int) $regional->kode_regional);
+            } else {
+                return collect();
+            }
+        }
+
+        return $query
             ->when($filters['location'] ?? null, fn($query, $location) => $query->where('initial', $location))
             ->orderBy('name')
             ->get(['initial', 'name', 'region_code']);

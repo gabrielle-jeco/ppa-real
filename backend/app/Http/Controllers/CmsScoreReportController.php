@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Services\CmsScoreReportService;
 use App\Services\ScoreReportSpreadsheetService;
+use App\Services\ScoreReportScopeService;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -11,18 +13,27 @@ use Illuminate\Validation\ValidationException;
 
 class CmsScoreReportController extends Controller
 {
+    public function __construct(private ScoreReportScopeService $reportScope)
+    {
+    }
+
+    public function options()
+    {
+        return response()->json($this->reportScope->managerOptions($this->authorizeReport()));
+    }
+
     public function index(string $mode, Request $request, CmsScoreReportService $service)
     {
-        $this->authorizeReport();
-        $filters = $this->validatedFilters($mode, $request);
+        $user = $this->authorizeReport();
+        $filters = $this->validatedFilters($mode, $request, $user);
 
         return response()->json($service->report($mode, $filters, (int) $request->input('page', 1)));
     }
 
     public function details(string $mode, Request $request, CmsScoreReportService $service)
     {
-        $this->authorizeReport();
-        $filters = $this->validatedFilters($mode, $request);
+        $user = $this->authorizeReport();
+        $filters = $this->validatedFilters($mode, $request, $user);
         $request->validate([
             'location_id' => ['required', 'string', 'exists:locations,initial'],
             'leader_id' => ['nullable', 'string', 'exists:users,username'],
@@ -44,8 +55,8 @@ class CmsScoreReportController extends Controller
         CmsScoreReportService $service,
         ScoreReportSpreadsheetService $spreadsheetService
     ) {
-        $this->authorizeReport();
-        $filters = $this->validatedFilters($mode, $request);
+        $user = $this->authorizeReport();
+        $filters = $this->validatedFilters($mode, $request, $user);
         $filename = 'report-penilaian-' . $mode . '-' . $filters['start'] . '-' . $filters['end'] . '.xlsx';
 
         return response()->streamDownload(
@@ -55,7 +66,7 @@ class CmsScoreReportController extends Controller
         );
     }
 
-    private function validatedFilters(string $mode, Request $request): array
+    private function validatedFilters(string $mode, Request $request, User $user): array
     {
         abort_unless(in_array($mode, ['daily', 'monthly'], true), 404);
 
@@ -93,10 +104,10 @@ class CmsScoreReportController extends Controller
             }
         }
 
+        $common = $this->reportScope->filters($user, $common);
         if (!empty($common['location']) && !empty($common['regional'])) {
-            $belongsToRegional = \App\Models\Location::where('initial', $common['location'])
-                ->where('region_code', (int) $common['regional'])
-                ->exists();
+            $belongsToRegional = app(CmsScoreReportService::class)->locations($common)
+                ->contains('initial', $common['location']);
             if (!$belongsToRegional) {
                 throw ValidationException::withMessages(['location' => ['Cabang tidak termasuk dalam regional yang dipilih.']]);
             }
@@ -110,10 +121,12 @@ class CmsScoreReportController extends Controller
         ];
     }
 
-    private function authorizeReport(): void
+    private function authorizeReport(): User
     {
         $user = Auth::user();
-        abort_if(!$user || $user->role_type !== 'superadmin', 403, 'Tidak memiliki akses.');
-        abort_if(!$user->accountRole?->hasPermission('score_reports'), 403, 'Tidak memiliki akses.');
+        abort_unless($user && ($user->role_type === 'manager'
+            || ($user->role_type === 'superadmin' && $user->accountRole?->hasPermission('score_reports'))), 403, 'Tidak memiliki akses.');
+
+        return $user;
     }
 }

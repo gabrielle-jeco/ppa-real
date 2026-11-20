@@ -62,7 +62,7 @@ class CmsScoreReportTest extends TestCase
     public function test_daily_group_details_are_loaded_for_the_selected_supervisor(): void
     {
         $this->actingAs($this->admin(), 'sanctum')
-            ->getJson('/api/cms/score-reports/daily/details?location_id=GBB&leader_id=spv-1&start=2026-11-01&end=2026-11-02')
+            ->getJson('/api/cms/score-reports/daily/details?regional=10&location=GBB&location_id=GBB&leader_id=spv-1&start=2026-11-01&end=2026-11-02')
             ->assertOk()
             ->assertJsonCount(4, 'rows')
             ->assertJsonPath('rows.0.leader_id', 'spv-1');
@@ -91,7 +91,7 @@ class CmsScoreReportTest extends TestCase
         ]);
 
         $this->actingAs($this->admin(), 'sanctum')
-            ->getJson('/api/cms/score-reports/daily?location=GBB&start=2026-11-01&end=2026-11-02')
+            ->getJson('/api/cms/score-reports/daily?regional=10&location=GBB&start=2026-11-01&end=2026-11-02')
             ->assertOk()
             ->assertJsonCount(2, 'groups')
             ->assertJsonPath('groups.0.leader_id', 'spv-2')
@@ -101,7 +101,7 @@ class CmsScoreReportTest extends TestCase
     public function test_monthly_report_reads_snapshot_components_for_service_crew(): void
     {
         $this->actingAs($this->admin(), 'sanctum')
-            ->getJson('/api/cms/score-reports/monthly?location=GBB&start=2026-10&end=2026-10')
+            ->getJson('/api/cms/score-reports/monthly?regional=10&location=GBB&start=2026-10&end=2026-10')
             ->assertOk()
             ->assertJsonCount(1, 'groups')
             ->assertJsonPath('groups.0.task_score', 80)
@@ -136,7 +136,7 @@ class CmsScoreReportTest extends TestCase
     public function test_daily_report_can_be_exported_as_xlsx(): void
     {
         $this->actingAs($this->admin(), 'sanctum')
-            ->get('/api/cms/score-reports/daily/export?location=GBB&start=2026-11-01&end=2026-11-02')
+            ->get('/api/cms/score-reports/daily/export?regional=10&location=GBB&start=2026-11-01&end=2026-11-02')
             ->assertOk()
             ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
@@ -150,6 +150,150 @@ class CmsScoreReportTest extends TestCase
         $crewRow = $rows->firstWhere('subordinate_id', 'crew-1');
         $this->assertNotNull($crewRow);
         $this->assertSame('spv-1', $crewRow['leader_id']);
+    }
+
+    public function test_report_uses_master_regional_branches_when_imported_region_code_differs(): void
+    {
+        DB::table('regional')->where('kode_regional', '10')->update(['kode_regional' => '001', 'cabang' => ' GBB, YPC ']);
+        DB::table('locations')->insert(['initial' => 'YPC', 'name' => 'Yogya Plaza Cimahi', 'region_code' => 99, 'is_active' => true]);
+        $locations = app(CmsScoreReportService::class)->locations(['regional' => '001']);
+        $this->assertEqualsCanonicalizing(['GBB', 'YPC'], $locations->pluck('initial')->all());
+
+        $this->actingAs($this->admin(), 'sanctum')
+            ->getJson('/api/cms/score-reports/daily?regional=001&location=GBB&start=2026-11-01&end=2026-11-02')
+            ->assertOk()->assertJsonPath('summary.total_employees', 6)->assertJsonCount(1, 'groups');
+        $this->get('/api/cms/score-reports/daily/export?regional=001&location=GBB&start=2026-11-01&end=2026-11-02')
+            ->assertOk()->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $this->assertDatabaseHas('locations', ['initial' => 'GBB', 'region_code' => 10]);
+    }
+
+    public function test_legacy_numeric_region_matching_accepts_leading_zeroes(): void
+    {
+        DB::table('regional')->where('kode_regional', '10')->update(['kode_regional' => '001']);
+        DB::table('locations')->where('initial', 'GBB')->update(['region_code' => 1]);
+        $this->actingAs($this->admin(), 'sanctum')
+            ->getJson('/api/cms/score-reports/daily?regional=001&location=GBB&start=2026-11-01&end=2026-11-02')
+            ->assertOk()->assertJsonCount(1, 'groups');
+    }
+
+    public function test_explicit_master_branch_list_does_not_expand_to_other_imported_locations(): void
+    {
+        $this->seedReportBranches();
+        DB::table('regional')->where('kode_regional', '10')->update(['cabang' => 'YPC']);
+        $this->actingAs($this->admin(), 'sanctum')
+            ->getJson('/api/cms/score-reports/daily?regional=10&location=GBB&start=2026-11-01&end=2026-11-02')
+            ->assertUnprocessable()->assertJsonValidationErrors('location');
+        $this->assertSame(['YPC'], app(CmsScoreReportService::class)->locations(['regional' => '10'])->pluck('initial')->all());
+    }
+
+    public function test_cms_must_choose_regional_and_branch_before_loading_report(): void
+    {
+        $this->actingAs($this->admin(), 'sanctum')
+            ->getJson('/api/cms/score-reports/daily?start=2026-11-01&end=2026-11-02')
+            ->assertUnprocessable()->assertJsonValidationErrors(['regional', 'location']);
+    }
+
+    public function test_store_manager_and_chief_have_locked_scope_and_can_read_daily_monthly_and_excel(): void
+    {
+        foreach (['sm-1', 'co-1'] as $username) {
+            $user = User::where('username', $username)->firstOrFail();
+            $this->actingAs($user, 'sanctum')->getJson('/api/manager/score-reports/options')
+                ->assertOk()->assertJsonPath('locked_regional', '10')->assertJsonPath('locked_location', 'GBB')
+                ->assertJsonCount(1, 'locations');
+            $this->getJson('/api/manager/score-reports/daily?start=2026-11-01&end=2026-11-02')
+                ->assertOk()->assertJsonCount(1, 'groups')->assertJsonPath('summary.total_employees', 6);
+            $this->getJson('/api/manager/score-reports/monthly?start=2026-10&end=2026-10')
+                ->assertOk()->assertJsonCount(1, 'groups');
+            $this->get('/api/manager/score-reports/daily/export?start=2026-11-01&end=2026-11-02')
+                ->assertOk()->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        }
+    }
+
+    public function test_manager_cannot_override_branch_on_summary_details_or_export_even_with_extra_assignment(): void
+    {
+        $this->seedReportBranches();
+        DB::table('user_locations')->insert(['user_id' => 'sm-1', 'location_id' => 'YPC', 'job_level' => 'manager']);
+        $this->actingAs(User::where('username', 'sm-1')->firstOrFail(), 'sanctum');
+        foreach (['daily', 'daily/details', 'daily/export'] as $path) {
+            $this->getJson('/api/manager/score-reports/' . $path . '?regional=10&location=YPC&location_id=YPC&start=2026-11-01&end=2026-11-02')
+                ->assertForbidden();
+        }
+        $this->getJson('/api/manager/score-reports/daily/details?location_id=YPC&start=2026-11-01&end=2026-11-02')->assertNotFound();
+        $this->getJson('/api/cms/score-reports/daily?regional=10&location=YPC&start=2026-11-01&end=2026-11-02')->assertForbidden();
+    }
+
+    public function test_rm_can_only_choose_assigned_branches_inside_primary_regional(): void
+    {
+        $this->seedReportBranches();
+        $rm = User::create(['username' => 'rm-1', 'name' => 'Regional Manager', 'initial_store' => 'GBB', 'active' => true]);
+        foreach (['GBB', 'YPC', 'OUT'] as $branch) {
+            DB::table('user_locations')->insert(['user_id' => $rm->username, 'location_id' => $branch, 'job_level' => 'regional_manager']);
+        }
+        $response = $this->actingAs($rm, 'sanctum')->getJson('/api/manager/score-reports/options')
+            ->assertOk()->assertJsonPath('locked_regional', '10')->assertJsonPath('locked_location', null);
+        $this->assertEqualsCanonicalizing(['GBB', 'YPC'], array_column($response->json('locations'), 'initial'));
+        $this->getJson('/api/manager/score-reports/daily?start=2026-11-01&end=2026-11-02')
+            ->assertUnprocessable()->assertJsonValidationErrors('location');
+        $this->getJson('/api/manager/score-reports/daily?location=GBB&start=2026-11-01&end=2026-11-02')
+            ->assertOk()->assertJsonCount(1, 'groups');
+        $this->getJson('/api/manager/score-reports/daily?location=YPC&start=2026-11-01&end=2026-11-02')->assertOk();
+        foreach (['FREE', 'OUT'] as $branch) {
+            foreach (['daily', 'daily/details', 'daily/export'] as $path) {
+                $this->getJson('/api/manager/score-reports/' . $path . '?location=' . $branch . '&location_id=' . $branch . '&start=2026-11-01&end=2026-11-02')
+                    ->assertForbidden();
+            }
+        }
+        $this->getJson('/api/manager/score-reports/daily?regional=20&location=OUT&start=2026-11-01&end=2026-11-02')->assertForbidden();
+    }
+
+    public function test_rm_primary_branch_must_be_an_explicit_assignment(): void
+    {
+        $this->seedReportBranches();
+        $rm = User::create(['username' => 'rm-1', 'name' => 'Regional Manager', 'initial_store' => 'FREE', 'active' => true]);
+        DB::table('user_locations')->insert(['user_id' => $rm->username, 'location_id' => 'GBB', 'job_level' => 'regional_manager']);
+        $this->actingAs($rm, 'sanctum')->getJson('/api/manager/score-reports/options')
+            ->assertUnprocessable()->assertJsonValidationErrors('location');
+    }
+
+    public function test_missing_or_ambiguous_primary_regional_returns_configuration_error(): void
+    {
+        $this->actingAs(User::where('username', 'sm-1')->firstOrFail(), 'sanctum');
+        DB::table('regional')->delete();
+        $this->getJson('/api/manager/score-reports/options')->assertUnprocessable()->assertJsonValidationErrors('regional');
+        DB::table('regional')->insert([
+            ['kode_regional' => '10', 'nama_regional' => 'First', 'cabang' => 'GBB'],
+            ['kode_regional' => '20', 'nama_regional' => 'Second', 'cabang' => 'GBB'],
+        ]);
+        $this->getJson('/api/manager/score-reports/options')->assertUnprocessable()->assertJsonValidationErrors('regional');
+    }
+
+    public function test_report_denies_operational_crew_and_supervisor_access(): void
+    {
+        foreach (['spv-1', 'crew-1'] as $username) {
+            $this->actingAs(User::where('username', $username)->firstOrFail(), 'sanctum');
+            $this->getJson('/api/manager/score-reports/options')->assertForbidden();
+            $this->getJson('/api/manager/score-reports/daily?regional=10&location=GBB&start=2026-11-01&end=2026-11-02')->assertForbidden();
+        }
+    }
+
+    public function test_missing_snapshots_can_leave_report_empty_while_employee_summary_is_populated(): void
+    {
+        DB::table('daily_scores')->delete();
+        $this->actingAs($this->admin(), 'sanctum')
+            ->getJson('/api/cms/score-reports/daily?regional=10&location=GBB&start=2026-11-01&end=2026-11-02')
+            ->assertOk()->assertJsonPath('summary.total_employees', 6)->assertJsonCount(0, 'groups');
+        $this->assertDatabaseCount('daily_scores', 0);
+    }
+
+    private function seedReportBranches(): void
+    {
+        DB::table('regional')->where('kode_regional', '10')->update(['cabang' => 'GBB, YPC, FREE']);
+        DB::table('regional')->insert(['kode_regional' => '20', 'nama_regional' => 'Other Regional', 'cabang' => 'OUT']);
+        DB::table('locations')->insert([
+            ['initial' => 'YPC', 'name' => 'Yogya Plaza Cimahi', 'region_code' => 99, 'is_active' => true],
+            ['initial' => 'FREE', 'name' => 'Unassigned Branch', 'region_code' => 10, 'is_active' => true],
+            ['initial' => 'OUT', 'name' => 'Other Regional Branch', 'region_code' => 20, 'is_active' => true],
+        ]);
     }
 
     private function admin(): User
@@ -259,6 +403,7 @@ class CmsScoreReportTest extends TestCase
             $table->id();
             $table->string('kode_regional')->unique();
             $table->string('nama_regional');
+            $table->string('cabang')->nullable();
         });
         Schema::create('users', function (Blueprint $table) {
             $table->id();

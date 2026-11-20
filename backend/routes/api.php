@@ -27,6 +27,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Manager Routes
     Route::get('/manager/supervisors', [App\Http\Controllers\ManagerController::class, 'getSupervisors']);
+    Route::get('/manager/score-reports/options', [App\Http\Controllers\CmsScoreReportController::class, 'options']);
+    Route::get('/manager/score-reports/{mode}', [App\Http\Controllers\CmsScoreReportController::class, 'index']);
+    Route::get('/manager/score-reports/{mode}/details', [App\Http\Controllers\CmsScoreReportController::class, 'details']);
+    Route::get('/manager/score-reports/{mode}/export', [App\Http\Controllers\CmsScoreReportController::class, 'export'])
+        ->middleware('throttle:10,1');
     Route::get('/manager/supervisors/{id}/stats', [App\Http\Controllers\ManagerController::class, 'getSupervisorStats']);
     Route::get('/manager/supervisors/{id}/crews', [App\Http\Controllers\ManagerController::class, 'getSupervisorCrewTasks']);
     Route::get('/manager/evaluation-reopen-requests', [App\Http\Controllers\EvaluationReopenRequestController::class, 'index']);
