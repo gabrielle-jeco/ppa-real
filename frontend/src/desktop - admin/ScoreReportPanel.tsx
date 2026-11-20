@@ -8,11 +8,13 @@ type LocationOption = {
     initial: string;
     name: string;
     region_code?: number;
+    is_active?: number | boolean;
 };
 
 type RegionalOption = {
     kode_regional: string;
     nama_regional: string;
+    cabang?: string | null;
 };
 
 type PersonSummary = {
@@ -73,6 +75,9 @@ type ReportPayload = {
 type Props = {
     locations: LocationOption[];
     regionals: RegionalOption[];
+    apiBase?: string;
+    lockedRegional?: string;
+    lockedLocation?: string | null;
 };
 
 type FilterOption = {
@@ -148,12 +153,13 @@ function PeriodFields({ mode, start, end, onChange }: {
     );
 }
 
-function SearchableFilter({ value, placeholder, searchPlaceholder, options, onChange }: {
+function SearchableFilter({ value, placeholder, searchPlaceholder, options, onChange, disabled = false }: {
     value: string;
     placeholder: string;
     searchPlaceholder: string;
     options: FilterOption[];
     onChange: (value: string) => void;
+    disabled?: boolean;
 }) {
     const rootRef = useRef<HTMLDivElement>(null);
     const [open, setOpen] = useState(false);
@@ -167,8 +173,8 @@ function SearchableFilter({ value, placeholder, searchPlaceholder, options, onCh
         const close = (event: PointerEvent) => {
             if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
         };
-        document.addEventListener('pointerdown', close);
-        return () => document.removeEventListener('pointerdown', close);
+        document.addEventListener('pointerdown', close, true);
+        return () => document.removeEventListener('pointerdown', close, true);
     }, [open]);
 
     const select = (nextValue: string) => {
@@ -178,8 +184,10 @@ function SearchableFilter({ value, placeholder, searchPlaceholder, options, onCh
     };
 
     return (
-        <div ref={rootRef} className="relative">
-            <button type="button" onClick={() => { setOpen((current) => !current); setSearch(''); }} className="flex min-h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-2 text-left transition hover:border-purple-200">
+        <div ref={rootRef} className="relative" onKeyDown={(event) => {
+            if (event.key === 'Escape') { setOpen(false); setSearch(''); }
+        }}>
+            <button type="button" disabled={disabled} aria-expanded={open} onClick={() => { setOpen((current) => !current); setSearch(''); }} className="flex min-h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-2 text-left transition hover:border-purple-200 disabled:cursor-not-allowed disabled:opacity-50">
                 <span className="min-w-0 flex-1">
                     <span className={`block truncate text-sm ${selected ? 'font-semibold text-gray-700' : 'text-gray-500'}`}>{selected?.label || placeholder}</span>
                     {selected?.secondaryLabel && <span className="block truncate text-[10px] font-semibold text-gray-400">{selected.secondaryLabel}</span>}
@@ -210,13 +218,22 @@ function SearchableFilter({ value, placeholder, searchPlaceholder, options, onCh
 }
 
 function PeopleCard({ label, people }: { label: string; people: PersonSummary[] }) {
+    const rootRef = useRef<HTMLDetailsElement>(null);
+    useEffect(() => {
+        const close = (event: PointerEvent) => {
+            if (rootRef.current?.open && !rootRef.current.contains(event.target as Node)) rootRef.current.open = false;
+        };
+        document.addEventListener('pointerdown', close, true);
+        return () => document.removeEventListener('pointerdown', close, true);
+    }, []);
+
     if (people.length === 0) {
         return <SummaryCard label={label} value="-" />;
     }
 
     const value = people.length === 1 ? people[0].name : `${people[0].name} +${people.length - 1}`;
     return (
-        <details className="group relative rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <details ref={rootRef} onKeyDown={(event) => { if (event.key === 'Escape') event.currentTarget.open = false; }} className="group relative rounded-2xl border border-gray-100 bg-white shadow-sm">
             <summary className="flex h-full min-h-[96px] cursor-pointer list-none flex-col items-center justify-center rounded-2xl px-4 py-3 text-center transition hover:bg-purple-50/40">
                 <span className="text-sm font-bold text-gray-500">{label}</span>
                 <span className="mt-2 line-clamp-2 text-xl font-black leading-tight text-gray-900">{value}</span>
@@ -242,12 +259,12 @@ function SummaryCard({ label, value }: { label: string; value: string | number }
     );
 }
 
-export default function ScoreReportPanel({ locations, regionals }: Props) {
+export default function ScoreReportPanel({ locations, regionals, apiBase = '/api/cms/score-reports', lockedRegional, lockedLocation }: Props) {
     const [mode, setMode] = useState<ReportMode>('daily');
     const [dailyPeriod, setDailyPeriod] = useState(dailyDefault);
     const [monthlyPeriod, setMonthlyPeriod] = useState(monthlyDefault);
-    const [regional, setRegional] = useState('');
-    const [location, setLocation] = useState('');
+    const [regional, setRegional] = useState(lockedRegional || '');
+    const [location, setLocation] = useState(lockedLocation || '');
     const [report, setReport] = useState<ReportPayload | null>(null);
     const [appliedQuery, setAppliedQuery] = useState('');
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -259,7 +276,14 @@ export default function ScoreReportPanel({ locations, regionals }: Props) {
     const reportRequestRef = useRef(0);
     const detailRequestRef = useRef(0);
     const period = mode === 'daily' ? dailyPeriod : monthlyPeriod;
-    const filteredLocations = locations.filter((item) => !regional || String(item.region_code || '') === regional);
+    const selectedRegional = regionals.find((item) => item.kode_regional === regional);
+    const regionalBranches = (selectedRegional?.cabang || '').split(',').map((branch) => branch.trim()).filter(Boolean);
+    const filteredLocations = locations.filter((item) => {
+        if (item.is_active === false || item.is_active === 0) return false;
+        if (!selectedRegional) return false;
+        if (regionalBranches.length > 0) return regionalBranches.includes(item.initial);
+        return /^\d+$/.test(regional) && item.region_code != null && Number(item.region_code) === Number(regional);
+    });
     const regionalOptions = regionals.map((item) => ({ value: item.kode_regional, label: item.nama_regional, secondaryLabel: item.kode_regional }));
     const locationOptions = filteredLocations.map((item) => ({ value: item.initial, label: `${item.initial} - ${item.name}` }));
 
@@ -271,6 +295,10 @@ export default function ScoreReportPanel({ locations, regionals }: Props) {
     };
 
     const loadReport = async (page = 1) => {
+        if (!regional || !location) {
+            setError('Pilih regional dan cabang sebelum menampilkan data.');
+            return;
+        }
         const requestId = ++reportRequestRef.current;
         detailRequestRef.current += 1;
         const requestMode = mode;
@@ -280,7 +308,7 @@ export default function ScoreReportPanel({ locations, regionals }: Props) {
         setDetailRows({});
         try {
             const query = queryFor(page);
-            const payload = await requestJson(`/api/cms/score-reports/${requestMode}?${query.toString()}`);
+            const payload = await requestJson(`${apiBase}/${requestMode}?${query.toString()}`);
             if (requestId !== reportRequestRef.current) return;
             setReport(payload);
             query.delete('page');
@@ -306,6 +334,18 @@ export default function ScoreReportPanel({ locations, regionals }: Props) {
         setError('');
     };
 
+    const clearReport = () => {
+        reportRequestRef.current += 1;
+        detailRequestRef.current += 1;
+        setLoading(false);
+        setDetailLoading(null);
+        setReport(null);
+        setAppliedQuery('');
+        setExpandedKey(null);
+        setDetailRows({});
+        setError('');
+    };
+
     const toggleGroup = async (group: ReportGroup) => {
         if (expandedKey === group.key) {
             detailRequestRef.current += 1;
@@ -324,7 +364,7 @@ export default function ScoreReportPanel({ locations, regionals }: Props) {
             const query = new URLSearchParams(appliedQuery);
             query.set('location_id', group.location_id);
             if (group.leader_id) query.set('leader_id', group.leader_id);
-            const payload = await requestJson(`/api/cms/score-reports/${requestMode}/details?${query.toString()}`);
+            const payload = await requestJson(`${apiBase}/${requestMode}/details?${query.toString()}`);
             if (requestId !== detailRequestRef.current) return;
             setDetailRows((current) => ({ ...current, [group.key]: payload.rows || [] }));
         } catch (requestError) {
@@ -341,7 +381,7 @@ export default function ScoreReportPanel({ locations, regionals }: Props) {
         setDownloading(true);
         setError('');
         try {
-            const response = await fetch(`/api/cms/score-reports/${mode}/export?${appliedQuery}`, {
+            const response = await fetch(`${apiBase}/${mode}/export?${appliedQuery}`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
             });
             if (!response.ok) {
@@ -372,20 +412,24 @@ export default function ScoreReportPanel({ locations, regionals }: Props) {
     return (
         <div className="flex h-[calc(100dvh-2rem)] min-h-[720px] flex-col overflow-hidden">
             <header className="mb-6">
-                <p className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">YoDaily CMS</p>
+                <p className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">{lockedRegional ? 'YoDaily' : 'YoDaily CMS'}</p>
                 <h1 className="mt-2 text-3xl font-extrabold text-gray-900">REPORT PENILAIAN</h1>
                 <p className="mt-2 text-gray-500">Persentase penilaian dan penggunaan aplikasi</p>
             </header>
 
             <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="grid grid-cols-[1fr_1fr_2fr_auto] items-end gap-4">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_160px] items-end gap-4">
                     <div className="space-y-2">
                         <span className="text-xs font-black text-gray-600">Regional</span>
-                        <SearchableFilter value={regional} placeholder="Semua Regional" searchPlaceholder="Cari regional..." options={regionalOptions} onChange={(value) => { setRegional(value); setLocation(''); }} />
+                        {lockedRegional ? (
+                            <div className="flex min-h-[52px] items-center rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700" aria-label="Regional terkunci">{selectedRegional?.nama_regional || lockedRegional}</div>
+                        ) : <SearchableFilter value={regional} placeholder="Pilih regional" searchPlaceholder="Cari regional..." options={regionalOptions} onChange={(value) => { setRegional(value); setLocation(''); clearReport(); }} />}
                     </div>
                     <div className="space-y-2">
                         <span className="text-xs font-black text-gray-600">Cabang</span>
-                        <SearchableFilter value={location} placeholder="Semua Cabang" searchPlaceholder="Cari cabang..." options={locationOptions} onChange={setLocation} />
+                        {lockedLocation ? (
+                            <div className="flex min-h-[52px] items-center rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700" aria-label="Cabang terkunci">{locationOptions.find((option) => option.value === lockedLocation)?.label || lockedLocation}</div>
+                        ) : <SearchableFilter value={location} placeholder="Pilih cabang" searchPlaceholder="Cari cabang..." options={locationOptions} disabled={!regional} onChange={(value) => { setLocation(value); clearReport(); }} />}
                     </div>
                     <PeriodFields
                         mode={mode}
@@ -393,7 +437,7 @@ export default function ScoreReportPanel({ locations, regionals }: Props) {
                         end={period.end}
                         onChange={(start, end) => mode === 'daily' ? setDailyPeriod({ start, end }) : setMonthlyPeriod({ start, end })}
                     />
-                    <button type="button" onClick={() => loadReport(1)} disabled={loading} className="min-h-[52px] rounded-xl bg-primary px-6 text-sm font-black text-white shadow-lg shadow-purple-200 transition hover:bg-purple-700 disabled:cursor-wait disabled:opacity-60">
+                    <button type="button" onClick={() => loadReport(1)} disabled={loading || !regional || !location} className="min-h-[52px] w-40 whitespace-nowrap rounded-xl bg-primary px-6 text-sm font-black text-white shadow-lg shadow-purple-200 transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60">
                         {loading ? 'Memuat...' : 'Tampilkan Data'}
                     </button>
                 </div>
@@ -456,7 +500,7 @@ export default function ScoreReportPanel({ locations, regionals }: Props) {
                                 <tr><td colSpan={mode === 'daily' ? 7 : 8} className="py-20 text-center text-sm font-semibold text-gray-400">Memuat report penilaian...</td></tr>
                             )}
                             {report && report.groups.length === 0 && (
-                                <tr><td colSpan={mode === 'daily' ? 7 : 8} className="py-20 text-center text-sm font-semibold text-gray-400">Tidak ada data penilaian pada periode ini.</td></tr>
+                                <tr><td colSpan={mode === 'daily' ? 7 : 8} className="py-20 text-center text-sm font-semibold text-gray-400">Belum ada data penilaian tersimpan untuk cabang dan periode ini.</td></tr>
                             )}
                             {report?.groups.map((group) => {
                                 const expanded = expandedKey === group.key;

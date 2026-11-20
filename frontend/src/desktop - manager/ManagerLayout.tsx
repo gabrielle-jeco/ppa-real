@@ -1,11 +1,11 @@
 import React from 'react';
-import { GitBranch, LayoutDashboard, LogOut, Store } from 'lucide-react';
+import { BarChart3, GitBranch, LayoutDashboard, LogOut, Store } from 'lucide-react';
 
 interface ManagerLayoutProps {
     children: React.ReactNode;
     user?: any;
-    activePage: 'dashboard' | 'organization';
-    onPageChange: (page: 'dashboard' | 'organization') => void;
+    activePage: 'dashboard' | 'organization' | 'scoreReport';
+    onPageChange: (page: 'dashboard' | 'organization' | 'scoreReport') => void;
     onLogout: () => void;
 }
 
@@ -30,6 +30,11 @@ export default function ManagerLayout({ children, activePage, onPageChange, onLo
                     <div className="flex justify-center">
                         <button type="button" onClick={() => onPageChange('organization')} title="Organigram" className={`p-3 rounded-xl cursor-pointer transition hover:scale-105 ${activePage === 'organization' ? 'bg-primary text-white shadow-lg shadow-purple-200' : 'text-gray-400 hover:bg-purple-50 hover:text-primary'}`}>
                             <GitBranch size={24} />
+                        </button>
+                    </div>
+                    <div className="flex justify-center">
+                        <button type="button" onClick={() => onPageChange('scoreReport')} title="Report Penilaian" className={`p-3 rounded-xl cursor-pointer transition hover:scale-105 ${activePage === 'scoreReport' ? 'bg-primary text-white shadow-lg shadow-purple-200' : 'text-gray-400 hover:bg-purple-50 hover:text-primary'}`}>
+                            <BarChart3 size={24} />
                         </button>
                     </div>
                 </nav>

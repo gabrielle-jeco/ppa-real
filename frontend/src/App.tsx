@@ -3,6 +3,7 @@ import LoginPage from './general/LoginPage';
 import ManagerLayout from './desktop - manager/ManagerLayout';
 import ManagerDashboard from './desktop - manager/ManagerDashboard';
 import OrganizationChart from './general/OrganizationChart';
+import ManagerScoreReport from './desktop - manager/ManagerScoreReport';
 import AdminLayout from './desktop - admin/AdminLayout';
 import AdminDashboard from './desktop - admin/AdminDashboard';
 import SupervisorLayout from './desktop - supervisor/SupervisorLayout';
@@ -17,7 +18,7 @@ import { registerPushSubscription, requestNotificationPermission } from './utils
 function App() {
   const [user, setUser] = useState<any>(null);
   const [activeSupervisorPage, setActiveSupervisorPage] = useState<'dashboard' | 'monitoring' | 'performance' | 'cashier'>('dashboard');
-  const [activeManagerPage, setActiveManagerPage] = useState<'dashboard' | 'organization'>('dashboard');
+  const [activeManagerPage, setActiveManagerPage] = useState<'dashboard' | 'organization' | 'scoreReport'>('dashboard');
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [isVerifying, setIsVerifying] = useState(true);
 
@@ -191,6 +192,8 @@ function App() {
       <ManagerLayout user={user} activePage={activeManagerPage} onPageChange={setActiveManagerPage} onLogout={handleLogout}>
         {activeManagerPage === 'organization' ? (
           <div className="flex h-full min-h-0 flex-col overflow-y-auto p-6 pb-10"><OrganizationChart /></div>
+        ) : activeManagerPage === 'scoreReport' ? (
+          <div className="flex h-full min-h-0 flex-col overflow-y-auto p-6"><ManagerScoreReport /></div>
         ) : <ManagerDashboard />}
       </ManagerLayout>
     );
