@@ -15,8 +15,17 @@ class OrganizationChartController extends Controller
 
     public function index(Request $request)
     {
-        $data = $request->validate(['location_id' => ['nullable', 'string', 'max:255']]);
-        return response()->json($this->chartService->chart(Auth::user(), $data['location_id'] ?? null));
+        $data = $request->validate([
+            'location_id' => ['nullable', 'string', 'max:255'],
+            'supervisor_id' => ['nullable', 'string', 'max:255'],
+            'view' => ['nullable', 'in:all,supervisor'],
+        ]);
+        return response()->json($this->chartService->chart(
+            Auth::user(),
+            $data['location_id'] ?? null,
+            $data['supervisor_id'] ?? null,
+            ($data['view'] ?? 'all') === 'supervisor'
+        ));
     }
 
     public function storeRelation(Request $request)
@@ -64,6 +73,7 @@ class OrganizationChartController extends Controller
     {
         $data = $request->validate([
             'location_id' => ['required', 'string', 'max:255'],
+            'supervisor_id' => ['nullable', 'string', 'max:255'],
             'nodes' => ['present', 'array', 'max:1000'],
             'nodes.*' => ['required', 'array'],
             'nodes.*.x' => ['required', 'numeric', 'between:0,1'],
@@ -79,7 +89,8 @@ class OrganizationChartController extends Controller
             Auth::user(),
             $data['location_id'],
             $data['nodes'],
-            $data['edges']
+            $data['edges'],
+            $data['supervisor_id'] ?? null
         );
 
         return response()->json(['layout' => $layout, 'message' => 'Layout organigram berhasil disimpan.']);

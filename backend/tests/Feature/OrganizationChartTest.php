@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\JobLevel;
+use App\Models\OrganizationChartLayout;
 use App\Models\ReportingLine;
 use App\Models\Role;
 use App\Models\User;
@@ -325,6 +326,176 @@ class OrganizationChartTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('layout.edges.' . $line->id . '.points', []);
+    }
+
+    public function test_supervisor_selection_starts_empty_and_loading_does_not_write_layout(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $sm = $this->createUser('sm-1', 'Store Manager', 'sm', 'manager');
+        $spv = $this->createUser('spv-1', 'Supervisor', 'spv', 'supervisor');
+        $this->line($sm, $spv);
+        $layout = OrganizationChartLayout::create([
+            'location_id' => 'GBB',
+            'layout' => ['nodes' => ['spv-1' => ['x' => 0.2, 'y' => 0.7]], 'edges' => []],
+            'updated_by' => $admin->username,
+        ]);
+        $original = $layout->getRawOriginal('layout');
+
+        foreach ([$admin, $sm] as $actor) {
+            $this->actingAs($actor, 'sanctum')->getJson('/api/organization-chart?location_id=GBB&view=supervisor')
+                ->assertOk()->assertJsonCount(0, 'nodes')->assertJsonCount(0, 'edges')
+                ->assertJsonCount(1, 'supervisors')->assertJsonPath('supervisors.0.username', 'spv-1');
+        }
+        $this->actingAs($admin, 'sanctum')->getJson('/api/organization-chart?location_id=GBB&view=supervisor&supervisor_id=spv-1')
+            ->assertOk()->assertJsonPath('layout.nodes', []);
+        $this->assertSame($original, $layout->fresh()->getRawOriginal('layout'));
+        $this->assertDatabaseCount('organization_chart_layouts', 1);
+    }
+
+    public function test_focus_shows_all_supervisor_ancestors_and_shared_crew_without_other_teams(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $sm = $this->createUser('sm-1', 'Store Manager', 'sm', 'manager');
+        $otherSm = $this->createUser('sm-2', 'Other Manager', 'sm', 'manager');
+        $co = $this->createUser('co-1', 'Chief One', 'co', 'manager');
+        $otherCo = $this->createUser('co-2', 'Chief Two', 'co', 'manager');
+        $spv = $this->createUser('spv-1', 'Supervisor One', 'spv', 'supervisor');
+        $otherSpv = $this->createUser('spv-2', 'Supervisor Two', 'spv', 'supervisor');
+        $sharedCrew = $this->createUser('crew-1', 'Shared Crew', 'sc', 'sc');
+        $otherCrew = $this->createUser('crew-2', 'Other Crew', 'sc', 'sc');
+        $selectedEdges = [
+            $this->line($sm, $co)->id,
+            $this->line($co, $spv)->id,
+            $this->line($otherSm, $spv)->id,
+            $this->line($spv, $sharedCrew)->id,
+        ];
+        $this->line($sm, $otherCo);
+        $this->line($otherCo, $otherSpv);
+        $this->line($otherSpv, $sharedCrew);
+        $this->line($otherSpv, $otherCrew);
+
+        foreach ([$admin, $sm, $co] as $actor) {
+            $response = $this->actingAs($actor, 'sanctum')
+                ->getJson('/api/organization-chart?location_id=GBB&view=supervisor&supervisor_id=spv-1')->assertOk();
+            $this->assertEqualsCanonicalizing(['sm-1', 'sm-2', 'co-1', 'spv-1', 'crew-1'], array_column($response->json('nodes'), 'username'));
+            $this->assertEqualsCanonicalizing($selectedEdges, array_column($response->json('edges'), 'id'));
+            $crew = collect($response->json('nodes'))->firstWhere('username', 'crew-1');
+            $this->assertEqualsCanonicalizing(['spv-1', 'spv-2'], $crew['leader_ids']);
+            $this->assertContains('spv-2', array_column($response->json('parent_nodes'), 'username'));
+        }
+        $this->actingAs($admin, 'sanctum')->getJson('/api/organization-chart?location_id=GBB&view=all')
+            ->assertOk()->assertJsonCount(8, 'nodes')->assertJsonCount(8, 'edges');
+        $this->assertDatabaseCount('reporting_lines', 8);
+    }
+
+    public function test_unassigned_supervisor_can_be_selected_without_promoting_hidden_members_to_candidates(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $sm = $this->createUser('sm-1', 'Store Manager', 'sm', 'manager');
+        $spv = $this->createUser('spv-1', 'Supervisor One', 'spv', 'supervisor');
+        $standalone = $this->createUser('spv-2', 'Supervisor Two', 'spv', 'supervisor');
+        $crew = $this->createUser('crew-1', 'Crew', 'sc', 'sc');
+        $this->line($sm, $spv);
+        $this->line($spv, $crew);
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/organization-chart?location_id=GBB&view=supervisor&supervisor_id=spv-2')
+            ->assertOk()->assertJsonCount(1, 'nodes')->assertJsonCount(0, 'edges')
+            ->assertJsonCount(1, 'candidates')->assertJsonPath('candidates.0.username', 'admin')->assertJsonCount(2, 'supervisors');
+        $this->assertSame($standalone->username, $response->json('nodes.0.username'));
+    }
+
+    public function test_focus_preserves_inactive_relations_and_only_effective_backup_crew(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $spv = $this->createUser('spv-1', 'Supervisor', 'spv', 'supervisor');
+        $inactiveCrew = $this->createUser('crew-1', 'Inactive Relation', 'sc', 'sc');
+        $backupCrew = $this->createUser('crew-2', 'Backup Crew', 'sc', 'sc');
+        $expiredCrew = $this->createUser('crew-3', 'Expired Backup', 'sc', 'sc');
+        $this->line($spv, $inactiveCrew)->update(['status' => 'inactive']);
+        $this->line($spv, $backupCrew)->update([
+            'relation_type' => 'backup', 'effective_from' => now()->subDay(), 'effective_until' => now()->addDay(),
+        ]);
+        $this->line($spv, $expiredCrew)->update([
+            'relation_type' => 'backup', 'effective_from' => now()->subDays(3), 'effective_until' => now()->subDays(2),
+        ]);
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/organization-chart?location_id=GBB&supervisor_id=spv-1')->assertOk();
+        $this->assertEqualsCanonicalizing(['spv-1', 'crew-1', 'crew-2'], array_column($response->json('nodes'), 'username'));
+        $response->assertJsonCount(2, 'edges')->assertJsonFragment(['status' => 'inactive']);
+    }
+
+    public function test_supervisor_filter_rejects_unknown_wrong_tier_and_other_branch_members(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $crew = $this->createUser('crew-1', 'Crew', 'sc', 'sc');
+        $spv = $this->createUser('spv-2', 'Other Branch', 'spv', 'supervisor');
+        $spv->update(['initial_store' => 'YPC']);
+        UserLocation::where('user_id', $spv->username)->update(['location_id' => 'YPC']);
+
+        foreach (['unknown', $crew->username, $spv->username] as $id) {
+            $this->actingAs($admin, 'sanctum')->getJson('/api/organization-chart?location_id=GBB&supervisor_id=' . $id)
+                ->assertUnprocessable()->assertJsonValidationErrors('supervisor_id');
+        }
+    }
+
+    public function test_manager_cannot_use_filter_to_access_another_branch(): void
+    {
+        $sm = $this->createUser('sm-1', 'Store Manager', 'sm', 'manager');
+        $spv = $this->createUser('spv-1', 'Supervisor', 'spv', 'supervisor');
+        DB::table('locations')->insert(['initial' => 'YPC', 'name' => 'Other Branch']);
+        $this->actingAs($sm, 'sanctum')->getJson('/api/organization-chart?location_id=YPC&supervisor_id=' . $spv->username)
+            ->assertForbidden();
+        $this->actingAs($sm, 'sanctum')->patchJson('/api/organization-chart/layout', [
+            'location_id' => 'YPC', 'supervisor_id' => $spv->username, 'nodes' => [], 'edges' => [],
+        ])->assertForbidden();
+    }
+
+    public function test_focused_layout_save_and_reset_preserve_full_branch_and_other_supervisor_layouts(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $sm = $this->createUser('sm-1', 'Store Manager', 'sm', 'manager');
+        $first = $this->createUser('spv-1', 'Supervisor One', 'spv', 'supervisor');
+        $second = $this->createUser('spv-2', 'Supervisor Two', 'spv', 'supervisor');
+        $firstLine = $this->line($sm, $first);
+        $hiddenLine = $this->line($sm, $second);
+        $root = ['nodes' => ['spv-2' => ['x' => 0.8, 'y' => 0.4]], 'edges' => [(string) $hiddenLine->id => ['points' => [['x' => 0.2, 'y' => 0.4]]]]];
+        $otherView = ['nodes' => ['spv-2' => ['x' => 0.5, 'y' => 0.5]], 'edges' => []];
+        $record = OrganizationChartLayout::create([
+            'location_id' => 'GBB', 'layout' => [...$root, 'views' => ['spv-2' => $otherView]], 'updated_by' => $admin->username,
+        ]);
+
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/layout', [
+            'location_id' => 'GBB', 'supervisor_id' => 'spv-1',
+            'nodes' => ['spv-1' => ['x' => 0.3, 'y' => 0.6], 'spv-2' => ['x' => 0.1, 'y' => 0.1]],
+            'edges' => [
+                (string) $firstLine->id => ['points' => [['x' => 0.4, 'y' => 0.4]]],
+                (string) $hiddenLine->id => ['points' => []],
+            ],
+        ])->assertOk()->assertJsonPath('layout.nodes.spv-1.x', 0.3)->assertJsonMissingPath('layout.nodes.spv-2')
+            ->assertJsonMissingPath('layout.edges.' . $hiddenLine->id);
+
+        $stored = $record->fresh()->layout;
+        $this->assertSame($root['nodes'], $stored['nodes']);
+        $this->assertSame($root['edges'], $stored['edges']);
+        $this->assertSame($otherView, $stored['views']['spv-2']);
+        $this->getJson('/api/organization-chart?location_id=GBB&supervisor_id=spv-1')
+            ->assertOk()->assertJsonPath('layout.nodes.spv-1.x', 0.3);
+        $this->getJson('/api/organization-chart?location_id=GBB&view=all')
+            ->assertOk()->assertJsonPath('layout.nodes.spv-2.x', 0.8);
+
+        $this->patchJson('/api/organization-chart/layout', [
+            'location_id' => 'GBB', 'supervisor_id' => 'spv-1', 'nodes' => [], 'edges' => [],
+        ])->assertOk();
+        $stored = $record->fresh()->layout;
+        $this->assertSame($root['nodes'], $stored['nodes']);
+        $this->assertSame($root['edges'], $stored['edges']);
+        $this->assertSame($otherView, $stored['views']['spv-2']);
+
+        $this->patchJson('/api/organization-chart/layout', ['location_id' => 'GBB', 'nodes' => [], 'edges' => []])->assertOk();
+        $this->assertSame($otherView, $record->fresh()->layout['views']['spv-2']);
+        $this->assertDatabaseCount('reporting_lines', 2);
     }
 
     private function createUser(string $username, string $name, string $jobLevelKey, string $appRole, ?int $roleId = null): User
