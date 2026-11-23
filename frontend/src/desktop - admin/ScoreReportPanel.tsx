@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Download, FileBarChart2, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, FileBarChart2, Search } from 'lucide-react';
 import ReportPeriodPicker from '../general/ReportPeriodPicker';
+import PaginationControls from '../general/PaginationControls';
 
 type ReportMode = 'daily' | 'monthly';
 
@@ -18,6 +19,7 @@ type RegionalOption = {
 };
 
 type PersonSummary = {
+    manager_type?: 'SM' | 'RM' | 'CO';
     id: string;
     name: string;
     location_id: string;
@@ -59,6 +61,7 @@ type ReportPayload = {
     period: { start: string; end: string };
     summary: {
         total_employees: number;
+        managers?: PersonSummary[];
         store_managers: PersonSummary[];
         chief_operations: PersonSummary[];
         supervisors: number;
@@ -242,6 +245,7 @@ function PeopleCard({ label, people }: { label: string; people: PersonSummary[] 
                 {people.map((person) => (
                     <div key={`${person.location_id}-${person.id}`} className="rounded-xl px-3 py-2 hover:bg-gray-50">
                         <p className="text-sm font-black text-gray-800">{person.id} - {person.name}</p>
+                        {person.manager_type && <p className="mt-1 text-xs font-bold text-primary">{{ SM: 'Store Manager', RM: 'Regional Manager', CO: 'Chief Operation' }[person.manager_type]}</p>}
                         <p className="mt-1 text-[11px] font-semibold text-gray-400">{person.location_id} - {person.location_name}</p>
                     </div>
                 ))}
@@ -444,7 +448,7 @@ export default function ScoreReportPanel({ locations, regionals, apiBase = '/api
 
                 <div className="mt-5 grid grid-cols-5 gap-4">
                     <SummaryCard label="Total Karyawan" value={summary?.total_employees ?? '-'} />
-                    <PeopleCard label="Store Manager" people={summary?.store_managers || []} />
+                    <PeopleCard label="Manager" people={summary?.managers || summary?.store_managers || []} />
                     <PeopleCard label="Chief Operation" people={summary?.chief_operations || []} />
                     <SummaryCard label="Supervisor" value={summary?.supervisors ?? '-'} />
                     <SummaryCard label="Non Staff" value={summary?.non_staff ?? '-'} />
@@ -544,14 +548,13 @@ export default function ScoreReportPanel({ locations, regionals, apiBase = '/api
                     </table>
                 </div>
 
-                {report && report.pagination.last_page > 1 && (
-                    <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-xs font-bold text-gray-400">
-                        <span>Halaman {report.pagination.current_page} dari {report.pagination.last_page}</span>
-                        <div className="flex gap-2">
-                            <button type="button" disabled={report.pagination.current_page <= 1 || loading} onClick={() => loadReport(report.pagination.current_page - 1)} className="rounded-lg border border-gray-200 p-2 text-gray-500 disabled:text-gray-200"><ChevronLeft size={15} /></button>
-                            <button type="button" disabled={report.pagination.current_page >= report.pagination.last_page || loading} onClick={() => loadReport(report.pagination.current_page + 1)} className="rounded-lg border border-gray-200 p-2 text-gray-500 disabled:text-gray-200"><ChevronRight size={15} /></button>
-                        </div>
-                    </div>
+                {report && (
+                    <PaginationControls
+                        page={report.pagination.current_page}
+                        totalPages={report.pagination.last_page}
+                        onPageChange={(page) => { void loadReport(page); }}
+                        disabled={loading}
+                    />
                 )}
             </section>
         </div>

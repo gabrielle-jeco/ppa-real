@@ -43,6 +43,7 @@ class TeamScoreReportTest extends TestCase
             $table->date('effective_from')->nullable();
             $table->date('effective_until')->nullable();
         });
+        $this->createBackupTables();
         Schema::create('attendances', function (Blueprint $table) {
             $table->id();
             $table->string('user_id');
@@ -188,4 +189,3 @@ class TeamScoreReportTest extends TestCase
         return User::where('username', 'spv-1')->firstOrFail();
     }
 }
-

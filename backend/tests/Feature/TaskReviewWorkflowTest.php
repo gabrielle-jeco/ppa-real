@@ -56,7 +56,9 @@ class TaskReviewWorkflowTest extends TestCase
             $table->date('effective_from')->nullable();
             $table->date('effective_until')->nullable();
             $table->timestamps();
+            $table->unsignedBigInteger('backup_request_id')->nullable();
         });
+        $this->createBackupTables();
         Schema::create('tasks', function (Blueprint $table) {
             $table->id();
             $table->string('employee_id');

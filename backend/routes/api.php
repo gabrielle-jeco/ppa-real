@@ -38,10 +38,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/manager/evaluation-reopen-requests/{evaluationReopenRequest}/review', [App\Http\Controllers\EvaluationReopenRequestController::class, 'review']);
 
     Route::get('/organization-chart', [App\Http\Controllers\OrganizationChartController::class, 'index']);
+    Route::patch('/organization-chart/groups/{supervisor}/status', [App\Http\Controllers\OrganizationChartController::class, 'updateGroup']);
     Route::patch('/organization-chart/layout', [App\Http\Controllers\OrganizationChartController::class, 'updateLayout']);
     Route::post('/organization-chart/relations', [App\Http\Controllers\OrganizationChartController::class, 'storeRelation']);
     Route::patch('/organization-chart/relations/{reportingLine}', [App\Http\Controllers\OrganizationChartController::class, 'updateRelation']);
     Route::delete('/organization-chart/relations/{reportingLine}', [App\Http\Controllers\OrganizationChartController::class, 'destroyRelation']);
+    Route::patch('/organization-chart/nodes/{username}/placement', [App\Http\Controllers\OrganizationChartController::class, 'placeNode']);
     Route::post('/organization-chart/nodes', [App\Http\Controllers\OrganizationChartController::class, 'storeNode']);
     Route::patch('/organization-chart/nodes/{username}', [App\Http\Controllers\OrganizationChartController::class, 'updateNode']);
     Route::delete('/organization-chart/nodes/{username}', [App\Http\Controllers\OrganizationChartController::class, 'destroyNode']);

@@ -10,7 +10,6 @@ type Attachment = { point: Point; anchor: EdgeAnchor };
 export type RouteMotion = {
     route: EdgeRoute;
     size: { width: number; height: number };
-    weights: number[];
     initialStart: Point;
     initialEnd: Point;
     start: Attachment;
@@ -64,90 +63,60 @@ export function createRouteMotion(route: EdgeRoute, startCard: CardGeometry, end
     startAnchor: EdgeAnchor, endAnchor: EdgeAnchor, size: { width: number; height: number }): RouteMotion {
     const start = { anchor: startAnchor, point: anchorPoint(startCard, startAnchor) };
     const end = { anchor: endAnchor, point: anchorPoint(endCard, endAnchor) };
-    const path = [start.point, ...route.points.map(point => ({ x: point.x * size.width, y: point.y * size.height })), end.point];
-    const distances = [0];
-    for (let index = 1; index < path.length; index++) {
-        distances[index] = distances[index - 1] + Math.hypot(path[index].x - path[index - 1].x, path[index].y - path[index - 1].y);
-    }
-    const length = distances[distances.length - 1];
-    const weights = route.points.map((_, index) => 1 - (length > 0 ? distances[index + 1] / length : (index + 1) / (route.points.length + 1)));
-    return { route, size, weights, initialStart: start.point, initialEnd: end.point, start, end, startCard, endCard };
+    return { route, size, initialStart: start.point, initialEnd: end.point, start, end, startCard, endCard };
 }
 
-export function routeFromMotion(motion: RouteMotion): EdgeRoute {
-    const startDelta = { x: motion.start.point.x - motion.initialStart.x, y: motion.start.point.y - motion.initialStart.y };
-    const endDelta = { x: motion.end.point.x - motion.initialEnd.x, y: motion.end.point.y - motion.initialEnd.y };
-    const stationary = startDelta.x === 0 && startDelta.y === 0 && endDelta.x === 0 && endDelta.y === 0;
+export function routeFromMotion(motion: RouteMotion, constrain = true): EdgeRoute {
     return {
-        points: motion.route.points.map((point, index) => {
-            if (stationary) return { ...point };
-            const weight = motion.weights[index];
-            return {
-                x: Number(clamp(point.x + (startDelta.x * weight + endDelta.x * (1 - weight)) / motion.size.width, 0, 1).toFixed(5)),
-                y: Number(clamp(point.y + (startDelta.y * weight + endDelta.y * (1 - weight)) / motion.size.height, 0, 1).toFixed(5)),
-            };
-        }),
+        points: motion.route.points.map(point => ({
+            x: constrain ? clamp(point.x, 0, 1) : point.x,
+            y: constrain ? clamp(point.y, 0, 1) : point.y,
+        })),
         start_anchor: motion.start.anchor,
         end_anchor: motion.end.anchor,
     };
 }
 
-export function moveCardConnection(motion: RouteMotion, end: EdgeEnd, card: CardGeometry): RouteMotion {
+function nearestAttachment(card: CardGeometry, pointer: Point, preferred: AnchorSide): Attachment {
+    const sides: AnchorSide[] = [preferred, ...(['top', 'right', 'bottom', 'left'] as AnchorSide[]).filter(side => side !== preferred)];
+    return sides.map(side => project(card, side, pointer)).reduce((best, candidate) =>
+        Math.hypot(candidate.point.x - pointer.x, candidate.point.y - pointer.y) < Math.hypot(best.point.x - pointer.x, best.point.y - pointer.y) - epsilon ? candidate : best);
+}
+
+export function nearestAnchor(card: CardGeometry, target: Point): EdgeAnchor {
+    return nearestAttachment(card, target, 'top').anchor;
+}
+
+export function moveCardConnection(motion: RouteMotion, end: EdgeEnd, card: CardGeometry, constrain = true): RouteMotion {
     const otherEnd = end === 'start' ? 'end' : 'start';
     const moving = motion[end];
-    const other = motion[otherEnd];
-    const otherCard = end === 'start' ? motion.endCard : motion.startCard;
+    const endpoint = end === 'start' ? motion.route.points[0] : motion.route.points.at(-1);
+    const target = endpoint ? { x: endpoint.x * motion.size.width, y: endpoint.y * motion.size.height } : motion[otherEnd].point;
     let next = project(card, moving.anchor.side, moving.point);
-    const delta = { x: next.point.x - moving.point.x, y: next.point.y - moving.point.y };
-    let nextOther = project(otherCard, other.anchor.side, { x: other.point.x + delta.x, y: other.point.y + delta.y });
-    const tangent = horizontalSide(moving.anchor.side) ? 'x' : 'y';
-    const pushed = Math.abs(delta[tangent]) > epsilon;
-    const blocked = Math.abs(nextOther.point[tangent] - other.point[tangent] - delta[tangent]) > epsilon;
-    const adjusted = routeFromMotion({ ...motion, [end]: next, [otherEnd]: nextOther });
-    const pointAt = (edgeEnd: EdgeEnd, fallback: Point) => {
-        const point = edgeEnd === 'start' ? adjusted.points[0] : adjusted.points[adjusted.points.length - 1];
-        return point ? { x: point.x * motion.size.width, y: point.y * motion.size.height } : fallback;
-    };
-    const movingTarget = pointAt(end, nextOther.point);
-    const otherTarget = pointAt(otherEnd, next.point);
-
-    // Keep sliding on the current sides until their available space is exhausted.
-    const nextSide = sideToward(card, movingTarget, moving.anchor.side);
-    if (nextSide !== moving.anchor.side && ((pushed && blocked) || facesInward(card, moving.anchor.side, movingTarget))) {
-        next = project(card, nextSide, next.point);
+    // Tangential movement keeps the canvas attachment pinned; change sides only when the segment would cross the card.
+    if (facesInward(card, next.anchor.side, target)) next = nearestAttachment(card, target, next.anchor.side);
+    const otherCard = end === 'start' ? motion.endCard : motion.startCard;
+    let other = motion[otherEnd];
+    if (!endpoint) {
+        const delta = { x: next.point.x - moving.point.x, y: next.point.y - moving.point.y };
+        other = project(otherCard, other.anchor.side, { x: other.point.x + delta.x, y: other.point.y + delta.y });
+        if (facesInward(otherCard, other.anchor.side, next.point)) other = nearestAttachment(otherCard, next.point, other.anchor.side);
     }
-    const otherSide = sideToward(otherCard, otherTarget, other.anchor.side);
-    const otherTangent = horizontalSide(other.anchor.side) ? 'x' : 'y';
-    const otherBlocked = Math.abs(delta[otherTangent]) > epsilon
-        && Math.abs(nextOther.point[otherTangent] - other.point[otherTangent] - delta[otherTangent]) > epsilon;
-    if (otherSide !== other.anchor.side && ((pushed && blocked) || otherBlocked || facesInward(otherCard, other.anchor.side, otherTarget))) {
-        nextOther = project(otherCard, otherSide, nextOther.point);
-    }
-    return {
-        ...motion,
-        [end]: next,
-        [otherEnd]: nextOther,
-        ...(end === 'start' ? { startCard: card } : { endCard: card }),
-    };
+    void constrain;
+    return { ...motion, [end]: next, [otherEnd]: other, ...(end === 'start' ? { startCard: card } : { endCard: card }) };
 }
 
 export function moveEndpoint(motion: RouteMotion, end: EdgeEnd, pointer: Point): EdgeRoute {
     const card = end === 'start' ? motion.startCard : motion.endCard;
-    const side = motion.route.points.length === 0
-        ? sideToward(card, pointer, motion[end].anchor.side)
-        : motion[end].anchor.side;
-    return routeFromMotion({ ...motion, [end]: project(card, side, pointer) });
+    const attachment = nearestAttachment(card, pointer, motion[end].anchor.side);
+    const route = routeFromMotion({ ...motion, [end]: attachment });
+    const point = { x: clamp(pointer.x / motion.size.width, 0, 1), y: clamp(pointer.y / motion.size.height, 0, 1) };
+    route.points = end === 'start' ? [point, ...route.points] : [...route.points, point];
+    return route;
 }
 
 function attachmentToward(card: CardGeometry, previous: Attachment, target: Point): Attachment {
-    const side = sideToward(card, target, previous.anchor.side);
-    if (side === previous.anchor.side) return previous;
-    const dx = target.x - card.centerX;
-    const dy = target.y - card.centerY;
-    const scale = horizontalSide(side)
-        ? ((side === 'top' ? card.top : card.bottom) - card.centerY) / dy
-        : ((side === 'left' ? card.left : card.right) - card.centerX) / dx;
-    return project(card, side, { x: card.centerX + dx * scale, y: card.centerY + dy * scale });
+    return nearestAttachment(card, target, previous.anchor.side);
 }
 
 export function moveWaypoint(motion: RouteMotion, index: number, pointer: Point): EdgeRoute {

@@ -28,6 +28,12 @@ class ReportingLine extends Model
 
     protected static function booted(): void
     {
+        static::saved(function (ReportingLine $line) {
+            if ($line->relation_type === 'permanent') app(\App\Services\BackupMirrorService::class)->syncForCrew([$line->subordinate_id, $line->getOriginal('subordinate_id')]);
+        });
+        static::deleted(function (ReportingLine $line) {
+            if ($line->relation_type === 'permanent') app(\App\Services\BackupMirrorService::class)->syncForCrew([$line->subordinate_id]);
+        });
         static::addGlobalScope('effective_backup_period', function (Builder $builder) {
             $today = Carbon::today()->toDateString();
 
@@ -36,7 +42,18 @@ class ReportingLine extends Model
                     ->orWhere(function (Builder $backup) use ($today) {
                         $backup->where('relation_type', 'backup')
                             ->whereDate('effective_from', '<=', $today)
-                            ->whereDate('effective_until', '>=', $today);
+                            ->whereDate('effective_until', '>=', $today)
+                            ->whereExists(function ($request) use ($today) {
+                                $request->selectRaw('1')->from('supervisor_backup_requests as mirror_request')
+                                    ->join('reporting_lines as mirror_source', 'mirror_source.leader_id', '=', 'mirror_request.requester_id')
+                                    ->whereColumn('mirror_request.id', 'reporting_lines.backup_request_id')
+                                    ->whereColumn('mirror_request.backup_supervisor_id', 'reporting_lines.leader_id')
+                                    ->where('mirror_request.status', 'approved')
+                                    ->whereDate('mirror_request.start_date', '<=', $today)
+                                    ->whereDate('mirror_request.end_date', '>=', $today)
+                                    ->whereColumn('mirror_source.subordinate_id', 'reporting_lines.subordinate_id')
+                                    ->where('mirror_source.relation_type', 'permanent')->where('mirror_source.status', 'active');
+                            });
                     });
             });
         });

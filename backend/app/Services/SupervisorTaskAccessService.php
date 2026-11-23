@@ -55,6 +55,10 @@ class SupervisorTaskAccessService
             ->whereDate('backup_requests.start_date', '<=', $date->toDateString())
             ->whereDate('backup_requests.end_date', '>=', $date->toDateString())
             ->whereIn('supervisor_backup_assignments.subordinate_id', $crewIds)
+            ->whereExists(fn($source) => $source->selectRaw('1')->from('reporting_lines as mirror_source')
+                ->whereColumn('mirror_source.leader_id', 'backup_requests.requester_id')
+                ->whereColumn('mirror_source.subordinate_id', 'supervisor_backup_assignments.subordinate_id')
+                ->where('mirror_source.relation_type', 'permanent')->where('mirror_source.status', 'active'))
             ->get([
                 'supervisor_backup_assignments.subordinate_id',
                 'backup_requests.requester_id',

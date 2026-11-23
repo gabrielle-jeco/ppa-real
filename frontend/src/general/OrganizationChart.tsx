@@ -1,10 +1,17 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { anchorPoint, createRouteMotion, defaultAnchor, moveCardConnection, moveEndpoint, moveWaypoint, routeFromMotion } from './organizationChartGeometry';
+import { anchorPoint, createRouteMotion, nearestAnchor, moveCardConnection, moveEndpoint, moveWaypoint, routeFromMotion } from './organizationChartGeometry';
 import type { EdgeEnd, EdgeRoute, RouteMotion } from './organizationChartGeometry';
+import { growCanvasLayout, compactRoute, columnStarRoute, radialAnchor, legacyCanvas, convertLegacyNodes, preserveLegacyRoutes, fitNewMembers, CARD_WIDTH, CARD_HEIGHT, CANVAS_PADDING } from './organizationChartLayout';
+import type { CanvasExtent, CanvasSize } from './organizationChartLayout';
+import { downloadOrganizationPdf } from './organizationChartPdf';
+import type { PdfMode } from './organizationChartPdf';
+import { hybridChart, hybridLayout, spaceContains, retiredSpaceMembers, fitSpaceMembers } from './organizationChartHybrid';
+import { buildOrganizationGroups, organizationRoleLabel } from './organizationChartGroups';
 import {
     AlertTriangle,
     Check,
     ChevronDown,
+    Download,
     GitBranch,
     GripVertical,
     Link2,
@@ -36,6 +43,12 @@ type ChartNode = {
     can_edit: boolean;
     can_delete: boolean;
     active_children_count: number;
+    group_supervisor?: string;
+    group_members?: string[];
+    space_size?: CanvasSize;
+    space_id?: string;
+    space_active?: boolean;
+    space_index?: number;
 };
 type ChartEdge = {
     id: number;
@@ -47,6 +60,7 @@ type ChartEdge = {
     effective_until?: string | null;
     is_currently_effective: boolean;
     can_manage: boolean;
+    group_supervisor?: string;
 };
 type Candidate = Omit<ChartNode, 'leader_ids' | 'inactive_leader_ids' | 'can_edit' | 'can_delete' | 'active_children_count'>;
 type ChartData = {
@@ -64,6 +78,7 @@ type ChartData = {
 
 type NormalizedPoint = { x: number; y: number };
 type ChartLayout = {
+    canvas?: CanvasSize;
     nodes: Record<string, NormalizedPoint>;
     edges: Record<string, EdgeRoute>;
 };
@@ -81,17 +96,16 @@ type CardDragPreview = {
     top: number;
     deltaX: number;
     deltaY: number;
-    nodePosition: NormalizedPoint;
+    nodes: Record<string, NormalizedPoint>;
+    canvas: CanvasSize;
+    shift: NormalizedPoint;
     routes: Record<string, EdgeRoute>;
 };
 
 type SelectOption = { value: string; label: string; secondary?: string };
 
 const tierOrder: Tier[] = ['store_manager', 'chief_operation', 'supervisor', 'service_crew'];
-const CARD_WIDTH = 230;
-const CARD_HEIGHT = 132;
 const CANVAS_HEIGHT = 760;
-const CANVAS_PADDING = 24;
 const ALL_SUPERVISORS = '__all__';
 const clamp = (value: number, minimum: number, maximum: number) => Math.min(maximum, Math.max(minimum, value));
 
@@ -223,6 +237,7 @@ function NodeModal({ data, node, onClose, onSaved }: {
                     username: selectedUser.username,
                     job_level_id: Number(jobLevelId),
                     leader_ids: leaderIds,
+                    ...(!editing && selectedUser.tier === 'service_crew' ? { initial_status: 'inactive' } : {}),
                 }),
             });
             await responseMessage(response);
@@ -306,9 +321,13 @@ function NodeModal({ data, node, onClose, onSaved }: {
 }
 
 export default function OrganizationChart() {
-    const [data, setData] = useState<ChartData | null>(null);
+    const [sourceData, setData] = useState<ChartData | null>(null);
+    const data = React.useMemo(() => sourceData ? { ...sourceData, ...hybridChart(sourceData.nodes, sourceData.edges) } : null, [sourceData]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
+    const [pdfMode, setPdfMode] = useState<PdfMode>('both');
+    const [pdfBusy, setPdfBusy] = useState(false);
+    const [canvasBounds, setCanvasBounds] = useState<CanvasSize | null>(null);
     const [layoutSaving, setLayoutSaving] = useState(false);
     const [error, setError] = useState('');
     const [locationId, setLocationId] = useState('');
@@ -325,7 +344,11 @@ export default function OrganizationChart() {
     const [selectedEdgeId, setSelectedEdgeId] = useState<number | null>(null);
     const [hoveredEdgeId, setHoveredEdgeId] = useState<number | null>(null);
     const [modalNode, setModalNode] = useState<ChartNode | Candidate | null | undefined>(undefined);
+    const containerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLDivElement | null>(null);
+    const canvasScrollRef = useRef<HTMLDivElement | null>(null);
+    const verticalScrollRef = useRef<HTMLElement | null>(null);
+    const pendingCanvasScrollRef = useRef({ x: 0, y: 0 });
     const nodeRefs = useRef(new Map<string, HTMLDivElement>());
     const layoutNodesRef = useRef<Record<string, NormalizedPoint>>({});
     const edgeRoutesRef = useRef<Record<string, EdgeRoute>>({});
@@ -337,9 +360,38 @@ export default function OrganizationChart() {
     const cardDragPreviewRef = useRef<CardDragPreview | null>(null);
     const [boardSize, setBoardSize] = useState({ width: 900, height: CANVAS_HEIGHT });
 
-    const activeTiers = data ? tierOrder.filter((tier) => data.nodes.some((node) => node.tier === tier)) : [];
-    const largestTier = data ? Math.max(1, ...activeTiers.map((tier) => data.nodes.filter((node) => node.tier === tier).length)) : 1;
-    const requiredCanvasWidth = Math.max(900, largestTier * (CARD_WIDTH + 32) + CANVAS_PADDING * 2);
+    const automaticLayout = React.useMemo(() => hybridLayout(data?.nodes || []), [data?.nodes]);
+    const requiredCanvasWidth = canvasBounds?.width || automaticLayout.width;
+    const canvasHeight = canvasBounds?.height || automaticLayout.height;
+    const renderCanvas = cardDragPreview?.canvas || { width: requiredCanvasWidth, height: canvasHeight };
+
+    const organization = React.useMemo(() => buildOrganizationGroups(sourceData?.nodes || [], sourceData?.edges || [], sourceData?.parent_nodes || []), [sourceData]);
+    const automaticRoutes = React.useMemo(() => {
+        const result: Record<string, EdgeRoute> = {};
+        if (!data) return result;
+        const cards = new Map(data.nodes.map((node) => {
+            const saved = layoutNodes[node.username];
+            const position = saved ? {
+                left: CANVAS_PADDING + saved.x * (requiredCanvasWidth - CARD_WIDTH - CANVAS_PADDING * 2),
+                top: 12 + saved.y * (canvasHeight - CARD_HEIGHT - 24),
+            } : automaticLayout.positions[node.username];
+            return [node.username, { ...position, right: position.left + (node.space_size?.width || CARD_WIDTH), bottom: position.top + (node.space_size?.height || CARD_HEIGHT), centerX: position.left + ((node.space_size?.width || CARD_WIDTH) / 2), centerY: position.top + ((node.space_size?.height || CARD_HEIGHT) / 2) }];
+        }));
+        const obstacles = [...cards.values()];
+        data.edges.filter((edge) => edge.status === 'active' && (edge.relation_type === 'permanent' || edge.is_currently_effective)).forEach((edge) => {
+            const leader = cards.get(edge.leader_id), subordinate = cards.get(edge.subordinate_id);
+            if (!leader || !subordinate) return;
+            const children = data.edges.filter(item => item.leader_id === edge.leader_id && item.status === 'active' &&
+                (item.relation_type === 'permanent' || item.is_currently_effective) && data.nodes.some(node => node.username === item.subordinate_id && node.tier === 'service_crew' && !node.group_supervisor));
+            if (children.some(item => item.id === edge.id) && children.length <= 8 && data.nodes.some(node => node.username === edge.leader_id && node.tier === 'supervisor') &&
+                (subordinate.right <= leader.left || subordinate.left >= leader.right)) {
+                const left = subordinate.centerX < leader.centerX;
+                const peers = children.map(item => ({ id: item.id, card: cards.get(item.subordinate_id) })).filter(item => item.card && (item.card.centerX < leader.centerX) === left).sort((a,b) => a.card!.centerY - b.card!.centerY);
+                result[String(edge.id)] = columnStarRoute(leader, subordinate, peers.findIndex(item => item.id === edge.id), peers.length);
+            } else result[String(edge.id)] = compactRoute(leader, subordinate, obstacles, { width: requiredCanvasWidth, height: canvasHeight });
+        });
+        return result;
+    }, [data, layoutNodes, automaticLayout, requiredCanvasWidth, canvasHeight]);
 
     const load = async (requestedLocation?: string, requestedSupervisor = supervisorId) => {
         const revision = ++loadRevisionRef.current;
@@ -351,10 +403,48 @@ export default function OrganizationChart() {
             if (requestedLocation) query.set('location_id', requestedLocation);
             if (requestedSupervisor && requestedSupervisor !== ALL_SUPERVISORS) query.set('supervisor_id', requestedSupervisor);
             const response = await fetch(`/api/organization-chart?${query}`, { headers: authHeaders() });
-            const payload = await responseMessage(response) as ChartData;
+            const original = await responseMessage(response) as ChartData;
+            const payload = { ...original, ...hybridChart(original.nodes, original.edges) };
             if (revision !== loadRevisionRef.current) return;
-            const nodes = payload.layout?.nodes || {};
-            const edges = payload.layout?.edges || {};
+            const savedNodes = payload.layout?.nodes || {};
+            const legacy = !payload.layout?.canvas && (Object.keys(savedNodes).length > 0 || Object.keys(payload.layout?.edges || {}).length > 0);
+            let bounds = payload.layout?.canvas || (legacy ? legacyCanvas(payload.nodes, Math.max(900, (containerRef.current?.clientWidth || 934) - 34)) : null);
+            let nodes = legacy && bounds ? convertLegacyNodes(payload.nodes, savedNodes, bounds) : savedNodes;
+            let edges = legacy && bounds ? preserveLegacyRoutes(nodes, payload.edges.filter((edge) => edge.status === 'active' && (edge.relation_type === 'permanent' || edge.is_currently_effective)), payload.layout?.edges || {}, bounds) : payload.layout?.edges || {};
+            const retired = retiredSpaceMembers(original.nodes, original.edges, savedNodes);
+            if (retired.size) {
+                if (requestedSupervisor !== ALL_SUPERVISORS && retired.has(requestedSupervisor)) {
+                    bounds = null; nodes = {}; edges = {};
+                } else {
+                    nodes = Object.fromEntries(Object.entries(nodes).filter(([id]) => !retired.has(id) && !((id.startsWith('__space__:') || id.startsWith('__group__:')) && retired.has(id.slice(10)))));
+                    const affectedEdges = new Set(original.edges.filter(edge => retired.has(edge.leader_id) || retired.has(edge.subordinate_id)).flatMap(edge => [String(edge.id), String(-edge.id)]));
+                    edges = Object.fromEntries(Object.entries(edges).filter(([id]) => !affectedEdges.has(id)));
+                }
+            }
+            const savedGroups = bounds ? Object.fromEntries(payload.nodes.filter(node => node.group_supervisor && nodes[node.username]).map(node => [node.username, {
+                left: CANVAS_PADDING + nodes[node.username].x * (bounds!.width - CARD_WIDTH - CANVAS_PADDING * 2),
+                top: 12 + nodes[node.username].y * (bounds!.height - CARD_HEIGHT - 24),
+            }])) : {};
+            if (bounds) {
+                const fitted = fitNewMembers(payload.nodes.filter(node => !node.group_supervisor), nodes, edges, bounds);
+                bounds = fitted.canvas; nodes = fitted.nodes; edges = fitted.edges;
+            }
+            const groups = payload.nodes.filter(node => node.group_supervisor);
+            if (bounds && groups.length) {
+                const planned = hybridLayout(payload.nodes);
+                const positions = Object.fromEntries(Object.entries(nodes).map(([id, p]) => [id, { left: CANVAS_PADDING + p.x * (bounds!.width - CARD_WIDTH - CANVAS_PADDING * 2), top: 12 + p.y * (bounds!.height - CARD_HEIGHT - 24) }]));
+                groups.forEach(node => {
+                    const supervisor = positions[node.group_supervisor!] || planned.positions[node.group_supervisor!];
+                    const origin = savedGroups[node.username] || { left: supervisor.left + CARD_WIDTH / 2 - node.space_size!.width / 2, top: supervisor.top + CARD_HEIGHT + 56 };
+                    positions[node.username] = origin;
+                    const members = payload.nodes.filter(member => member.space_id === node.username);
+                    Object.assign(positions, fitSpaceMembers(origin, node.space_size!, members, positions, Boolean(savedGroups[node.username])));
+                });
+                const expanded = growCanvasLayout(positions, edges, bounds, { left: 0, top: 0, right: bounds.width, bottom: bounds.height }, bounds,
+                    Object.fromEntries(groups.map(node => [node.username, node.space_size!])));
+                bounds = expanded.canvas; nodes = expanded.nodes; edges = expanded.routes;
+            }
+            setCanvasBounds(bounds);
             cardDragPreviewRef.current = null;
             setCardDragPreview(null);
             setMovingCard(null);
@@ -365,7 +455,7 @@ export default function OrganizationChart() {
             setDragPoint(null);
             setModalNode(undefined);
             setGeometryReady(false);
-            setData(payload);
+            setData(original);
             setLocationId(payload.location.initial);
             setSupervisorId(requestedSupervisor);
             setLayoutNodes(nodes);
@@ -386,6 +476,14 @@ export default function OrganizationChart() {
     React.useEffect(() => { loadInitialChart(); }, []);
 
     useLayoutEffect(() => {
+        const pending = pendingCanvasScrollRef.current;
+        if (pending.x && canvasScrollRef.current) canvasScrollRef.current.scrollLeft += pending.x;
+        if (pending.y && verticalScrollRef.current) verticalScrollRef.current.scrollTop += pending.y;
+        pendingCanvasScrollRef.current = { x: 0, y: 0 };
+    }, [cardDragPreview, canvasBounds]);
+
+    useLayoutEffect(() => {
+        if (movingCard) return;
         if (!data || !canvasRef.current) {
             setGeometryReady(false);
             return;
@@ -424,12 +522,21 @@ export default function OrganizationChart() {
         nodeRefs.current.forEach((element) => observer.observe(element));
         window.addEventListener('resize', update);
         return () => { observer.disconnect(); window.removeEventListener('resize', update); };
-    }, [data, layoutNodes, boardSize.width, boardSize.height, loading, supervisorId]);
+    }, [data, layoutNodes, boardSize.width, boardSize.height, loading, supervisorId, movingCard]);
 
     const persistLayout = (
         nodes: Record<string, NormalizedPoint> = layoutNodesRef.current,
-        edges: Record<string, EdgeRoute> = edgeRoutesRef.current
+        edges: Record<string, EdgeRoute> = edgeRoutesRef.current,
+        canvas: CanvasSize = { width: boardSize.width, height: boardSize.height }
     ) => {
+        const completeNodes = { ...nodes };
+        if (Object.keys(nodes).length || Object.keys(edges).length) {
+            data?.nodes.forEach((node) => {
+                if (completeNodes[node.username]) return;
+                const p = automaticLayout.positions[node.username];
+                if (p) completeNodes[node.username] = { x: (p.left - CANVAS_PADDING) / Math.max(1, canvas.width - CARD_WIDTH - CANVAS_PADDING * 2), y: (p.top - 12) / Math.max(1, canvas.height - CARD_HEIGHT - 24) };
+            });
+        }
         const revision = ++layoutSaveRevisionRef.current;
         const requestedLocation = locationId;
         const requestedSupervisor = supervisorId && supervisorId !== ALL_SUPERVISORS ? supervisorId : undefined;
@@ -443,12 +550,13 @@ export default function OrganizationChart() {
                     const response = await fetch('/api/organization-chart/layout', {
                         method: 'PATCH',
                         headers: authHeaders(true),
-                        body: JSON.stringify({ location_id: requestedLocation, supervisor_id: requestedSupervisor, nodes, edges }),
+                        body: JSON.stringify({ location_id: requestedLocation, supervisor_id: requestedSupervisor, nodes: completeNodes, edges, canvas }),
                     });
                     const payload = await responseMessage(response) as { layout: ChartLayout };
                     if (revision !== layoutSaveRevisionRef.current || loadRevision !== loadRevisionRef.current) return;
                     const savedNodes = payload.layout?.nodes || {};
                     const savedEdges = payload.layout?.edges || {};
+                    setCanvasBounds(payload.layout.canvas || canvas);
                     setLayoutNodes(savedNodes);
                     setEdgeRoutes(savedEdges);
                     layoutNodesRef.current = savedNodes;
@@ -464,7 +572,25 @@ export default function OrganizationChart() {
         layoutSaveQueueRef.current = save;
         return save;
     };
-    const persistLayoutEvent = React.useEffectEvent(() => { void persistLayout(); });
+    const persistLayoutEvent = React.useEffectEvent((nodes?: Record<string, NormalizedPoint>, routes?: Record<string, EdgeRoute>, canvas?: CanvasSize) => { void persistLayout(nodes, routes, canvas); });
+
+    const commitPlacementEvent = React.useEffectEvent((username: string, transitions: { leader_id: string; status: 'active' | 'inactive' }[], preview: CardDragPreview) => {
+        void (async () => {
+            setBusy(true);
+            try {
+                await layoutSaveQueueRef.current.catch(() => undefined);
+                const response = await fetch(`/api/organization-chart/nodes/${encodeURIComponent(username)}/placement`, {
+                    method: 'PATCH', headers: authHeaders(true), body: JSON.stringify({ location_id: locationId, supervisor_id: supervisorId === ALL_SUPERVISORS ? undefined : supervisorId,
+                        nodes: preview.nodes, edges: preview.routes, canvas: preview.canvas, transitions }),
+                });
+                await responseMessage(response);
+                await load(locationId);
+            } catch (failure) {
+                await load(locationId);
+                setError(failure instanceof Error ? failure.message : 'Perpindahan card tidak dapat disimpan.');
+            } finally { setBusy(false); }
+        })();
+    });
 
     const mutate = async (url: string, method: string, body?: object) => {
         setBusy(true);
@@ -539,7 +665,7 @@ export default function OrganizationChart() {
         data?.edges.forEach((edge) => {
             if (edge.leader_id !== username && edge.subordinate_id !== username) return;
             if (edge.status !== 'active' || (edge.relation_type !== 'permanent' && !edge.is_currently_effective)) return;
-            const points = edgeRoutesRef.current[String(edge.id)]?.points || defaultRoute(edge);
+            const points = edgeRoutesRef.current[String(edge.id)]?.points ?? automaticRoutes[String(edge.id)]?.points ?? [];
             const endpoints = edgeEndpoints(edge);
             const startCard = geometryFor(edge.leader_id);
             const endCard = geometryFor(edge.subordinate_id);
@@ -553,75 +679,125 @@ export default function OrganizationChart() {
         return initialRoutes;
     });
 
+    const captureCanvasSnapshot = React.useEffectEvent(() => {
+        const positions: Record<string, { left: number; top: number }> = {};
+        const routes = { ...edgeRoutesRef.current };
+        data?.nodes.forEach((node) => {
+            const card = geometryFor(node.username);
+            if (card) positions[node.username] = { left: card.left, top: card.top };
+        });
+        data?.edges.filter((edge) => edge.status === 'active' && (edge.relation_type === 'permanent' || edge.is_currently_effective)).forEach((edge) => {
+            const endpoints = edgeEndpoints(edge);
+            if (endpoints) routes[String(edge.id)] = { points: [...routeFor(edge)], start_anchor: endpoints.startAnchor, end_anchor: endpoints.endAnchor };
+        });
+        return { positions, routes };
+    });
+
     React.useEffect(() => {
         if (!movingCard || !data || !canvasRef.current) return;
-        const movableTiers = tierOrder.filter((tier) => data.nodes.some((item) => item.tier === tier));
-        if (movableTiers.length === 0) return;
         const node = data.nodes.find((item) => item.username === movingCard.username);
         if (!node) return;
-        const initialCanvasRect = canvasRef.current.getBoundingClientRect();
-        const initialCardRect = nodeRefs.current.get(node.username)?.getBoundingClientRect();
-        const initialLeft = initialCardRect ? initialCardRect.left - initialCanvasRect.left : 0;
-        const initialTop = initialCardRect ? initialCardRect.top - initialCanvasRect.top : 0;
-        const initialRoutes = captureCardRoutes(node.username, { width: initialCanvasRect.width, height: initialCanvasRect.height });
+        const canvas = canvasRef.current;
+        const initialCanvasRect = canvas.getBoundingClientRect();
+        const sourceSize = { width: initialCanvasRect.width, height: initialCanvasRect.height };
+        const snapshot = captureCanvasSnapshot();
+        const initialPosition = snapshot.positions[node.username];
+        if (!initialPosition) return;
+        const carried = node.group_supervisor ? data.nodes.filter(item => !item.group_supervisor && item.tier === 'service_crew' && snapshot.positions[item.username] && spaceContains({ ...initialPosition, ...node.space_size! }, snapshot.positions[item.username])) : [];
+        const movedIds = [node.username, ...carried.map(item => item.username)];
+        const routeMotions = Object.fromEntries(movedIds.map(id => [id, captureCardRoutes(id, sourceSize)]));
+        let extent: CanvasExtent = { left: 0, top: 0, right: sourceSize.width, bottom: sourceSize.height };
+        let shift = { x: 0, y: 0 };
+        let pointer: { clientX: number; clientY: number } | null = null;
+        let vertical = canvas.parentElement;
+        while (vertical && vertical !== document.body) {
+            if (/(auto|scroll)/.test(getComputedStyle(vertical).overflowY) && vertical.scrollHeight > vertical.clientHeight + 1) break;
+            vertical = vertical.parentElement;
+        }
+        const verticalScroll = vertical && vertical !== document.body ? vertical : document.scrollingElement as HTMLElement;
+        verticalScrollRef.current = verticalScroll;
         layoutSaveRevisionRef.current += 1;
-        const move = (event: PointerEvent) => {
-            const canvas = canvasRef.current;
-            if (!canvas) return;
+        const move = (event: { clientX: number; clientY: number }) => {
+            pointer = event;
             const rect = canvas.getBoundingClientRect();
-            const laneIndex = movableTiers.indexOf(node.tier);
-            const laneHeight = rect.height / movableTiers.length;
-            const xRange = Math.max(1, rect.width - CARD_WIDTH - CANVAS_PADDING * 2);
-            const yPadding = 12;
-            const yRange = Math.max(1, laneHeight - CARD_HEIGHT - yPadding * 2);
-            const left = clamp(event.clientX - rect.left - movingCard.offsetX, CANVAS_PADDING, rect.width - CARD_WIDTH - CANVAS_PADDING);
-            const laneTop = laneIndex * laneHeight;
-            const top = clamp(event.clientY - rect.top - movingCard.offsetY, laneTop + yPadding, laneTop + laneHeight - CARD_HEIGHT - yPadding);
-            const previewRoutes: Record<string, EdgeRoute> = {};
-            Object.entries(initialRoutes).forEach(([edgeId, route]) => {
-                const card = {
-                    left, right: left + CARD_WIDTH, top, bottom: top + CARD_HEIGHT,
-                    centerX: left + CARD_WIDTH / 2, centerY: top + CARD_HEIGHT / 2,
-                };
-                route.motion = moveCardConnection(route.motion, route.end, card);
-                previewRoutes[edgeId] = routeFromMotion(route.motion);
+            // Read the committed origin so batched pointer events cannot introduce drift.
+            const left = event.clientX - rect.left - movingCard.offsetX - Number(canvas.dataset.originX || 0);
+            const top = event.clientY - rect.top - movingCard.offsetY - Number(canvas.dataset.originY || 0);
+            const rawRoutes = { ...snapshot.routes };
+            const positions = { ...snapshot.positions, [node.username]: { left, top } };
+            carried.forEach(item => { const initial = snapshot.positions[item.username]; positions[item.username] = { left: initial.left + left - initialPosition.left, top: initial.top + top - initialPosition.top }; });
+            movedIds.forEach(id => {
+                const moving = data.nodes.find(item => item.username === id)!, position = positions[id];
+                const width = moving.space_size?.width || CARD_WIDTH, height = moving.space_size?.height || CARD_HEIGHT;
+                Object.entries(routeMotions[id]).forEach(([edgeId, route]) => {
+                    route.motion = moveCardConnection(route.motion, route.end, { ...position, right: position.left + width, bottom: position.top + height, centerX: position.left + width / 2, centerY: position.top + height / 2 }, false);
+                    rawRoutes[edgeId] = routeFromMotion(route.motion, false);
+                });
             });
+            const expanded = growCanvasLayout(positions, rawRoutes, sourceSize, extent, {
+                width: canvasScrollRef.current?.clientWidth || sourceSize.width,
+                height: verticalScroll === document.scrollingElement ? window.innerHeight : verticalScroll.clientHeight,
+            }, Object.fromEntries(data.nodes.filter(item => item.group_supervisor).map(item => [item.username, item.space_size!])));
+            extent = expanded.extent;
+            pendingCanvasScrollRef.current.x += expanded.shift.x - shift.x;
+            pendingCanvasScrollRef.current.y += expanded.shift.y - shift.y;
+            shift = expanded.shift;
             const preview: CardDragPreview = {
-                username: node.username,
-                left,
-                top,
-                deltaX: left - initialLeft,
-                deltaY: top - initialTop,
-                nodePosition: {
-                    x: Number(((left - CANVAS_PADDING) / xRange).toFixed(5)),
-                    y: Number(((top - laneTop - yPadding) / yRange).toFixed(5)),
-                },
-                routes: previewRoutes,
+                username: node.username, left: left + shift.x, top: top + shift.y,
+                deltaX: left - initialPosition.left, deltaY: top - initialPosition.top,
+                nodes: expanded.nodes, routes: expanded.routes, canvas: expanded.canvas, shift,
             };
             cardDragPreviewRef.current = preview;
             setCardDragPreview(preview);
         };
-        const finish = () => {
-            const preview = cardDragPreviewRef.current;
+        const speed = (coordinate: number, minimum: number, maximum: number) => {
+            if (coordinate < minimum || coordinate > maximum) return 0;
+            if (coordinate < minimum + 40) return -Math.ceil(16 * (minimum + 40 - coordinate) / 40);
+            if (coordinate > maximum - 40) return Math.ceil(16 * (coordinate - maximum + 40) / 40);
+            return 0;
+        };
+        let animation = 0;
+        const autoScroll = () => {
+            if (pointer) {
+                const horizontal = canvasScrollRef.current;
+                const horizontalRect = horizontal?.getBoundingClientRect();
+                const verticalRect = verticalScroll === document.scrollingElement ? { top: 0, bottom: window.innerHeight } : verticalScroll.getBoundingClientRect();
+                const oldX = horizontal?.scrollLeft || 0, oldY = verticalScroll.scrollTop;
+                if (horizontal && horizontalRect) horizontal.scrollLeft += speed(pointer.clientX, Math.max(0, horizontalRect.left), Math.min(window.innerWidth, horizontalRect.right));
+                verticalScroll.scrollTop += speed(pointer.clientY, Math.max(0, verticalRect.top), Math.min(window.innerHeight, verticalRect.bottom));
+                if ((horizontal?.scrollLeft || 0) !== oldX || verticalScroll.scrollTop !== oldY) move(pointer);
+            }
+            animation = requestAnimationFrame(autoScroll);
+        };
+        animation = requestAnimationFrame(autoScroll);
+        const finish = (event: PointerEvent) => {
+            cancelAnimationFrame(animation);
+            const preview = event.type === 'pointercancel' ? null : cardDragPreviewRef.current;
             if (preview) {
-                const nextNodes = { ...layoutNodesRef.current, [preview.username]: preview.nodePosition };
-                const nextRoutes = { ...edgeRoutesRef.current, ...preview.routes };
-                layoutNodesRef.current = nextNodes;
-                edgeRoutesRef.current = nextRoutes;
-                setGeometryReady(false);
-                setLayoutNodes(nextNodes);
-                setEdgeRoutes(nextRoutes);
+                layoutNodesRef.current = preview.nodes; edgeRoutesRef.current = preview.routes;
+                setGeometryReady(false); setLayoutNodes(preview.nodes); setEdgeRoutes(preview.routes);
+                setCanvasBounds(preview.canvas); setBoardSize(preview.canvas);
+                const transitions = node.tier === 'service_crew' && !node.group_supervisor ? data.nodes.filter(item => item.group_supervisor).flatMap(space => {
+                    const origin = snapshot.positions[space.username];
+                    if (!origin) return [];
+                    const size = space.space_size!;
+                    const before = spaceContains({ ...origin, ...size }, initialPosition);
+                    const after = spaceContains({ left: origin.left + preview.shift.x, top: origin.top + preview.shift.y, ...size }, { left: preview.left, top: preview.top });
+                    if (before === after) return [];
+                    return [{ leader_id: space.group_supervisor!, status: after ? 'active' as const : 'inactive' as const }];
+                }) : [];
+                if (transitions.length) commitPlacementEvent(node.username, transitions, preview);
+                else persistLayoutEvent(preview.nodes, preview.routes, preview.canvas);
             }
             cardDragPreviewRef.current = null;
-            setCardDragPreview(null);
-            setMovingCard(null);
-            persistLayoutEvent();
+            setCardDragPreview(null); setMovingCard(null);
         };
         document.body.style.userSelect = 'none';
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', finish, { once: true });
         window.addEventListener('pointercancel', finish, { once: true });
         return () => {
+            cancelAnimationFrame(animation);
             document.body.style.userSelect = '';
             window.removeEventListener('pointermove', move);
             window.removeEventListener('pointerup', finish);
@@ -685,93 +861,56 @@ export default function OrganizationChart() {
     const activeEdges = data.edges.filter((edge) => edge.status === 'active' && (edge.relation_type === 'permanent' || edge.is_currently_effective));
     const selectedEdge = data.edges.find((edge) => edge.id === selectedEdgeId);
     const draggingNode = data.nodes.find((node) => node.username === draggingId);
-    const canvasWidth = Math.max(requiredCanvasWidth, boardSize.width);
-    const laneHeight = CANVAS_HEIGHT / Math.max(1, activeTiers.length);
-    const automaticPosition = (node: ChartNode): NormalizedPoint => {
-        const siblings = data.nodes.filter((item) => item.tier === node.tier);
-        const index = Math.max(0, siblings.findIndex((item) => item.username === node.username));
-        return { x: (index + 1) / (siblings.length + 1), y: 0.5 };
-    };
-    const positionFor = (node: ChartNode) => layoutNodes[node.username] || automaticPosition(node);
+    const canvasWidth = requiredCanvasWidth;
     const cardCoordinates = (node: ChartNode) => {
-        if (cardDragPreview?.username === node.username) {
-            return { left: cardDragPreview.left, top: cardDragPreview.top };
-        }
-        const position = positionFor(node);
-        const laneIndex = Math.max(0, activeTiers.indexOf(node.tier));
-        const xRange = Math.max(1, canvasWidth - CARD_WIDTH - CANVAS_PADDING * 2);
-        const yPadding = 12;
-        const yRange = Math.max(1, laneHeight - CARD_HEIGHT - yPadding * 2);
-        return {
-            left: CANVAS_PADDING + position.x * xRange,
-            top: laneIndex * laneHeight + yPadding + position.y * yRange,
-        };
+        const preview = cardDragPreview?.nodes[node.username];
+        if (preview && cardDragPreview) return { left: CANVAS_PADDING + preview.x * (cardDragPreview.canvas.width - CARD_WIDTH - CANVAS_PADDING * 2), top: 12 + preview.y * (cardDragPreview.canvas.height - CARD_HEIGHT - 24) };
+        const position = layoutNodes[node.username];
+        const base = position ? {
+            left: CANVAS_PADDING + position.x * Math.max(1, canvasWidth - CARD_WIDTH - CANVAS_PADDING * 2),
+            top: 12 + position.y * Math.max(1, canvasHeight - CARD_HEIGHT - 24),
+        } : automaticLayout.positions[node.username] || { left: CANVAS_PADDING, top: 12 };
+        return { left: base.left + (cardDragPreview?.shift.x || 0), top: base.top + (cardDragPreview?.shift.y || 0) };
     };
     const geometryFor = (username: string) => {
-        const nodeGeometry = geometry[username];
-        if (!nodeGeometry || cardDragPreview?.username !== username) return nodeGeometry;
-        return {
-            left: nodeGeometry.left + cardDragPreview.deltaX,
-            right: nodeGeometry.right + cardDragPreview.deltaX,
-            top: nodeGeometry.top + cardDragPreview.deltaY,
-            bottom: nodeGeometry.bottom + cardDragPreview.deltaY,
-            centerX: nodeGeometry.centerX + cardDragPreview.deltaX,
-            centerY: nodeGeometry.centerY + cardDragPreview.deltaY,
-        };
+        const card = geometry[username];
+        if (!card || !cardDragPreview) return card;
+        const node = data.nodes.find(item => item.username === username);
+        const next = node && cardCoordinates(node);
+        const dx = next ? next.left - card.left : cardDragPreview.shift.x;
+        const dy = next ? next.top - card.top : cardDragPreview.shift.y;
+        return { left: card.left + dx, right: card.right + dx, top: card.top + dy, bottom: card.bottom + dy, centerX: card.centerX + dx, centerY: card.centerY + dy };
     };
     const edgeEndpoints = (edge: ChartEdge) => {
         const leader = geometryFor(edge.leader_id);
         const subordinate = geometryFor(edge.subordinate_id);
         if (!leader || !subordinate) return null;
-        const outgoing = activeEdges.filter((item) => item.leader_id === edge.leader_id);
-        const incoming = activeEdges.filter((item) => item.subordinate_id === edge.subordinate_id);
-        const outgoingIndex = outgoing.findIndex((item) => item.id === edge.id);
-        const incomingIndex = incoming.findIndex((item) => item.id === edge.id);
-        const outgoingOffset = (outgoingIndex - (outgoing.length - 1) / 2) * 16;
-        const incomingOffset = (incomingIndex - (incoming.length - 1) / 2) * 16;
-        const route = cardDragPreview?.routes[String(edge.id)] ?? edgeRoutes[String(edge.id)];
+        const route = cardDragPreview?.routes[String(edge.id)] ?? edgeRoutes[String(edge.id)] ?? automaticRoutes[String(edge.id)];
         const customPoints = route?.points;
         const startTarget = customPoints?.[0]
-            ? { x: customPoints[0].x * boardSize.width, y: customPoints[0].y * boardSize.height }
+            ? { x: customPoints[0].x * renderCanvas.width, y: customPoints[0].y * renderCanvas.height }
             : { x: subordinate.centerX, y: subordinate.centerY };
         const lastCustomPoint = customPoints?.[customPoints.length - 1];
         const endTarget = lastCustomPoint
-            ? { x: lastCustomPoint.x * boardSize.width, y: lastCustomPoint.y * boardSize.height }
+            ? { x: lastCustomPoint.x * renderCanvas.width, y: lastCustomPoint.y * renderCanvas.height }
             : { x: leader.centerX, y: leader.centerY };
-        const startAnchor = route?.start_anchor ?? defaultAnchor(leader, startTarget, outgoingOffset);
-        const endAnchor = route?.end_anchor ?? defaultAnchor(subordinate, endTarget, incomingOffset);
+        const startAnchor = route?.start_anchor ?? (customPoints?.length ? nearestAnchor(leader, startTarget) : radialAnchor(leader, startTarget));
+        const endAnchor = route?.end_anchor ?? (customPoints?.length ? nearestAnchor(subordinate, endTarget) : radialAnchor(subordinate, endTarget));
         return {
             start: anchorPoint(leader, startAnchor),
             end: anchorPoint(subordinate, endAnchor),
             startAnchor,
             endAnchor,
-            horizontal: startAnchor.side === 'left' || startAnchor.side === 'right',
-            routeOffset: (outgoingIndex - (outgoing.length - 1) / 2) * 12 + (incomingIndex - (incoming.length - 1) / 2) * 12,
         };
-    };
-    const defaultRoute = (edge: ChartEdge): NormalizedPoint[] => {
-        const endpoints = edgeEndpoints(edge);
-        if (!endpoints) return [];
-        if (endpoints.horizontal) {
-            const middleX = (endpoints.start.x + endpoints.end.x) / 2 + endpoints.routeOffset;
-            return [
-                { x: middleX / boardSize.width, y: endpoints.start.y / boardSize.height },
-                { x: middleX / boardSize.width, y: endpoints.end.y / boardSize.height },
-            ];
-        }
-        const middleY = (endpoints.start.y + endpoints.end.y) / 2 + endpoints.routeOffset;
-        return [
-            { x: endpoints.start.x / boardSize.width, y: middleY / boardSize.height },
-            { x: endpoints.end.x / boardSize.width, y: middleY / boardSize.height },
-        ];
     };
     const routeFor = (edge: ChartEdge) => cardDragPreview?.routes[String(edge.id)]?.points
         ?? edgeRoutes[String(edge.id)]?.points
-        ?? defaultRoute(edge);
+        ?? automaticRoutes[String(edge.id)]?.points
+        ?? [];
     const edgeCoordinates = (edge: ChartEdge) => {
         const endpoints = edgeEndpoints(edge);
         if (!endpoints) return null;
-        const points = routeFor(edge).map((point) => ({ x: point.x * boardSize.width, y: point.y * boardSize.height }));
+        const points = routeFor(edge).map((point) => ({ x: point.x * renderCanvas.width, y: point.y * renderCanvas.height }));
         return [endpoints.start, ...points, endpoints.end];
     };
     const edgePath = (edge: ChartEdge) => {
@@ -802,6 +941,7 @@ export default function OrganizationChart() {
         return createRouteMotion(route, startCard, endCard, endpoints.startAnchor, endpoints.endAnchor, { width: rect.width, height: rect.height });
     };
     const beginEndpointDrag = (edge: ChartEdge, end: EdgeEnd, event: React.PointerEvent<SVGCircleElement>) => {
+        if (routeFor(edge).length >= 1000) return;
         const motion = captureEdgeMotion(edge);
         if (!motion || event.button !== 0) return;
         event.preventDefault();
@@ -826,24 +966,40 @@ export default function OrganizationChart() {
         const t = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy), 0, 1);
         return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
     };
-    const addWaypoint = (edge: ChartEdge, event: React.MouseEvent<SVGPathElement>) => {
+    const insertWaypoint = (edge: ChartEdge, clientX: number, clientY: number) => {
         const rect = canvasRef.current?.getBoundingClientRect();
         const coordinates = edgeCoordinates(edge);
-        if (!rect || !coordinates) return;
-        const point = { x: clamp((event.clientX - rect.left) / rect.width, 0, 1), y: clamp((event.clientY - rect.top) / rect.height, 0, 1) };
-        const normalizedCoordinates = coordinates.map((item) => ({ x: item.x / rect.width, y: item.y / rect.height }));
-        let segmentIndex = 0;
-        let nearest = Number.POSITIVE_INFINITY;
-        for (let index = 0; index < normalizedCoordinates.length - 1; index += 1) {
-            const distance = distanceToSegment(point, normalizedCoordinates[index], normalizedCoordinates[index + 1]);
-            if (distance < nearest) { nearest = distance; segmentIndex = index; }
+        const motion = captureEdgeMotion(edge);
+        if (!rect || !coordinates || !motion || motion.route.points.length >= 1000) return null;
+        const point = { x: clamp((clientX - rect.left) / rect.width, 0, 1), y: clamp((clientY - rect.top) / rect.height, 0, 1) };
+        const path = coordinates.map(item => ({ x: item.x / rect.width, y: item.y / rect.height }));
+        let index = 0, nearest = Infinity;
+        for (let i = 0; i < path.length - 1; i++) {
+            const distance = distanceToSegment(point, path[i], path[i + 1]);
+            if (distance < nearest) { nearest = distance; index = i; }
         }
-        const points = [...routeFor(edge)];
-        points.splice(segmentIndex, 0, point);
-        const next = { ...edgeRoutesRef.current, [String(edge.id)]: { ...edgeRoutesRef.current[String(edge.id)], points } };
-        updateRoutes(next);
+        const route = routeFromMotion(motion);
+        route.points.splice(index, 0, point);
+        updateRoutes({ ...edgeRoutesRef.current, [String(edge.id)]: route });
         setSelectedEdgeId(edge.id);
-        void persistLayout(layoutNodesRef.current, next);
+        return { index, motion: createRouteMotion(route, motion.startCard, motion.endCard, motion.start.anchor, motion.end.anchor, motion.size) };
+    };
+    const addWaypoint = (edge: ChartEdge, event: React.MouseEvent<SVGPathElement>) => {
+        event.stopPropagation();
+        if (insertWaypoint(edge, event.clientX, event.clientY)) void persistLayout(layoutNodesRef.current, edgeRoutesRef.current);
+    };
+    const beginLineDrag = (edge: ChartEdge, event: React.PointerEvent<SVGPathElement>) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        const { clientX, clientY } = event;
+        const move = (pointer: PointerEvent) => {
+            if (Math.hypot(pointer.clientX - clientX, pointer.clientY - clientY) < 4) return;
+            cleanup();
+            const inserted = insertWaypoint(edge, clientX, clientY);
+            if (inserted) setMovingWaypoint({ edgeId: edge.id, ...inserted });
+        };
+        const cleanup = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', cleanup); window.removeEventListener('pointercancel', cleanup); };
+        window.addEventListener('pointermove', move); window.addEventListener('pointerup', cleanup, { once: true }); window.addEventListener('pointercancel', cleanup, { once: true });
     };
     const removeWaypoint = (edge: ChartEdge, index: number) => {
         const points = routeFor(edge).filter((_, pointIndex) => pointIndex !== index);
@@ -861,13 +1017,24 @@ export default function OrganizationChart() {
         ? `M ${temporaryStart.x} ${temporaryStart.y} L ${dragPoint.x} ${dragPoint.y}`
         : null;
 
+    const exportPdf = async () => {
+        setPdfBusy(true);
+        try {
+            await downloadOrganizationPdf({
+                mode: pdfMode, title: `${data.location.initial} - ${data.location.name} | ${supervisorId === ALL_SUPERVISORS ? 'Seluruh cabang' : data.supervisors.find((person) => person.username === supervisorId)?.name || supervisorId}`,
+                groups: organization,
+            });
+        } catch (reason) { setError(reason instanceof Error ? reason.message : 'PDF gagal dibuat.'); }
+        finally { setPdfBusy(false); }
+    };
+
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <div ref={containerRef} className="flex min-h-0 flex-1 flex-col gap-4">
             <section className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-gray-100 bg-white px-5 py-4 shadow-sm">
                 <div>
                     <div className="flex items-center gap-2 text-primary"><GitBranch size={18} /><p className="text-[10px] font-black uppercase tracking-[0.22em]">Struktur Cabang</p></div>
                     <h2 className="mt-1 text-xl font-black text-gray-900">Organigram Karyawan</h2>
-                    <p className="mt-1 text-xs text-gray-400">Geser card atau titik sambungan pada garis terpilih. Tarik handle rantai ke card atasan untuk membuat relasi.</p>
+                    <p className="mt-1 text-xs text-gray-400">Geser card dan titik garis. Masukkan SC ke kelompok untuk mengaktifkan relasi; keluarkan ke area nonaktif untuk menonaktifkan.</p>
                 </div>
                 <div className="flex w-full flex-wrap items-center justify-end gap-3 lg:w-auto">
                     {data.locations.length > 1 ? (
@@ -878,8 +1045,14 @@ export default function OrganizationChart() {
                         ...data.supervisors.map((supervisor) => ({ value: supervisor.username, label: `${supervisor.username} - ${supervisor.name}`, secondary: supervisor.job_level_name || 'Supervisor' })),
                         { value: ALL_SUPERVISORS, label: 'Seluruh cabang', secondary: 'Tampilkan semua anggota organigram' },
                     ]} /></div>
-                    <button type="button" onClick={() => { layoutNodesRef.current = {}; edgeRoutesRef.current = {}; setLayoutNodes({}); setEdgeRoutes({}); void persistLayout({}, {}); }} disabled={!supervisorId || loading || busy || layoutSaving} className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-3 text-xs font-black text-gray-500 transition hover:border-primary hover:text-primary disabled:opacity-50" title="Rapikan posisi dan jalur"><RotateCcw size={17} /> Rapikan</button>
+                    <button type="button" onClick={() => { layoutNodesRef.current = {}; edgeRoutesRef.current = {}; setLayoutNodes({}); setEdgeRoutes({}); setCanvasBounds({ width: automaticLayout.width, height: automaticLayout.height }); void persistLayout({}, {}, { width: automaticLayout.width, height: automaticLayout.height }); }} disabled={!supervisorId || loading || busy || layoutSaving} className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-3 text-xs font-black text-gray-500 transition hover:border-primary hover:text-primary disabled:opacity-50" title="Rapikan posisi dan jalur"><RotateCcw size={17} /> Rapikan</button>
                     <button type="button" onClick={() => void load(locationId)} disabled={loading || busy || layoutSaving} className="rounded-xl border border-gray-200 p-3 text-gray-500 transition hover:border-primary hover:text-primary disabled:opacity-50" title="Muat ulang"><RefreshCcw size={18} className={loading ? 'animate-spin' : ''} /></button>
+                    <div className="flex items-center gap-2">
+                        <select aria-label="Isi PDF" value={pdfMode} onChange={(event) => setPdfMode(event.target.value as PdfMode)} className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-xs font-bold text-gray-600">
+                            <option value="chart">Organigram saja</option><option value="list">Daftar saja</option><option value="both">Organigram dan daftar</option>
+                        </select>
+                        <button type="button" disabled={!supervisorId || loading || busy || layoutSaving || pdfBusy || !data.nodes.length} onClick={() => void exportPdf()} className="flex items-center gap-2 rounded-xl border border-purple-200 px-3 py-3 text-xs font-black text-primary disabled:opacity-40"><Download size={16} />{pdfBusy ? 'Membuat PDF...' : 'Download PDF'}</button>
+                    </div>
                     <button type="button" onClick={() => setModalNode(null)} disabled={loading || busy || layoutSaving || data.candidates.length === 0} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-white shadow-lg shadow-purple-200 disabled:cursor-not-allowed disabled:opacity-40"><Plus size={17} /> Tambah Card</button>
                 </div>
             </section>
@@ -895,7 +1068,7 @@ export default function OrganizationChart() {
                     <div className="flex shrink-0 items-center gap-4 text-[11px] font-bold text-gray-500">
                         <span className="flex items-center gap-2"><span className="h-0.5 w-8 bg-primary" /> Permanen aktif</span>
                         <span className="flex items-center gap-2"><span className="w-8 border-t-2 border-dashed border-amber-400" /> Backup</span>
-                        <span>{data.edges.filter((edge) => edge.status === 'inactive').length} relasi nonaktif</span>
+                        <span>{sourceData!.edges.filter((edge) => edge.status === 'inactive').length} relasi nonaktif</span>
                         {layoutSaving && <span className="text-primary">Menyimpan layout...</span>}
                     </div>
                     <div className="ml-auto flex h-10 min-h-10 shrink-0 items-center">
@@ -904,16 +1077,16 @@ export default function OrganizationChart() {
                                 <span className="text-xs font-black text-gray-600">{selectedEdge.relation_type === 'backup' ? 'Garis backup' : 'Garis permanen'}</span>
                                 <span className="text-[10px] text-gray-400">Klik ganda garis untuk menambah titik, klik ganda titik untuk menghapus.</span>
                                 <button type="button" onClick={() => resetRoute(selectedEdge.id)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-primary hover:bg-purple-50"><RotateCcw size={13} /> Reset jalur</button>
-                                {selectedEdge.can_manage && selectedEdge.relation_type === 'permanent' && <button type="button" disabled={busy} onClick={() => mutate(`/api/organization-chart/relations/${selectedEdge.id}`, 'PATCH', { status: 'inactive' })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-amber-600 hover:bg-amber-50"><Unlink size={14} /> Nonaktifkan</button>}
+                                {selectedEdge.can_manage && <button type="button" disabled={busy} onClick={() => mutate(selectedEdge.group_supervisor ? `/api/organization-chart/groups/${selectedEdge.group_supervisor}/status` : `/api/organization-chart/relations/${selectedEdge.id}`, 'PATCH', { status: 'inactive' })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-amber-600 hover:bg-amber-50"><Unlink size={14} /> Nonaktifkan</button>}
                                 <button type="button" onClick={() => setSelectedEdgeId(null)} className="text-gray-400"><X size={14} /></button>
                             </div>
                         )}
                     </div>
                 </div>
 
-                <div className="overflow-x-auto p-4">
-                    <div ref={canvasRef} onClick={() => setSelectedEdgeId(null)} className="relative" style={{ minWidth: requiredCanvasWidth, height: CANVAS_HEIGHT }}>
-                        <svg className="pointer-events-none absolute inset-0 z-30 overflow-visible" width={boardSize.width} height={boardSize.height}>
+                <div ref={canvasScrollRef} className="overflow-x-auto p-4">
+                    <div ref={canvasRef} onClick={() => setSelectedEdgeId(null)} className="relative" data-origin-x={cardDragPreview?.shift.x || 0} data-origin-y={cardDragPreview?.shift.y || 0} style={{ width: renderCanvas.width, minWidth: renderCanvas.width, height: renderCanvas.height }}>
+                        <svg className="pointer-events-none absolute inset-0 z-30 overflow-visible" width={renderCanvas.width} height={renderCanvas.height}>
                             {geometryReady && activeEdges.map((edge) => {
                                 const path = edgePath(edge);
                                 if (!path) return null;
@@ -923,9 +1096,9 @@ export default function OrganizationChart() {
                                 return (
                                     <g key={edge.id}>
                                         <path d={path} fill="none" stroke={edge.relation_type === 'backup' ? '#f59e0b' : focused ? '#5b21b6' : '#7444d4'} strokeWidth={focused ? 3.5 : 2.25} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={edge.relation_type === 'backup' ? '8 7' : undefined} opacity={dimmed ? 0.18 : 1} />
-                                        <path d={path} fill="none" stroke="transparent" strokeWidth="16" style={{ pointerEvents: 'stroke' }} className="cursor-pointer" onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(null)} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.id); }} onDoubleClick={(event) => addWaypoint(edge, event)} />
+                                        <path d={path} fill="none" stroke="transparent" strokeWidth="16" style={{ pointerEvents: 'stroke' }} className="cursor-pointer" onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(null)} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.id); }} onPointerDown={event => beginLineDrag(edge, event)} onDoubleClick={(event) => addWaypoint(edge, event)} />
                                         {selected && routeFor(edge).map((point, index) => (
-                                            <circle key={`${edge.id}-${index}`} cx={point.x * boardSize.width} cy={point.y * boardSize.height} r="6" fill="white" stroke="#7444d4" strokeWidth="3" style={{ pointerEvents: 'all' }} className="cursor-move" onPointerDown={(event) => beginWaypointDrag(edge, index, event)} onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => { event.stopPropagation(); removeWaypoint(edge, index); }} />
+                                            <circle key={`${edge.id}-${index}`} cx={point.x * renderCanvas.width} cy={point.y * renderCanvas.height} r="6" fill="white" stroke="#7444d4" strokeWidth="3" style={{ pointerEvents: 'all' }} className="cursor-move" onPointerDown={(event) => beginWaypointDrag(edge, index, event)} onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => { event.stopPropagation(); removeWaypoint(edge, index); }} />
                                         ))}
                                     </g>
                                 );
@@ -935,12 +1108,21 @@ export default function OrganizationChart() {
 
                         {data.nodes.map((node) => {
                             const coordinates = cardCoordinates(node);
-                            const inactive = !activeEdges.some((edge) => edge.relation_type === 'permanent' && (edge.leader_id === node.username || edge.subordinate_id === node.username));
+                            if (node.group_supervisor) {
+                                const group = organization.groups.find(item => item.supervisor.username === node.group_supervisor)!;
+                                return <div key={node.username} data-space-id={node.username} ref={element => { if (element) nodeRefs.current.set(node.username, element); else nodeRefs.current.delete(node.username); }}
+                                    onPointerDown={event => { if (busy || layoutSaving || event.button !== 0 || !(event.target as HTMLElement).closest('[data-group-grip]')) return;
+                                        const rect = event.currentTarget.getBoundingClientRect(); setMovingCard({ username: node.username, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top }); }}
+                                    className="absolute z-10 rounded-2xl border-2 border-purple-200 bg-purple-50/30" style={{ left: coordinates.left, top: coordinates.top, width: node.space_size!.width, height: node.space_size!.height }}>
+                                    <div data-group-grip className="h-12 cursor-grab touch-none border-b border-purple-100 px-4 py-3 text-xs font-black text-primary">Kelompok {group.supervisor.name} - {group.members.length} SC</div>
+                                </div>;
+                            }
+                            const inactive = !sourceData!.edges.some(edge => edge.status === 'active' && (edge.relation_type === 'permanent' || edge.is_currently_effective) && (edge.leader_id === node.username || edge.subordinate_id === node.username));
                             const canReceive = Boolean(draggingNode && validPair(node.tier, draggingNode.tier));
                             const canConnect = node.tier !== 'store_manager' && node.can_edit;
                             return (
-                                <div key={node.username} ref={(element) => { if (element) nodeRefs.current.set(node.username, element); else nodeRefs.current.delete(node.username); }} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => {
-                                    if (!geometryReady || event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+                                <div key={node.username} data-card-id={node.username} ref={(element) => { if (element) nodeRefs.current.set(node.username, element); else nodeRefs.current.delete(node.username); }} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => {
+                                    if (!geometryReady || busy || layoutSaving || event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
                                     const rect = event.currentTarget.getBoundingClientRect();
                                     setMovingCard({ username: node.username, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top });
                                 }} className={`group absolute z-40 flex touch-none cursor-grab flex-col rounded-2xl border bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-[border-color,box-shadow] active:cursor-grabbing ${dropTargetId === node.username ? 'border-primary ring-4 ring-purple-100' : canReceive ? 'border-purple-200' : 'border-gray-100'}`} style={{ left: coordinates.left, top: coordinates.top, width: CARD_WIDTH, height: CARD_HEIGHT }}>
@@ -961,6 +1143,7 @@ export default function OrganizationChart() {
                                         </div>
                                     </div>
                                     <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
+
                                         <span className="flex items-center gap-1 text-[9px] font-bold text-gray-400"><Link2 size={11} /> {node.leader_ids.length} atasan</span>
                                         <div className="flex items-center gap-0.5">
                                             {node.can_edit && <button type="button" onClick={() => setModalNode(node)} className="rounded-md p-1.5 text-gray-400 hover:bg-purple-50 hover:text-primary" title="Edit card"><Pencil size={13} /></button>}
@@ -974,12 +1157,11 @@ export default function OrganizationChart() {
                             const endpoints = edgeEndpoints(selectedEdge);
                             if (!endpoints) return null;
                             return (
-                                <svg className="pointer-events-none absolute inset-0 z-50 overflow-visible" width={boardSize.width} height={boardSize.height}>
+                                <svg className="pointer-events-none absolute inset-0 z-50 overflow-visible" width={renderCanvas.width} height={renderCanvas.height}>
                                     {(['start', 'end'] as const).map((end) => {
-                                        const anchor = end === 'start' ? endpoints.startAnchor : endpoints.endAnchor;
                                         return <circle key={end} cx={endpoints[end].x} cy={endpoints[end].y} r="7" fill="#7444d4" stroke="white" strokeWidth="3"
                                             data-edge-end={end} style={{ pointerEvents: 'all' }}
-                                            className={routeFor(selectedEdge).length === 0 ? 'cursor-move' : anchor.side === 'top' || anchor.side === 'bottom' ? 'cursor-ew-resize' : 'cursor-ns-resize'}
+                                            className="cursor-move"
                                             onPointerDown={(event) => beginEndpointDrag(selectedEdge, end, event)}
                                             onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
                                             <title>{end === 'start' ? 'Geser titik sambungan atasan' : 'Geser titik sambungan bawahan'}</title>
@@ -990,6 +1172,24 @@ export default function OrganizationChart() {
                         })()}
                     </div>
                 </div>
+            </section>}
+
+            {!loading && supervisorId && <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+                <h3 className="text-lg font-black text-gray-900">Daftar Anggota Organigram</h3>
+                <p className="mt-1 text-xs text-gray-400">{data.location.initial} - {data.location.name} | {sourceData!.nodes.length} anggota sesuai organigram yang ditampilkan</p>
+                {tierOrder.map((tier) => {
+                    const members = sourceData!.nodes.filter((node) => node.tier === tier);
+                    if (!members.length) return null;
+                    return <div key={tier} className="mt-5">
+                        <h4 className="mb-2 text-sm font-black text-primary">{organizationRoleLabel(members[0])} ({members.length})</h4>
+                        <div className="overflow-x-auto"><table className="w-full min-w-[720px] table-fixed text-left text-xs">
+                            <colgroup><col style={{ width: '20%' }} /><col style={{ width: '35%' }} /><col style={{ width: '30%' }} /><col style={{ width: '15%' }} /></colgroup>
+                            <thead className="bg-purple-50 text-gray-600"><tr><th className="p-3">NIK</th><th className="p-3">Nama</th><th className="p-3">Jabatan</th><th className="p-3">Divisi</th></tr></thead>
+                            <tbody>{members.map((node) => <tr key={node.username} className="border-b border-gray-100"><td className="break-words p-3 font-bold">{node.username}</td><td className="break-words p-3">{node.name}</td><td className="break-words p-3">{node.job_level_name || node.tier_label}</td><td className="break-words p-3">{node.division_name || '-'}</td></tr>)}</tbody>
+                        </table></div>
+                    </div>;
+                })}
+                {data.nodes.length === 0 && <p className="py-6 text-sm text-gray-400">Belum ada anggota organigram.</p>}
             </section>}
 
             {modalNode !== undefined && <NodeModal data={data} node={modalNode} onClose={() => setModalNode(undefined)} onSaved={() => load(locationId)} />}

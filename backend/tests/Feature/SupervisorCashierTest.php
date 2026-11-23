@@ -45,7 +45,9 @@ class SupervisorCashierTest extends TestCase
             $table->string('subordinate_id');
             $table->string('status')->default('active');
             $table->string('relation_type')->default('permanent');
+            $table->unsignedBigInteger('backup_request_id')->nullable();
         });
+        $this->createBackupTables();
         Schema::create('push_selling_campaigns', function (Blueprint $table) {
             $table->id();
             $table->string('location_id');

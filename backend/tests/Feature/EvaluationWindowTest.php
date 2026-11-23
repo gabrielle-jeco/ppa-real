@@ -53,6 +53,7 @@ class EvaluationWindowTest extends TestCase
             $table->date('effective_until')->nullable();
             $table->timestamps();
         });
+        $this->createBackupTables();
         Schema::create('monthly_personality_evaluations', function (Blueprint $table) {
             $table->id();
             $table->string('evaluatee_id');

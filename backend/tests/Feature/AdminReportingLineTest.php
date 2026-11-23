@@ -445,5 +445,6 @@ class AdminReportingLineTest extends TestCase
             $table->timestamps();
             $table->unique(['leader_id', 'subordinate_id']);
         });
+        $this->createBackupTables();
     }
 }
