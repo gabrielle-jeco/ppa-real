@@ -44,15 +44,16 @@ class OrganizationChartService
         $users = $this->usersAtLocation($location->initial);
         $userIds = $users->pluck('username');
         $lines = ReportingLine::withoutGlobalScope('effective_backup_period')
-            ->with(['leader.jobLevel', 'subordinate.jobLevel'])
+            ->with(['leader.jobLevel', 'subordinate.jobLevel', 'backupRequest'])
             ->whereIn('leader_id', $userIds)
             ->whereIn('subordinate_id', $userIds)
             ->orderBy('leader_id')
             ->orderBy('subordinate_id')
             ->get();
 
+        $this->markBackupEligibility($lines);
         $visibleLines = $lines->filter(fn(ReportingLine $line) => $line->relation_type === 'permanent'
-            || $this->isCurrentlyEffective($line));
+            || $this->isVisibleBackup($line));
         $memberIds = $visibleLines
             ->flatMap(fn(ReportingLine $line) => [$line->leader_id, $line->subordinate_id])
             ->merge($users->filter(fn(User $user) => $this->tier($user) === self::STORE_MANAGER)->pluck('username'))
@@ -67,6 +68,9 @@ class OrganizationChartService
             ->map(fn(User $user) => $this->formatCandidate($user))->values();
         $storedLayout = OrganizationChartLayout::where('location_id', $location->initial)->value('layout') ?? [];
         $layout = ['nodes' => $storedLayout['nodes'] ?? [], 'edges' => $storedLayout['edges'] ?? []];
+        if (isset($storedLayout['canvas'])) {
+            $layout['canvas'] = $storedLayout['canvas'];
+        }
         if ($supervisorId !== null) {
             $focusedIds = $this->supervisorMemberIds($users, $visibleLines, $supervisorId);
             $nodeUsers = $users->filter(fn(User $user) => $focusedIds->contains($user->username));
@@ -152,13 +156,13 @@ class OrganizationChartService
         return $members->unique()->values();
     }
 
-    public function saveLayout(User $actor, string $locationId, array $nodes, array $edges, ?string $supervisorId = null): array
+    public function saveLayout(User $actor, string $locationId, array $nodes, array $edges, ?string $supervisorId = null, ?array $canvas = null): array
     {
         $this->assertLocationAccess($actor, $locationId);
         $users = $this->usersAtLocation($locationId)->keyBy('username');
         $lines = $this->linesForUsers($users->keys())->keyBy(fn(ReportingLine $line) => (string) $line->id);
         if ($supervisorId !== null) {
-            $visibleLines = $lines->filter(fn(ReportingLine $line) => $line->relation_type === 'permanent' || $this->isCurrentlyEffective($line));
+            $visibleLines = $lines->filter(fn(ReportingLine $line) => $line->relation_type === 'permanent' || $this->isVisibleBackup($line));
             $focusedIds = $this->supervisorMemberIds($users, $visibleLines, $supervisorId);
             $users = $users->filter(fn(User $user) => $focusedIds->contains($user->username));
             $lines = $visibleLines->filter(fn(ReportingLine $line) => $focusedIds->contains($line->leader_id)
@@ -167,7 +171,9 @@ class OrganizationChartService
 
         $cleanNodes = [];
         foreach ($nodes as $username => $position) {
-            if (!$users->has((string) $username) || !is_array($position)) {
+            $groupLeader = (str_starts_with((string) $username, '__group__:') || str_starts_with((string) $username, '__space__:')) ? substr((string) $username, 10) : null;
+            $validGroup = $groupLeader && $users->has($groupLeader) && $this->tier($users->get($groupLeader)) === self::SUPERVISOR;
+            if ((!$users->has((string) $username) && !$validGroup) || !is_array($position)) {
                 continue;
             }
             $cleanNodes[(string) $username] = [
@@ -179,12 +185,12 @@ class OrganizationChartService
         $cleanEdges = [];
         foreach ($edges as $lineId => $route) {
             $lineKey = (string) $lineId;
-            if (!$lines->has($lineKey) || !is_array($route)) {
+            if ((!$lines->has($lineKey) && !($lineKey[0] === '-' && $lines->has(substr($lineKey, 1)))) || !is_array($route)) {
                 continue;
             }
             $points = collect($route['points'] ?? [])
                 ->filter(fn($point) => is_array($point))
-                ->take(12)
+                ->take(1000)
                 ->map(fn(array $point) => [
                     'x' => $this->normalizedCoordinate($point['x'] ?? 0.5),
                     'y' => $this->normalizedCoordinate($point['y'] ?? 0.5),
@@ -205,6 +211,9 @@ class OrganizationChartService
         }
 
         $layout = ['nodes' => $cleanNodes, 'edges' => $cleanEdges];
+        if ($canvas !== null) {
+            $layout['canvas'] = ['width' => (int) $canvas['width'], 'height' => (int) $canvas['height']];
+        }
         DB::transaction(function () use ($actor, $locationId, $supervisorId, $layout) {
             $record = OrganizationChartLayout::firstOrCreate(
                 ['location_id' => $locationId],
@@ -229,29 +238,20 @@ class OrganizationChartService
         $this->validatePair($leader, $subordinate);
         $this->assertCanManageRelation($actor, $leader, $subordinate, $locationId, $lines, $descendants, true);
 
-        $now = now();
-        DB::table('reporting_lines')->upsert([[
-            'leader_id' => $leaderId,
-            'subordinate_id' => $subordinateId,
-            'relation_type' => 'permanent',
-            'status' => 'active',
-            'backup_request_id' => null,
-            'effective_from' => null,
-            'effective_until' => null,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]], ['leader_id', 'subordinate_id'], [
-            'relation_type', 'status', 'backup_request_id', 'effective_from', 'effective_until', 'updated_at',
-        ]);
-
-        return ReportingLine::withoutGlobalScope('effective_backup_period')
-            ->where('leader_id', $leaderId)
-            ->where('subordinate_id', $subordinateId)
-            ->firstOrFail();
+        return DB::transaction(function () use ($leaderId, $subordinateId) {
+            $this->upsertPermanentRelation($leaderId, $subordinateId);
+            app(BackupMirrorService::class)->syncForCrew([$subordinateId]);
+            return ReportingLine::withoutGlobalScope('effective_backup_period')
+                ->where('leader_id', $leaderId)->where('subordinate_id', $subordinateId)->firstOrFail();
+        });
     }
 
     public function updateRelationStatus(User $actor, ReportingLine $line, string $locationId, string $status): ReportingLine
     {
+        if ($line->relation_type === 'backup') {
+            abort_unless($this->isVisibleBackup($line), 422, 'Periode backup tidak berlaku.');
+            $line = ReportingLine::withoutGlobalScope('effective_backup_period')->where('leader_id', $line->backupRequest->requester_id)->where('subordinate_id', $line->subordinate_id)->where('relation_type', 'permanent')->firstOrFail();
+        }
         $this->assertPermanent($line);
         [$leader, $subordinate, $lines, $descendants] = $this->mutationContext(
             $actor,
@@ -262,9 +262,39 @@ class OrganizationChartService
         $this->validatePair($leader, $subordinate);
         $this->assertCanManageRelation($actor, $leader, $subordinate, $locationId, $lines, $descendants);
 
-        $line->update(['status' => $status]);
+        DB::transaction(fn() => $line->update(['status' => $status]));
 
         return $line->fresh(['leader.jobLevel', 'subordinate.jobLevel']);
+    }
+
+    public function placeCrew(User $actor, string $locationId, string $username, array $transitions): void
+    {
+        $this->assertLocationAccess($actor, $locationId);
+        $users = $this->usersAtLocation($locationId)->keyBy('username');
+        $crew = $users->get($username);
+        abort_unless($crew && $this->tier($crew) === self::SERVICE_CREW, 422, 'Hanya card Service Crew yang dapat dimasukkan ke kelompok.');
+        foreach ($transitions as $transition) {
+            $leader = $users->get($transition['leader_id']);
+            abort_unless($leader && $this->tier($leader) === self::SUPERVISOR, 422, 'Kelompok harus dimiliki supervisor pada cabang ini.');
+            $line = ReportingLine::withoutGlobalScope('effective_backup_period')
+                ->where('leader_id', $leader->username)->where('subordinate_id', $username)->lockForUpdate()->first();
+            if ($line) $this->updateRelationStatus($actor, $line, $locationId, $transition['status']);
+            elseif ($transition['status'] === 'active') $this->createRelation($actor, $locationId, $leader->username, $username);
+        }
+    }
+
+    public function updateGroupStatus(User $actor, string $locationId, string $supervisorId, string $status): void
+    {
+        $this->assertLocationAccess($actor, $locationId);
+        $users = $this->usersAtLocation($locationId)->keyBy('username');
+        $supervisor = $users->get($supervisorId);
+        abort_if(!$supervisor || $this->tier($supervisor) !== self::SUPERVISOR, 422, 'Supervisor tidak tersedia pada cabang ini.');
+        $crewIds = $users->filter(fn(User $user) => $this->tier($user) === self::SERVICE_CREW)->keys();
+        DB::transaction(function () use ($actor, $locationId, $supervisorId, $status, $crewIds) {
+            $lines = ReportingLine::withoutGlobalScope('effective_backup_period')->where('leader_id', $supervisorId)
+                ->whereIn('subordinate_id', $crewIds)->lockForUpdate()->get()->filter(fn(ReportingLine $line) => $line->relation_type === 'permanent' || $this->isVisibleBackup($line));
+            foreach ($lines as $line) $this->updateRelationStatus($actor, $line, $locationId, $status);
+        });
     }
 
     public function deleteRelation(User $actor, ReportingLine $line, string $locationId): void
@@ -277,7 +307,7 @@ class OrganizationChartService
             $line->subordinate_id
         );
         $this->assertCanManageRelation($actor, $leader, $subordinate, $locationId, $lines, $descendants);
-        $line->delete();
+        DB::transaction(fn() => $line->delete());
     }
 
     public function saveNode(
@@ -285,7 +315,8 @@ class OrganizationChartService
         string $locationId,
         string $username,
         int $jobLevelId,
-        array $leaderIds
+        array $leaderIds,
+        string $initialStatus = 'active'
     ): void {
         $this->assertLocationAccess($actor, $locationId);
         $users = $this->usersAtLocation($locationId)->keyBy('username');
@@ -336,7 +367,7 @@ class OrganizationChartService
             }
         }
 
-        DB::transaction(function () use ($user, $jobLevel, $futureTier, $locationId, $leaders, $lines) {
+        DB::transaction(function () use ($user, $jobLevel, $futureTier, $locationId, $leaders, $lines, $initialStatus) {
             $user->update(['job_level_id' => $jobLevel->id]);
             UserLocation::updateOrCreate(
                 ['user_id' => $user->username, 'location_id' => $locationId],
@@ -350,8 +381,9 @@ class OrganizationChartService
                 ->update(['status' => 'inactive', 'updated_at' => now()]);
 
             foreach ($selectedLeaderIds as $leaderId) {
-                $this->upsertPermanentRelation($leaderId, $user->username);
+                $this->upsertPermanentRelation($leaderId, $user->username, $initialStatus);
             }
+            app(BackupMirrorService::class)->syncForCrew([$user->username]);
         });
     }
 
@@ -382,7 +414,7 @@ class OrganizationChartService
         }
 
         $activeBackup = $lines->first(fn(ReportingLine $line) => $line->relation_type === 'backup'
-            && ($line->leader_id === $username || $line->subordinate_id === $username)
+            && $line->leader_id === $username
             && $this->isCurrentlyEffective($line));
         if ($activeBackup) {
             throw ValidationException::withMessages([
@@ -391,16 +423,18 @@ class OrganizationChartService
         }
 
         $partnerIds = $users->keys();
-        ReportingLine::withoutGlobalScope('effective_backup_period')
-            ->where('relation_type', 'permanent')
-            ->where(function ($query) use ($username, $partnerIds) {
-                $query->where(function ($incoming) use ($username, $partnerIds) {
-                    $incoming->where('subordinate_id', $username)->whereIn('leader_id', $partnerIds);
-                })->orWhere(function ($outgoing) use ($username, $partnerIds) {
-                    $outgoing->where('leader_id', $username)->whereIn('subordinate_id', $partnerIds);
-                });
-            })
-            ->delete();
+        DB::transaction(function () use ($username, $partnerIds) {
+            ReportingLine::withoutGlobalScope('effective_backup_period')
+                ->where('relation_type', 'permanent')
+                ->where(function ($query) use ($username, $partnerIds) {
+                    $query->where(function ($incoming) use ($username, $partnerIds) {
+                        $incoming->where('subordinate_id', $username)->whereIn('leader_id', $partnerIds);
+                    })->orWhere(function ($outgoing) use ($username, $partnerIds) {
+                        $outgoing->where('leader_id', $username)->whereIn('subordinate_id', $partnerIds);
+                    });
+                })
+                ->get()->each(fn(ReportingLine $line) => $line->delete());
+        });
     }
 
     public function validatePair(User|string $leader, User|string $subordinate): void
@@ -510,10 +544,10 @@ class OrganizationChartService
 
     private function linesForUsers(Collection $userIds): Collection
     {
-        return ReportingLine::withoutGlobalScope('effective_backup_period')
-            ->whereIn('leader_id', $userIds)
-            ->whereIn('subordinate_id', $userIds)
-            ->get();
+        $lines = ReportingLine::withoutGlobalScope('effective_backup_period')->with('backupRequest')
+            ->whereIn('leader_id', $userIds)->whereIn('subordinate_id', $userIds)->get();
+        $this->markBackupEligibility($lines);
+        return $lines;
     }
 
     private function mutationContext(User $actor, string $locationId, string $leaderId, string $subordinateId): array
@@ -600,7 +634,7 @@ class OrganizationChartService
             && $line->status === 'active'
             && $line->leader_id === $user->username)->count();
         $activeBackup = $lines->contains(fn(ReportingLine $line) => $line->relation_type === 'backup'
-            && ($line->leader_id === $user->username || $line->subordinate_id === $user->username)
+            && $line->leader_id === $user->username
             && $this->isCurrentlyEffective($line));
         $canManage = $this->canManageUser($actor, $user, $locationId, $descendants);
 
@@ -633,7 +667,7 @@ class OrganizationChartService
 
     private function formatEdge(User $actor, ReportingLine $line, string $locationId, Collection $descendants): array
     {
-        $canManage = $line->relation_type === 'permanent'
+        $canManage = ($line->relation_type === 'permanent' || $this->isVisibleBackup($line))
             && $line->subordinate
             && $line->leader
             && $this->canManageUser($actor, $line->subordinate, $locationId, $descendants);
@@ -647,6 +681,7 @@ class OrganizationChartService
             'effective_from' => $line->effective_from?->toDateString(),
             'effective_until' => $line->effective_until?->toDateString(),
             'is_currently_effective' => $this->isCurrentlyEffective($line),
+            'is_mirror_member' => $this->isVisibleBackup($line),
             'can_manage' => $canManage,
         ];
     }
@@ -670,14 +705,18 @@ class OrganizationChartService
         return round(max(0, min(1, (float) $value)), 5);
     }
 
-    private function upsertPermanentRelation(string $leaderId, string $subordinateId): void
+    private function upsertPermanentRelation(string $leaderId, string $subordinateId, string $status = 'active'): void
     {
+        $existing = ReportingLine::withoutGlobalScope('effective_backup_period')->where('leader_id', $leaderId)->where('subordinate_id', $subordinateId)->first();
+        if ($existing && $existing->relation_type === 'backup' && $this->isCurrentlyEffective($existing)) {
+            throw ValidationException::withMessages(['relation' => ['Relasi backup aktif tidak dapat diganti menjadi permanen.']]);
+        }
         $now = now();
         DB::table('reporting_lines')->upsert([[
             'leader_id' => $leaderId,
             'subordinate_id' => $subordinateId,
             'relation_type' => 'permanent',
-            'status' => 'active',
+            'status' => $status,
             'backup_request_id' => null,
             'effective_from' => null,
             'effective_until' => null,
@@ -691,8 +730,37 @@ class OrganizationChartService
     private function assertPermanent(ReportingLine $line): void
     {
         if ($line->relation_type !== 'permanent') {
-            throw ValidationException::withMessages(['relation' => ['Relasi backup hanya dapat dibaca dari organigram.']]);
+            throw ValidationException::withMessages(['relation' => ['Relasi backup mengikuti relasi permanen SPV asal dan tidak dapat dihapus langsung.']]);
         }
+    }
+
+    private function markBackupEligibility(Collection $lines): void
+    {
+        $ids = $lines->where('relation_type', 'backup')->pluck('id');
+        if ($ids->isEmpty()) return;
+        $effective = ReportingLine::query()->whereIn('id', $ids)->pluck('id');
+        $backups = $lines->where('relation_type', 'backup');
+        $sources = DB::table('reporting_lines')->where('relation_type', 'permanent')
+            ->whereIn('leader_id', $backups->map(fn($line) => $line->backupRequest?->requester_id)->filter())
+            ->whereIn('subordinate_id', $backups->pluck('subordinate_id'))->get()->keyBy(fn($line) => $line->leader_id . '|' . $line->subordinate_id);
+        foreach ($backups as $line) {
+            $request = $line->backupRequest;
+            $line->setRelation('effectiveBackup', $effective->contains($line->id));
+            $line->setRelation('mirrorMember', $request && $request->status === 'approved'
+                && $request->start_date->lte(today()) && $request->end_date->gte(today())
+                && $sources->has($request->requester_id . '|' . $line->subordinate_id));
+        }
+    }
+
+    private function isVisibleBackup(ReportingLine $line): bool
+    {
+        if ($line->relation_type !== 'backup') return false;
+        if ($line->relationLoaded('mirrorMember')) return $line->getRelation('mirrorMember');
+        $request = $line->backupRequest;
+        return $request && $request->status === 'approved'
+            && $request->start_date->lte(today()) && $request->end_date->gte(today())
+            && DB::table('reporting_lines')->where('leader_id', $request->requester_id)
+                ->where('subordinate_id', $line->subordinate_id)->where('relation_type', 'permanent')->exists();
     }
 
     private function isCurrentlyEffective(ReportingLine $line): bool
@@ -700,6 +768,7 @@ class OrganizationChartService
         $today = Carbon::today();
         return $line->status === 'active'
             && ($line->relation_type === 'permanent'
-                || ($line->effective_from?->lte($today) && $line->effective_until?->gte($today)));
+                || ($line->effective_from?->lte($today) && $line->effective_until?->gte($today)
+                    && ($line->relationLoaded('effectiveBackup') ? $line->getRelation('effectiveBackup') : ReportingLine::query()->whereKey($line->id)->exists())));
     }
 }

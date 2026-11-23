@@ -17,6 +17,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
+        $schedule->command('backup:sync')->everyMinute()->withoutOverlapping(10);
+
         $schedule->command('notifications:dispatch-tasks')
             ->everyFiveMinutes()
             ->withoutOverlapping(10);

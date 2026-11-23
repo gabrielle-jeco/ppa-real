@@ -714,22 +714,26 @@ class AdminController extends Controller
 
         $this->validateReportingLineHierarchy($data['leader_id'], $data['subordinate_id']);
 
-        $now = now();
-        DB::table('reporting_lines')->upsert(
-            [[
-                'leader_id' => $data['leader_id'],
-                'subordinate_id' => $data['subordinate_id'],
-                'relation_type' => 'permanent',
-                'status' => $data['status'],
-                'backup_request_id' => null,
-                'effective_from' => null,
-                'effective_until' => null,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]],
-            ['leader_id', 'subordinate_id'],
-            ['relation_type', 'status', 'backup_request_id', 'effective_from', 'effective_until', 'updated_at']
-        );
+        DB::transaction(function () use ($data) {
+            $now = now();
+            DB::table('reporting_lines')->upsert(
+                [[
+                    'leader_id' => $data['leader_id'],
+                    'subordinate_id' => $data['subordinate_id'],
+                    'relation_type' => 'permanent',
+                    'status' => $data['status'],
+                    'backup_request_id' => null,
+                    'effective_from' => null,
+                    'effective_until' => null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]],
+                ['leader_id', 'subordinate_id'],
+                ['relation_type', 'status', 'backup_request_id', 'effective_from', 'effective_until', 'updated_at']
+            );
+
+            app(\App\Services\BackupMirrorService::class)->syncForCrew([$data['subordinate_id']]);
+        });
 
         $line = ReportingLine::withoutGlobalScope('effective_backup_period')
             ->where('leader_id', $data['leader_id'])
@@ -752,13 +756,13 @@ class AdminController extends Controller
 
         $this->validateReportingLineHierarchy($data['leader_id'], $data['subordinate_id']);
 
-        $reportingLine->update([
+        DB::transaction(fn() => $reportingLine->update([
             ...$data,
             'relation_type' => 'permanent',
             'backup_request_id' => null,
             'effective_from' => null,
             'effective_until' => null,
-        ]);
+        ]));
 
         return response()->json($this->formatReportingLine($reportingLine->fresh(['leader', 'subordinate'])));
     }
@@ -768,7 +772,7 @@ class AdminController extends Controller
         $this->authorizePermission('reporting_lines');
         abort_if($reportingLine->relation_type !== 'permanent', 404);
 
-        $reportingLine->delete();
+        DB::transaction(fn() => $reportingLine->delete());
 
         return response()->json(['message' => 'Reporting line deleted.']);
     }
@@ -832,6 +836,7 @@ class AdminController extends Controller
                     ->update(['status' => 'active', 'updated_at' => now()]);
             }
 
+            app(\App\Services\BackupMirrorService::class)->syncForCrew($newRows->pluck('subordinate_id')->merge(ReportingLine::withoutGlobalScope('effective_backup_period')->whereIn('id', $reactivateIds)->pluck('subordinate_id'))->all());
             return [$created, $reactivated];
         });
 

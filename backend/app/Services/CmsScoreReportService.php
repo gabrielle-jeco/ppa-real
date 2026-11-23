@@ -104,6 +104,7 @@ class CmsScoreReportService
         if ($locationIds === []) {
             return [
                 'total_employees' => 0,
+                'managers' => [],
                 'store_managers' => [],
                 'chief_operations' => [],
                 'supervisors' => 0,
@@ -117,15 +118,15 @@ class CmsScoreReportService
             ->whereIn('user_locations.location_id', $locationIds)
             ->whereIn(DB::raw('LOWER(TRIM(user_locations.job_level))'), ['sc', 'supervisor', 'manager', 'regional_manager']);
 
-        $managers = DB::table('users')
-            ->join('job_levels', 'job_levels.id', '=', 'users.job_level_id')
-            ->join('locations', 'locations.initial', '=', 'users.initial_store')
-            ->where('users.active', true)
-            ->whereIn('users.initial_store', $locationIds)
+        $managers = (clone $operationalUsers)
+            ->leftJoin('job_levels', 'job_levels.id', '=', 'users.job_level_id')
+            ->join('locations', 'locations.initial', '=', 'user_locations.location_id')
+            ->distinct()
             ->get([
                 'users.username as id',
                 'users.name',
-                'users.initial_store as location_id',
+                'user_locations.job_level as app_role',
+                'user_locations.location_id as location_id',
                 'locations.name as location_name',
                 'job_levels.name as job_level_name',
                 'job_levels.position_code',
@@ -137,6 +138,7 @@ class CmsScoreReportService
                 'name' => $person->name,
                 'location_id' => $person->location_id,
                 'location_name' => $person->location_name,
+                'manager_type' => $person->manager_type,
             ])
             ->values()
             ->all();
@@ -147,14 +149,24 @@ class CmsScoreReportService
         $isChiefOperation = fn($person) => str_contains(strtoupper((string) $person->job_level_name), 'CHIEF OPERATION')
             || str_starts_with(strtoupper((string) $person->position_code), 'CF-OPR-CAB-');
 
+        $managers = $managers
+            ->groupBy(fn($person) => $person->location_id . '|' . $person->id)
+            ->map(function (Collection $assignments) use ($isStoreManager, $isChiefOperation) {
+                $person = clone $assignments->first();
+                $roles = $assignments->pluck('app_role')->map(fn($role) => strtolower(trim((string) $role)));
+                $person->manager_type = $roles->contains('regional_manager') ? 'RM'
+                    : ($isChiefOperation($person) ? 'CO'
+                        : (($roles->contains('manager') || $isStoreManager($person)) ? 'SM' : null));
+                return $person;
+            })->values();
+
         return [
             'total_employees' => (clone $operationalUsers)
-                ->pluck('users.username')
-                ->merge($managers->pluck('id'))
-                ->unique()
-                ->count(),
-            'store_managers' => $formatPeople($managers->filter($isStoreManager)),
-            'chief_operations' => $formatPeople($managers->filter($isChiefOperation)),
+                ->distinct()
+                ->count('users.username'),
+            'managers' => $formatPeople($managers->whereIn('manager_type', ['SM', 'RM'])),
+            'store_managers' => $formatPeople($managers->where('manager_type', 'SM')),
+            'chief_operations' => $formatPeople($managers->where('manager_type', 'CO')),
             'supervisors' => (clone $operationalUsers)
                 ->whereRaw('LOWER(TRIM(user_locations.job_level)) = ?', ['supervisor'])
                 ->distinct()

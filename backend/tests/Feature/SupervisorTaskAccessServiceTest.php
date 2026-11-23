@@ -91,6 +91,21 @@ class SupervisorTaskAccessServiceTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_backup_review_access_follows_current_source_relationship(): void
+    {
+        $reviewer = $this->supervisor('backup');
+        $this->createBackup('primary', 'backup', 'crew-1', 'approved', '2026-09-10', '2026-09-20');
+        $task = new Task(['employee_id' => 'crew-1', 'employer_id' => 'primary']);
+        $this->assertTrue($this->service->canReviewTask($reviewer, $task, Carbon::today()));
+        $source = ReportingLine::where('leader_id', 'primary')->firstOrFail();
+        $source->update(['status' => 'inactive']);
+        $this->assertFalse($this->service->canReviewTask($reviewer, $task, Carbon::today()));
+        $source->update(['status' => 'active']);
+        $this->assertTrue($this->service->canReviewTask($reviewer, $task, Carbon::today()));
+        $source->delete();
+        $this->assertFalse($this->service->canReviewTask($reviewer, $task, Carbon::today()));
+    }
+
     public function test_task_creator_can_always_review_own_task(): void
     {
         $reviewer = $this->supervisor('primary');
@@ -296,6 +311,7 @@ class SupervisorTaskAccessServiceTest extends TestCase
         string $startDate,
         string $endDate
     ): void {
+        $this->createPermanentRelation($requester, $crew);
         $request = SupervisorBackupRequest::create([
             'requester_id' => $requester,
             'backup_supervisor_id' => $backup,

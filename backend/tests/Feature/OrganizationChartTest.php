@@ -50,6 +50,134 @@ class OrganizationChartTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_group_deactivation_is_atomic_scoped_and_does_not_delete_members(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $a = $this->createUser('spv-a', 'A', 'spv', 'supervisor');
+        $b = $this->createUser('spv-b', 'B', 'spv', 'supervisor');
+        for ($i = 0; $i < 9; $i++) $this->line($a, $this->createUser('crew-' . $i, 'Crew ' . $i, 'sc', 'sc'));
+        $this->line($b, User::where('username', 'crew-0')->first());
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/groups/spv-a/status', ['location_id' => 'GBB', 'status' => 'inactive'])->assertOk();
+        $this->assertSame(9, ReportingLine::where('leader_id', 'spv-a')->where('status', 'inactive')->count());
+        $this->assertDatabaseHas('reporting_lines', ['leader_id' => 'spv-b', 'subordinate_id' => 'crew-0', 'status' => 'active']);
+        $this->actingAs($admin, 'sanctum')->getJson('/api/organization-chart?location_id=GBB&supervisor_id=spv-a')->assertOk()->assertJsonCount(10, 'nodes');
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/groups/spv-a/status', ['location_id' => 'YPC', 'status' => 'active'])->assertForbidden();
+        $this->assertSame(9, ReportingLine::where('leader_id', 'spv-a')->where('status', 'inactive')->count());
+    }
+
+    public function test_backup_tracks_source_deactivate_rejoin_reassign_and_delete_without_deleting_request(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $a = $this->createUser('spv-a', 'A', 'spv', 'supervisor');
+        $b = $this->createUser('spv-b', 'Backup', 'spv', 'supervisor');
+        $c = $this->createUser('spv-c', 'C', 'spv', 'supervisor');
+        $crew = $this->createUser('crew', 'Crew', 'sc', 'sc');
+        $source = $this->line($a, $crew);
+        $request = \App\Models\SupervisorBackupRequest::create(['requester_id' => $a->username, 'backup_supervisor_id' => $b->username, 'start_date' => now()->subDay(), 'end_date' => now()->addDay(), 'status' => 'approved']);
+        app(\App\Services\BackupMirrorService::class)->syncForRequest($request);
+        $backup = ReportingLine::where('leader_id', 'spv-b')->firstOrFail();
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/relations/' . $backup->id, ['location_id' => 'GBB', 'status' => 'inactive'])->assertOk();
+        $this->assertDatabaseHas('reporting_lines', ['id' => $source->id, 'status' => 'inactive']);
+        $this->assertFalse(ReportingLine::whereKey($backup->id)->exists());
+        $this->actingAs($admin, 'sanctum')->getJson('/api/organization-chart?location_id=GBB&supervisor_id=spv-b')->assertOk()->assertJsonCount(2, 'nodes')->assertJsonFragment(['status' => 'inactive']);
+        $this->line($c, $crew);
+        $this->assertFalse(ReportingLine::whereKey($backup->id)->exists());
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/relations/' . $backup->id, ['location_id' => 'GBB', 'status' => 'active'])->assertOk();
+        $this->assertTrue(ReportingLine::whereKey($backup->id)->where('status', 'active')->exists());
+        $new = $this->createUser('crew-new', 'New', 'sc', 'sc');
+        $this->line($a, $new);
+        $this->assertTrue(ReportingLine::where('leader_id', 'spv-b')->where('subordinate_id', 'crew-new')->exists());
+        $this->actingAs($admin, 'sanctum')->deleteJson('/api/organization-chart/nodes/crew', ['location_id' => 'GBB'])->assertOk();
+        $this->assertDatabaseHas('users', ['username' => 'crew']);
+        $this->assertDatabaseMissing('reporting_lines', ['subordinate_id' => 'crew', 'relation_type' => 'permanent']);
+        $this->assertFalse(ReportingLine::whereKey($backup->id)->exists());
+        $this->assertDatabaseHas('supervisor_backup_requests', ['id' => $request->id, 'status' => 'approved']);
+    }
+
+    public function test_new_card_can_start_inactive_and_virtual_group_layout_survives_reload(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $spv = $this->createUser('spv', 'Supervisor', 'spv', 'supervisor');
+        $crew = $this->createUser('crew', 'Crew', 'sc', 'sc');
+        $this->actingAs($admin, 'sanctum')->postJson('/api/organization-chart/nodes', ['location_id' => 'GBB', 'username' => 'crew', 'job_level_id' => $this->jobLevels['sc']->id, 'leader_ids' => ['spv'], 'initial_status' => 'inactive'])->assertOk();
+        $line = ReportingLine::where('leader_id', 'spv')->firstOrFail();
+        $this->assertSame('inactive', $line->status);
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/layout', [
+            'location_id' => 'GBB', 'supervisor_id' => 'spv', 'nodes' => ['__group__:spv' => ['x' => .4, 'y' => .6]],
+            'edges' => [(string)-$line->id => ['points' => [['x' => .5, 'y' => .4]]]],
+        ])->assertOk()->assertJsonPath('layout.nodes.__group__:spv.x', .4);
+        $this->actingAs($admin, 'sanctum')->getJson('/api/organization-chart?location_id=GBB&supervisor_id=spv')->assertOk()->assertJsonPath('layout.nodes.__group__:spv.y', .6);
+    }
+
+    public function test_group_conflict_rolls_back_every_member_and_mirror(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $a = $this->createUser('spv-a', 'A', 'spv', 'supervisor');
+        $b = $this->createUser('spv-b', 'Backup', 'spv', 'supervisor');
+        foreach (['crew-1', 'crew-2'] as $id) $this->line($a, $this->createUser($id, $id, 'sc', 'sc'))->update(['status' => 'inactive']);
+        $this->line($b, User::where('username', 'crew-2')->first())->update(['status' => 'inactive']);
+        \App\Models\SupervisorBackupRequest::create(['requester_id' => 'spv-a', 'backup_supervisor_id' => 'spv-b', 'start_date' => now()->subDay(), 'end_date' => now()->addDay(), 'status' => 'approved']);
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/groups/spv-a/status', ['location_id' => 'GBB', 'status' => 'active'])->assertUnprocessable();
+        $this->assertSame(2, ReportingLine::where('leader_id', 'spv-a')->where('status', 'inactive')->count());
+        $this->assertDatabaseMissing('reporting_lines', ['leader_id' => 'spv-b', 'subordinate_id' => 'crew-1']);
+        $this->assertDatabaseCount('supervisor_backup_assignments', 0);
+    }
+
+    public function test_scheduled_backup_sync_keeps_current_period_then_activates_the_next_period(): void
+    {
+        $a = $this->createUser('spv-a', 'A', 'spv', 'supervisor');
+        $b = $this->createUser('spv-b', 'B', 'spv', 'supervisor');
+        $crew = $this->createUser('crew', 'Crew', 'sc', 'sc');
+        $this->line($a, $crew);
+        $today = now()->startOfDay();
+        $current = \App\Models\SupervisorBackupRequest::create(['requester_id' => 'spv-a', 'backup_supervisor_id' => 'spv-b', 'start_date' => $today->copy()->subDay(), 'end_date' => $today, 'status' => 'approved']);
+        $next = \App\Models\SupervisorBackupRequest::create(['requester_id' => 'spv-a', 'backup_supervisor_id' => 'spv-b', 'start_date' => $today->copy()->addDay(), 'end_date' => $today->copy()->addDays(3), 'status' => 'approved']);
+        $this->artisan('backup:sync')->assertExitCode(0);
+        $this->assertSame($current->id, ReportingLine::where('leader_id', 'spv-b')->firstOrFail()->backup_request_id);
+        \Carbon\Carbon::setTestNow($today->copy()->addDay()->addHours(10));
+        try {
+            $this->artisan('backup:sync')->assertExitCode(0);
+            $this->assertSame($next->id, ReportingLine::where('leader_id', 'spv-b')->firstOrFail()->backup_request_id);
+            $this->assertDatabaseCount('supervisor_backup_assignments', 2);
+        } finally { \Carbon\Carbon::setTestNow(); }
+    }
+
+    public function test_spatial_drop_saves_relationship_and_free_card_position_atomically(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $a = $this->createUser('spv-a', 'A', 'spv', 'supervisor');
+        $b = $this->createUser('spv-b', 'B', 'spv', 'supervisor');
+        $crew = $this->createUser('crew', 'Crew', 'sc', 'sc');
+        $line = $this->line($a, $crew); $other = $this->line($b, $crew);
+        $payload = ['location_id' => 'GBB', 'supervisor_id' => 'spv-a', 'nodes' => ['crew' => ['x' => .8, 'y' => .7], '__space__:spv-a' => ['x' => .1, 'y' => .3]], 'edges' => [], 'canvas' => ['width' => 1800, 'height' => 1400], 'transitions' => [['leader_id' => 'spv-a', 'status' => 'inactive']]];
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/nodes/crew/placement', $payload)->assertOk()->assertJsonPath('layout.nodes.crew.x', .8);
+        $this->assertDatabaseHas('reporting_lines', ['id' => $line->id, 'status' => 'inactive']);
+        $this->assertDatabaseHas('reporting_lines', ['id' => $other->id, 'status' => 'active']);
+        $payload['transitions'][0]['status'] = 'active'; $payload['nodes']['crew']['x'] = .35;
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/nodes/crew/placement', $payload)->assertOk();
+        $this->assertDatabaseHas('reporting_lines', ['id' => $line->id, 'status' => 'active']);
+        $payload['transitions'][0]['status'] = 'inactive'; $payload['nodes']['crew']['x'] = 1.1;
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/nodes/crew/placement', $payload)->assertUnprocessable();
+        $this->assertDatabaseHas('reporting_lines', ['id' => $line->id, 'status' => 'active']);
+        $this->actingAs($admin, 'sanctum')->getJson('/api/organization-chart?location_id=GBB&supervisor_id=spv-a')->assertOk()->assertJsonPath('layout.nodes.crew.x', .35);
+        $this->assertDatabaseCount('reporting_lines', 2);
+    }
+
+    public function test_spatial_drop_can_add_a_second_supervisor_and_rejects_non_crew_and_cross_branch(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $a = $this->createUser('spv-a', 'A', 'spv', 'supervisor');
+        $b = $this->createUser('spv-b', 'B', 'spv', 'supervisor');
+        $crew = $this->createUser('crew', 'Crew', 'sc', 'sc'); $this->line($a, $crew);
+        $payload = ['location_id' => 'GBB', 'nodes' => ['crew' => ['x' => .3, 'y' => .4]], 'edges' => [], 'transitions' => [['leader_id' => 'spv-b', 'status' => 'active']]];
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/nodes/crew/placement', $payload)->assertOk();
+        $this->assertDatabaseHas('reporting_lines', ['leader_id' => 'spv-a', 'subordinate_id' => 'crew', 'status' => 'active']);
+        $this->assertDatabaseHas('reporting_lines', ['leader_id' => 'spv-b', 'subordinate_id' => 'crew', 'status' => 'active']);
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/nodes/spv-a/placement', $payload)->assertUnprocessable();
+        $payload['location_id'] = 'YPC';
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/nodes/crew/placement', $payload)->assertForbidden();
+    }
+
     public function test_chart_supports_full_and_direct_supervisor_paths(): void
     {
         $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
@@ -413,8 +541,11 @@ class OrganizationChartTest extends TestCase
         $backupCrew = $this->createUser('crew-2', 'Backup Crew', 'sc', 'sc');
         $expiredCrew = $this->createUser('crew-3', 'Expired Backup', 'sc', 'sc');
         $this->line($spv, $inactiveCrew)->update(['status' => 'inactive']);
+        $origin = $this->createUser('origin-spv', 'Origin', 'spv', 'supervisor');
+        $this->line($origin, $backupCrew);
+        $request = \App\Models\SupervisorBackupRequest::create(['requester_id' => $origin->username, 'backup_supervisor_id' => $spv->username, 'start_date' => now()->subDay(), 'end_date' => now()->addDay(), 'status' => 'approved']);
         $this->line($spv, $backupCrew)->update([
-            'relation_type' => 'backup', 'effective_from' => now()->subDay(), 'effective_until' => now()->addDay(),
+            'relation_type' => 'backup', 'backup_request_id' => $request->id, 'effective_from' => now()->subDay(), 'effective_until' => now()->addDay(),
         ]);
         $this->line($spv, $expiredCrew)->update([
             'relation_type' => 'backup', 'effective_from' => now()->subDays(3), 'effective_until' => now()->subDays(2),
@@ -502,6 +633,40 @@ class OrganizationChartTest extends TestCase
         $this->patchJson('/api/organization-chart/layout', ['location_id' => 'GBB', 'nodes' => [], 'edges' => []])->assertOk();
         $this->assertSame($otherView, $record->fresh()->layout['views']['spv-2']);
         $this->assertDatabaseCount('reporting_lines', 2);
+    }
+
+    public function test_canvas_coordinates_round_trip_in_focused_view_without_changing_legacy_layout(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $sm = $this->createUser('sm-1', 'Store Manager', 'sm', 'manager');
+        $spv = $this->createUser('spv-1', 'Supervisor', 'spv', 'supervisor');
+        $line = $this->line($sm, $spv);
+        $legacy = ['nodes' => ['spv-1' => ['x' => 0.2, 'y' => 0.7]], 'edges' => []];
+        OrganizationChartLayout::create(['location_id' => 'GBB', 'layout' => $legacy, 'updated_by' => 'admin']);
+        $canvas = ['width' => 1800, 'height' => 1200];
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/layout', [
+            'location_id' => 'GBB', 'supervisor_id' => 'spv-1', 'canvas' => $canvas,
+            'nodes' => ['spv-1' => ['x' => 0.3, 'y' => 0.9]], 'edges' => [(string) $line->id => ['points' => []]],
+        ])->assertOk()->assertJsonPath('layout.canvas', $canvas)->assertJsonPath('layout.nodes.spv-1.y', 0.9);
+        $this->getJson('/api/organization-chart?location_id=GBB&view=supervisor&supervisor_id=spv-1')
+            ->assertOk()->assertJsonPath('layout.canvas', $canvas);
+        $this->getJson('/api/organization-chart?location_id=GBB')->assertOk()
+            ->assertJsonPath('layout.nodes', $legacy['nodes'])->assertJsonMissingPath('layout.canvas');
+        $this->patchJson('/api/organization-chart/layout', ['location_id' => 'GBB', 'nodes' => [], 'edges' => [], 'canvas' => $canvas])
+            ->assertOk()->assertJsonPath('layout.canvas', $canvas);
+        $this->getJson('/api/organization-chart?location_id=GBB')->assertOk()->assertJsonPath('layout.canvas', $canvas);
+        $this->assertDatabaseCount('reporting_lines', 1);
+    }
+
+    public function test_canvas_bounds_reject_invalid_or_incomplete_sizes(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $this->actingAs($admin, 'sanctum');
+        foreach ([[], ['width' => 899, 'height' => 760], ['width' => 900, 'height' => 759], ['width' => 900], ['width' => 1000001, 'height' => 760]] as $canvas) {
+            $this->patchJson('/api/organization-chart/layout', ['location_id' => 'GBB', 'nodes' => [], 'edges' => [], 'canvas' => $canvas])
+                ->assertUnprocessable();
+        }
+        $this->assertDatabaseCount('organization_chart_layouts', 0);
     }
 
     public function test_endpoint_anchors_round_trip_without_changing_relations_or_other_layout_data(): void
@@ -663,6 +828,7 @@ class OrganizationChartTest extends TestCase
             $table->timestamps();
             $table->unique(['leader_id', 'subordinate_id']);
         });
+        $this->createBackupTables();
         Schema::create('organization_chart_layouts', function (Blueprint $table) {
             $table->id();
             $table->string('location_id')->unique();

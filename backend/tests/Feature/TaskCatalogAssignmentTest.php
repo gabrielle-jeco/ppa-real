@@ -48,6 +48,7 @@ class TaskCatalogAssignmentTest extends TestCase
             $table->date('effective_from')->nullable();
             $table->date('effective_until')->nullable();
         });
+        $this->createBackupTables();
         Schema::create('work_stations', function (Blueprint $table) {
             $table->id();
             $table->string('name');

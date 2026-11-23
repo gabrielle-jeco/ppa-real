@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\ReportingLine;
-use App\Models\SupervisorBackupAssignment;
 use App\Models\SupervisorBackupRequest;
 use App\Models\User;
 use App\Services\UserNotificationService;
@@ -162,14 +161,12 @@ class SupervisorBackupController extends Controller
                 ]);
             }
 
-            if ($data['decision'] === 'approved') {
-                $this->activateBackupRelations($lockedRequest);
-            }
-
             $lockedRequest->update([
                 'status' => $data['decision'],
                 'responded_at' => now(),
             ]);
+
+            if ($data['decision'] === 'approved') app(\App\Services\BackupMirrorService::class)->syncForRequest($lockedRequest);
 
             return $lockedRequest;
         });
@@ -230,64 +227,6 @@ class SupervisorBackupController extends Controller
             ->get(['username', 'name', 'role_id'])
             ->filter(fn (User $candidate) => $candidate->role_type === 'supervisor')
             ->values();
-    }
-
-    private function activateBackupRelations(SupervisorBackupRequest $backupRequest): void
-    {
-        $crewIds = ReportingLine::withoutGlobalScope('effective_backup_period')
-            ->where('leader_id', $backupRequest->requester_id)
-            ->where('status', 'active')
-            ->where('relation_type', 'permanent')
-            ->pluck('subordinate_id')
-            ->unique();
-
-        foreach ($crewIds as $crewId) {
-            $line = ReportingLine::withoutGlobalScope('effective_backup_period')
-                ->where('leader_id', $backupRequest->backup_supervisor_id)
-                ->where('subordinate_id', $crewId)
-                ->first();
-
-            $createdTemporaryLine = false;
-            if ($line?->relation_type === 'permanent' && $line->status !== 'active') {
-                throw ValidationException::withMessages([
-                    'decision' => ['Terdapat relasi permanen nonaktif dengan salah satu crew. Aktifkan atau hapus relasi tersebut melalui CMS terlebih dahulu.'],
-                ]);
-            }
-
-            if ($line?->relation_type === 'backup' && $line->backup_request_id !== $backupRequest->id) {
-                $existingRequest = SupervisorBackupRequest::find($line->backup_request_id);
-                $overlaps = $existingRequest
-                    && in_array($existingRequest->status, ['pending', 'approved'], true)
-                    && $existingRequest->start_date->lte($backupRequest->end_date)
-                    && $existingRequest->end_date->gte($backupRequest->start_date);
-
-                if ($overlaps) {
-                    throw ValidationException::withMessages([
-                        'decision' => ['Crew yang sama sudah tercakup dalam periode backup lain untuk supervisor tersebut.'],
-                    ]);
-                }
-            }
-
-            if (!$line || $line->relation_type === 'backup') {
-                $line ??= new ReportingLine([
-                    'leader_id' => $backupRequest->backup_supervisor_id,
-                    'subordinate_id' => $crewId,
-                ]);
-                $line->fill([
-                    'status' => 'active',
-                    'relation_type' => 'backup',
-                    'backup_request_id' => $backupRequest->id,
-                    'effective_from' => $backupRequest->start_date,
-                    'effective_until' => $backupRequest->end_date,
-                ])->save();
-                $createdTemporaryLine = true;
-            }
-
-            SupervisorBackupAssignment::updateOrCreate(
-                ['backup_request_id' => $backupRequest->id, 'subordinate_id' => $crewId],
-                ['reporting_line_id' => $line->id, 'created_temporary_line' => $createdTemporaryLine]
-            );
-        }
     }
 
     private function formatRequest(SupervisorBackupRequest $request): array

@@ -59,6 +59,101 @@ class CmsScoreReportTest extends TestCase
             ->assertJsonPath('groups.0.percentage', 50);
     }
 
+    public function test_summary_excludes_primary_branch_hr_users_without_an_operational_assignment(): void
+    {
+        $managerLevel = DB::table('job_levels')->where('name', 'STORE MANAGER')->value('id');
+        DB::table('users')->insert([
+            ['username' => 'hr-only', 'name' => 'HR Only', 'initial_store' => 'GBB', 'job_level_id' => $managerLevel, 'active' => true],
+            ['username' => 'unsupported-role', 'name' => 'Unsupported Role', 'initial_store' => 'GBB', 'job_level_id' => $managerLevel, 'active' => true],
+            ['username' => 'inactive-manager', 'name' => 'Inactive Manager', 'initial_store' => 'GBB', 'job_level_id' => $managerLevel, 'active' => false],
+        ]);
+        DB::table('user_locations')->insert([
+            ['user_id' => 'unsupported-role', 'location_id' => 'GBB', 'job_level' => 'admin'],
+            ['user_id' => 'inactive-manager', 'location_id' => 'GBB', 'job_level' => 'manager'],
+        ]);
+
+        foreach (['daily' => ['2026-11-01', '2026-11-02'], 'monthly' => ['2026-10', '2026-10']] as $mode => [$start, $end]) {
+            $this->actingAs($this->admin(), 'sanctum')
+                ->getJson("/api/cms/score-reports/{$mode}?regional=10&location=GBB&start={$start}&end={$end}")
+                ->assertOk()->assertJsonPath('summary.total_employees', 6)
+                ->assertJsonCount(1, 'summary.store_managers')->assertJsonCount(2, 'summary.chief_operations')
+                ->assertJsonPath('summary.supervisors', 1)->assertJsonPath('summary.non_staff', 2);
+        }
+    }
+
+    public function test_summary_uses_assigned_branch_even_when_primary_branch_is_different(): void
+    {
+        DB::table('locations')->insert(['initial' => 'YPC', 'name' => 'Other Branch', 'region_code' => 10, 'is_active' => true]);
+        DB::table('users')->whereIn('username', ['sm-1', 'co-1', 'crew-1'])->update(['initial_store' => 'YPC']);
+        $this->actingAs($this->admin(), 'sanctum')
+            ->getJson('/api/cms/score-reports/daily?regional=10&location=GBB&start=2026-11-01&end=2026-11-02')
+            ->assertOk()->assertJsonPath('summary.total_employees', 6)
+            ->assertJsonPath('summary.store_managers.0.id', 'sm-1')
+            ->assertJsonPath('summary.store_managers.0.location_id', 'GBB')
+            ->assertJsonPath('summary.chief_operations.0.location_id', 'GBB');
+        $this->getJson('/api/cms/score-reports/daily?regional=10&location=YPC&start=2026-11-01&end=2026-11-02')
+            ->assertOk()->assertJsonPath('summary.total_employees', 0)
+            ->assertJsonCount(0, 'summary.store_managers')->assertJsonCount(0, 'summary.chief_operations');
+    }
+
+    public function test_summary_deduplicates_assignments_and_excludes_other_branches(): void
+    {
+        DB::table('locations')->insert(['initial' => 'YPC', 'name' => 'Other Branch', 'region_code' => 10, 'is_active' => true]);
+        DB::table('users')->insert(['username' => 'other-crew', 'name' => 'Other Crew', 'initial_store' => 'GBB', 'active' => true]);
+        DB::table('user_locations')->insert([
+            ['user_id' => 'sm-1', 'location_id' => 'GBB', 'job_level' => ' manager '],
+            ['user_id' => 'co-1', 'location_id' => 'GBB', 'job_level' => 'MANAGER'],
+            ['user_id' => 'spv-1', 'location_id' => 'GBB', 'job_level' => ' supervisor '],
+            ['user_id' => 'crew-1', 'location_id' => 'GBB', 'job_level' => 'SC'],
+            ['user_id' => 'other-crew', 'location_id' => 'YPC', 'job_level' => 'sc'],
+        ]);
+        $this->actingAs($this->admin(), 'sanctum')
+            ->getJson('/api/cms/score-reports/daily?regional=10&location=GBB&start=2026-11-01&end=2026-11-02')
+            ->assertOk()->assertJsonPath('summary.total_employees', 6)
+            ->assertJsonCount(1, 'summary.store_managers')->assertJsonCount(2, 'summary.chief_operations')
+            ->assertJsonPath('summary.supervisors', 1)->assertJsonPath('summary.non_staff', 2);
+    }
+
+    public function test_manager_card_includes_regional_and_store_assignments_with_type_details(): void
+    {
+        DB::table('users')->insert([
+            ['username' => 'rm-1', 'name' => 'Regional Manager', 'initial_store' => 'OTHER', 'active' => true],
+            ['username' => 'generic-sm', 'name' => 'Assigned Store Manager', 'initial_store' => 'OTHER', 'active' => true],
+            ['username' => 'other-rm', 'name' => 'Unassigned Regional Manager', 'initial_store' => 'GBB', 'active' => true],
+        ]);
+        DB::table('user_locations')->insert([
+            ['user_id' => 'rm-1', 'location_id' => 'GBB', 'job_level' => ' regional_manager '],
+            ['user_id' => 'rm-1', 'location_id' => 'GBB', 'job_level' => 'manager'],
+            ['user_id' => 'generic-sm', 'location_id' => 'GBB', 'job_level' => 'MANAGER'],
+            ['user_id' => 'other-rm', 'location_id' => 'OTHER', 'job_level' => 'regional_manager'],
+        ]);
+        foreach (['daily' => ['2026-11-01', '2026-11-02'], 'monthly' => ['2026-10', '2026-10']] as $mode => [$start, $end]) {
+            $response = $this->actingAs($this->admin(), 'sanctum')
+                ->getJson("/api/cms/score-reports/{$mode}?regional=10&location=GBB&start={$start}&end={$end}")
+                ->assertOk()->assertJsonPath('summary.total_employees', 8)
+                ->assertJsonCount(3, 'summary.managers')->assertJsonCount(2, 'summary.store_managers')
+                ->assertJsonCount(2, 'summary.chief_operations');
+            $people = collect($response->json('summary.managers'))->keyBy('id');
+            $this->assertSame('RM', $people['rm-1']['manager_type']);
+            $this->assertSame('GBB', $people['rm-1']['location_id']);
+            $this->assertSame('SM', $people['generic-sm']['manager_type']);
+            $this->assertSame('SM', $people['sm-1']['manager_type']);
+            $this->assertFalse($people->has('other-rm'));
+            $this->assertSame(['CO'], collect($response->json('summary.chief_operations'))->pluck('manager_type')->unique()->all());
+        }
+    }
+
+    public function test_regional_manager_is_visible_when_branch_has_no_store_manager(): void
+    {
+        DB::table('user_locations')->where('user_id', 'sm-1')->update(['job_level' => 'regional_manager']);
+        $this->actingAs($this->admin(), 'sanctum')
+            ->getJson('/api/cms/score-reports/daily?regional=10&location=GBB&start=2026-11-01&end=2026-11-02')
+            ->assertOk()->assertJsonCount(1, 'summary.managers')
+            ->assertJsonPath('summary.managers.0.id', 'sm-1')
+            ->assertJsonPath('summary.managers.0.manager_type', 'RM')
+            ->assertJsonCount(0, 'summary.store_managers');
+    }
+
     public function test_daily_group_details_are_loaded_for_the_selected_supervisor(): void
     {
         $this->actingAs($this->admin(), 'sanctum')
@@ -429,6 +524,7 @@ class CmsScoreReportTest extends TestCase
             $table->string('status')->default('active');
             $table->string('relation_type')->default('permanent');
         });
+        $this->createBackupTables();
         Schema::create('daily_scores', function (Blueprint $table) {
             $table->id();
             $table->string('user_id');
