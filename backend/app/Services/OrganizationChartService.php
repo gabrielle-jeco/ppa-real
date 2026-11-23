@@ -192,6 +192,16 @@ class OrganizationChartService
                 ->values()
                 ->all();
             $cleanEdges[$lineKey] = ['points' => $points];
+            foreach (['start_anchor', 'end_anchor'] as $anchorKey) {
+                $anchor = $route[$anchorKey] ?? null;
+                if (is_array($anchor) && in_array($anchor['side'] ?? null, ['top', 'right', 'bottom', 'left'], true)
+                    && isset($anchor['position']) && is_numeric($anchor['position'])) {
+                    $cleanEdges[$lineKey][$anchorKey] = [
+                        'side' => $anchor['side'],
+                        'position' => $this->normalizedCoordinate($anchor['position']),
+                    ];
+                }
+            }
         }
 
         $layout = ['nodes' => $cleanNodes, 'edges' => $cleanEdges];

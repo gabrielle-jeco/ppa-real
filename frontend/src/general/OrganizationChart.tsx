@@ -1,4 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
+import { anchorPoint, createRouteMotion, defaultAnchor, moveCardConnection, moveEndpoint, moveWaypoint, routeFromMotion } from './organizationChartGeometry';
+import type { EdgeEnd, EdgeRoute, RouteMotion } from './organizationChartGeometry';
 import {
     AlertTriangle,
     Check,
@@ -63,7 +65,7 @@ type ChartData = {
 type NormalizedPoint = { x: number; y: number };
 type ChartLayout = {
     nodes: Record<string, NormalizedPoint>;
-    edges: Record<string, { points: NormalizedPoint[] }>;
+    edges: Record<string, EdgeRoute>;
 };
 type NodeGeometry = {
     left: number;
@@ -80,7 +82,7 @@ type CardDragPreview = {
     deltaX: number;
     deltaY: number;
     nodePosition: NormalizedPoint;
-    routes: Record<string, { points: NormalizedPoint[] }>;
+    routes: Record<string, EdgeRoute>;
 };
 
 type SelectOption = { value: string; label: string; secondary?: string };
@@ -313,9 +315,10 @@ export default function OrganizationChart() {
     const [supervisorId, setSupervisorId] = useState('');
     const loadRevisionRef = useRef(0);
     const [layoutNodes, setLayoutNodes] = useState<Record<string, NormalizedPoint>>({});
-    const [edgeRoutes, setEdgeRoutes] = useState<Record<string, { points: NormalizedPoint[] }>>({});
+    const [edgeRoutes, setEdgeRoutes] = useState<Record<string, EdgeRoute>>({});
     const [movingCard, setMovingCard] = useState<{ username: string; offsetX: number; offsetY: number } | null>(null);
-    const [movingWaypoint, setMovingWaypoint] = useState<{ edgeId: number; index: number } | null>(null);
+    const [movingWaypoint, setMovingWaypoint] = useState<{ edgeId: number; index: number; motion: RouteMotion } | null>(null);
+    const [movingEndpoint, setMovingEndpoint] = useState<{ edgeId: number; end: EdgeEnd; motion: RouteMotion } | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dropTargetId, setDropTargetId] = useState<string | null>(null);
     const [dragPoint, setDragPoint] = useState<NormalizedPoint | null>(null);
@@ -325,7 +328,7 @@ export default function OrganizationChart() {
     const canvasRef = useRef<HTMLDivElement | null>(null);
     const nodeRefs = useRef(new Map<string, HTMLDivElement>());
     const layoutNodesRef = useRef<Record<string, NormalizedPoint>>({});
-    const edgeRoutesRef = useRef<Record<string, { points: NormalizedPoint[] }>>({});
+    const edgeRoutesRef = useRef<Record<string, EdgeRoute>>({});
     const layoutSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
     const layoutSaveRevisionRef = useRef(0);
     const [geometry, setGeometry] = useState<Record<string, NodeGeometry>>({});
@@ -356,6 +359,7 @@ export default function OrganizationChart() {
             setCardDragPreview(null);
             setMovingCard(null);
             setMovingWaypoint(null);
+            setMovingEndpoint(null);
             setDraggingId(null);
             setDropTargetId(null);
             setDragPoint(null);
@@ -424,7 +428,7 @@ export default function OrganizationChart() {
 
     const persistLayout = (
         nodes: Record<string, NormalizedPoint> = layoutNodesRef.current,
-        edges: Record<string, { points: NormalizedPoint[] }> = edgeRoutesRef.current
+        edges: Record<string, EdgeRoute> = edgeRoutesRef.current
     ) => {
         const revision = ++layoutSaveRevisionRef.current;
         const requestedLocation = locationId;
@@ -530,6 +534,25 @@ export default function OrganizationChart() {
         };
     }, [data, draggingId]);
 
+    const captureCardRoutes = React.useEffectEvent((username: string, size: { width: number; height: number }) => {
+        const initialRoutes: Record<string, { motion: RouteMotion; end: EdgeEnd }> = {};
+        data?.edges.forEach((edge) => {
+            if (edge.leader_id !== username && edge.subordinate_id !== username) return;
+            if (edge.status !== 'active' || (edge.relation_type !== 'permanent' && !edge.is_currently_effective)) return;
+            const points = edgeRoutesRef.current[String(edge.id)]?.points || defaultRoute(edge);
+            const endpoints = edgeEndpoints(edge);
+            const startCard = geometryFor(edge.leader_id);
+            const endCard = geometryFor(edge.subordinate_id);
+            if (!endpoints || !startCard || !endCard) return;
+            initialRoutes[String(edge.id)] = {
+                motion: createRouteMotion({ ...edgeRoutesRef.current[String(edge.id)], points }, startCard, endCard,
+                    endpoints.startAnchor, endpoints.endAnchor, size),
+                end: edge.leader_id === username ? 'start' : 'end',
+            };
+        });
+        return initialRoutes;
+    });
+
     React.useEffect(() => {
         if (!movingCard || !data || !canvasRef.current) return;
         const movableTiers = tierOrder.filter((tier) => data.nodes.some((item) => item.tier === tier));
@@ -540,54 +563,7 @@ export default function OrganizationChart() {
         const initialCardRect = nodeRefs.current.get(node.username)?.getBoundingClientRect();
         const initialLeft = initialCardRect ? initialCardRect.left - initialCanvasRect.left : 0;
         const initialTop = initialCardRect ? initialCardRect.top - initialCanvasRect.top : 0;
-        const initialRoutes: Record<string, { points: NormalizedPoint[]; weights: number[] }> = {};
-        data.edges.forEach((edge) => {
-            if (edge.leader_id !== node.username && edge.subordinate_id !== node.username) return;
-            if (edge.status !== 'active' || (edge.relation_type !== 'permanent' && !edge.is_currently_effective)) return;
-            const points = edgeRoutesRef.current[String(edge.id)]?.points || defaultRoute(edge);
-            const endpoints = edgeEndpoints(edge);
-            if (points.length === 0 || !endpoints) return;
-            const path = [
-                endpoints.start,
-                ...points.map((point) => ({
-                    x: point.x * initialCanvasRect.width,
-                    y: point.y * initialCanvasRect.height,
-                })),
-                endpoints.end,
-            ];
-            const cumulativeDistances = [0];
-            for (let index = 1; index < path.length; index += 1) {
-                cumulativeDistances[index] = cumulativeDistances[index - 1]
-                    + Math.hypot(path[index].x - path[index - 1].x, path[index].y - path[index - 1].y);
-            }
-            const totalDistance = cumulativeDistances[cumulativeDistances.length - 1];
-            const weights = points.map((_, index) => {
-                const progress = totalDistance > 0
-                    ? cumulativeDistances[index + 1] / totalDistance
-                    : (index + 1) / (points.length + 1);
-                return edge.leader_id === node.username ? 1 - progress : progress;
-            });
-            initialRoutes[String(edge.id)] = {
-                points: points.map((point) => ({ ...point })),
-                weights,
-            };
-        });
-        const movementBounds = Object.values(initialRoutes).reduce((bounds, route) => {
-            route.points.forEach((point, index) => {
-                const weight = route.weights[index];
-                if (weight <= 0.00001) return;
-                bounds.minimumX = Math.max(bounds.minimumX, -point.x / weight);
-                bounds.maximumX = Math.min(bounds.maximumX, (1 - point.x) / weight);
-                bounds.minimumY = Math.max(bounds.minimumY, -point.y / weight);
-                bounds.maximumY = Math.min(bounds.maximumY, (1 - point.y) / weight);
-            });
-            return bounds;
-        }, {
-            minimumX: Number.NEGATIVE_INFINITY,
-            maximumX: Number.POSITIVE_INFINITY,
-            minimumY: Number.NEGATIVE_INFINITY,
-            maximumY: Number.POSITIVE_INFINITY,
-        });
+        const initialRoutes = captureCardRoutes(node.username, { width: initialCanvasRect.width, height: initialCanvasRect.height });
         layoutSaveRevisionRef.current += 1;
         const move = (event: PointerEvent) => {
             const canvas = canvasRef.current;
@@ -601,18 +577,14 @@ export default function OrganizationChart() {
             const left = clamp(event.clientX - rect.left - movingCard.offsetX, CANVAS_PADDING, rect.width - CARD_WIDTH - CANVAS_PADDING);
             const laneTop = laneIndex * laneHeight;
             const top = clamp(event.clientY - rect.top - movingCard.offsetY, laneTop + yPadding, laneTop + laneHeight - CARD_HEIGHT - yPadding);
-            const requestedDeltaX = (left - initialLeft) / rect.width;
-            const requestedDeltaY = (top - initialTop) / rect.height;
-            const deltaX = clamp(requestedDeltaX, movementBounds.minimumX, movementBounds.maximumX);
-            const deltaY = clamp(requestedDeltaY, movementBounds.minimumY, movementBounds.maximumY);
-            const previewRoutes: Record<string, { points: NormalizedPoint[] }> = {};
+            const previewRoutes: Record<string, EdgeRoute> = {};
             Object.entries(initialRoutes).forEach(([edgeId, route]) => {
-                previewRoutes[edgeId] = {
-                    points: route.points.map((point, index) => ({
-                        x: Number((point.x + deltaX * route.weights[index]).toFixed(5)),
-                        y: Number((point.y + deltaY * route.weights[index]).toFixed(5)),
-                    })),
+                const card = {
+                    left, right: left + CARD_WIDTH, top, bottom: top + CARD_HEIGHT,
+                    centerX: left + CARD_WIDTH / 2, centerY: top + CARD_HEIGHT / 2,
                 };
+                route.motion = moveCardConnection(route.motion, route.end, card);
+                previewRoutes[edgeId] = routeFromMotion(route.motion);
             });
             const preview: CardDragPreview = {
                 username: node.username,
@@ -661,13 +633,9 @@ export default function OrganizationChart() {
         if (!movingWaypoint || !canvasRef.current) return;
         const move = (event: PointerEvent) => {
             const rect = canvasRef.current?.getBoundingClientRect();
-            const route = edgeRoutesRef.current[String(movingWaypoint.edgeId)];
-            if (!rect || !route?.points[movingWaypoint.index]) return;
-            const points = route.points.map((point, index) => index === movingWaypoint.index ? {
-                x: Number(clamp((event.clientX - rect.left) / rect.width, 0, 1).toFixed(5)),
-                y: Number(clamp((event.clientY - rect.top) / rect.height, 0, 1).toFixed(5)),
-            } : point);
-            const next = { ...edgeRoutesRef.current, [String(movingWaypoint.edgeId)]: { points } };
+            if (!rect) return;
+            const route = moveWaypoint(movingWaypoint.motion, movingWaypoint.index, { x: event.clientX - rect.left, y: event.clientY - rect.top });
+            const next = { ...edgeRoutesRef.current, [String(movingWaypoint.edgeId)]: route };
             edgeRoutesRef.current = next;
             setEdgeRoutes(next);
         };
@@ -681,6 +649,29 @@ export default function OrganizationChart() {
             window.removeEventListener('pointercancel', finish);
         };
     }, [movingWaypoint]);
+
+    React.useEffect(() => {
+        if (!movingEndpoint || !canvasRef.current) return;
+        const move = (event: PointerEvent) => {
+            const rect = canvasRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const route = moveEndpoint(movingEndpoint.motion, movingEndpoint.end, { x: event.clientX - rect.left, y: event.clientY - rect.top });
+            const next = { ...edgeRoutesRef.current, [String(movingEndpoint.edgeId)]: route };
+            edgeRoutesRef.current = next;
+            setEdgeRoutes(next);
+        };
+        const finish = () => { setMovingEndpoint(null); persistLayoutEvent(); };
+        document.body.style.userSelect = 'none';
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', finish, { once: true });
+        window.addEventListener('pointercancel', finish, { once: true });
+        return () => {
+            document.body.style.userSelect = '';
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', finish);
+            window.removeEventListener('pointercancel', finish);
+        };
+    }, [movingEndpoint]);
 
     const deleteNode = async (node: ChartNode) => {
         const detail = node.active_children_count > 0 ? ` Card masih memiliki ${node.active_children_count} bawahan aktif.` : '';
@@ -738,8 +729,8 @@ export default function OrganizationChart() {
         const incomingIndex = incoming.findIndex((item) => item.id === edge.id);
         const outgoingOffset = (outgoingIndex - (outgoing.length - 1) / 2) * 16;
         const incomingOffset = (incomingIndex - (incoming.length - 1) / 2) * 16;
-        const customPoints = cardDragPreview?.routes[String(edge.id)]?.points
-            ?? edgeRoutes[String(edge.id)]?.points;
+        const route = cardDragPreview?.routes[String(edge.id)] ?? edgeRoutes[String(edge.id)];
+        const customPoints = route?.points;
         const startTarget = customPoints?.[0]
             ? { x: customPoints[0].x * boardSize.width, y: customPoints[0].y * boardSize.height }
             : { x: subordinate.centerX, y: subordinate.centerY };
@@ -747,23 +738,14 @@ export default function OrganizationChart() {
         const endTarget = lastCustomPoint
             ? { x: lastCustomPoint.x * boardSize.width, y: lastCustomPoint.y * boardSize.height }
             : { x: leader.centerX, y: leader.centerY };
-        const anchorToward = (node: NodeGeometry, target: NormalizedPoint, offset: number) => {
-            const deltaX = target.x - node.centerX;
-            const deltaY = target.y - node.centerY;
-            const horizontal = Math.abs(deltaX) > Math.abs(deltaY);
-            return {
-                horizontal,
-                point: horizontal
-                    ? { x: deltaX >= 0 ? node.right : node.left, y: node.centerY + offset }
-                    : { x: node.centerX + offset, y: deltaY >= 0 ? node.bottom : node.top },
-            };
-        };
-        const startAnchor = anchorToward(leader, startTarget, outgoingOffset);
-        const endAnchor = anchorToward(subordinate, endTarget, incomingOffset);
+        const startAnchor = route?.start_anchor ?? defaultAnchor(leader, startTarget, outgoingOffset);
+        const endAnchor = route?.end_anchor ?? defaultAnchor(subordinate, endTarget, incomingOffset);
         return {
-            start: startAnchor.point,
-            end: endAnchor.point,
-            horizontal: startAnchor.horizontal,
+            start: anchorPoint(leader, startAnchor),
+            end: anchorPoint(subordinate, endAnchor),
+            startAnchor,
+            endAnchor,
+            horizontal: startAnchor.side === 'left' || startAnchor.side === 'right',
             routeOffset: (outgoingIndex - (outgoing.length - 1) / 2) * 12 + (incomingIndex - (incoming.length - 1) / 2) * 12,
         };
     };
@@ -796,7 +778,7 @@ export default function OrganizationChart() {
         const points = edgeCoordinates(edge);
         return points ? points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ') : null;
     };
-    const updateRoutes = (routes: Record<string, { points: NormalizedPoint[] }>) => {
+    const updateRoutes = (routes: Record<string, EdgeRoute>) => {
         edgeRoutesRef.current = routes;
         setEdgeRoutes(routes);
     };
@@ -805,6 +787,37 @@ export default function OrganizationChart() {
         delete next[String(edgeId)];
         updateRoutes(next);
         void persistLayout(layoutNodesRef.current, next);
+    };
+    const captureEdgeMotion = (edge: ChartEdge) => {
+        const endpoints = edgeEndpoints(edge);
+        const startCard = geometryFor(edge.leader_id);
+        const endCard = geometryFor(edge.subordinate_id);
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!endpoints || !startCard || !endCard || !rect) return null;
+        const route: EdgeRoute = {
+            points: [...routeFor(edge)],
+            start_anchor: endpoints.startAnchor,
+            end_anchor: endpoints.endAnchor,
+        };
+        return createRouteMotion(route, startCard, endCard, endpoints.startAnchor, endpoints.endAnchor, { width: rect.width, height: rect.height });
+    };
+    const beginEndpointDrag = (edge: ChartEdge, end: EdgeEnd, event: React.PointerEvent<SVGCircleElement>) => {
+        const motion = captureEdgeMotion(edge);
+        if (!motion || event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        updateRoutes({ ...edgeRoutesRef.current, [String(edge.id)]: routeFromMotion(motion) });
+        setMovingEndpoint({ edgeId: edge.id, end, motion });
+    };
+    const beginWaypointDrag = (edge: ChartEdge, index: number, event: React.PointerEvent<SVGCircleElement>) => {
+        const motion = captureEdgeMotion(edge);
+        if (!motion || event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        updateRoutes({ ...edgeRoutesRef.current, [String(edge.id)]: routeFromMotion(motion) });
+        setMovingWaypoint({ edgeId: edge.id, index, motion });
     };
     const distanceToSegment = (point: NormalizedPoint, start: NormalizedPoint, end: NormalizedPoint) => {
         const dx = end.x - start.x;
@@ -827,14 +840,14 @@ export default function OrganizationChart() {
         }
         const points = [...routeFor(edge)];
         points.splice(segmentIndex, 0, point);
-        const next = { ...edgeRoutesRef.current, [String(edge.id)]: { points } };
+        const next = { ...edgeRoutesRef.current, [String(edge.id)]: { ...edgeRoutesRef.current[String(edge.id)], points } };
         updateRoutes(next);
         setSelectedEdgeId(edge.id);
         void persistLayout(layoutNodesRef.current, next);
     };
     const removeWaypoint = (edge: ChartEdge, index: number) => {
         const points = routeFor(edge).filter((_, pointIndex) => pointIndex !== index);
-        const next = { ...edgeRoutesRef.current, [String(edge.id)]: { points } };
+        const next = { ...edgeRoutesRef.current, [String(edge.id)]: { ...edgeRoutesRef.current[String(edge.id)], points } };
         updateRoutes(next);
         void persistLayout(layoutNodesRef.current, next);
     };
@@ -854,7 +867,7 @@ export default function OrganizationChart() {
                 <div>
                     <div className="flex items-center gap-2 text-primary"><GitBranch size={18} /><p className="text-[10px] font-black uppercase tracking-[0.22em]">Struktur Cabang</p></div>
                     <h2 className="mt-1 text-xl font-black text-gray-900">Organigram Karyawan</h2>
-                    <p className="mt-1 text-xs text-gray-400">Geser card dalam areanya. Tarik handle rantai ke card atasan untuk membuat relasi.</p>
+                    <p className="mt-1 text-xs text-gray-400">Geser card atau titik sambungan pada garis terpilih. Tarik handle rantai ke card atasan untuk membuat relasi.</p>
                 </div>
                 <div className="flex w-full flex-wrap items-center justify-end gap-3 lg:w-auto">
                     {data.locations.length > 1 ? (
@@ -912,13 +925,7 @@ export default function OrganizationChart() {
                                         <path d={path} fill="none" stroke={edge.relation_type === 'backup' ? '#f59e0b' : focused ? '#5b21b6' : '#7444d4'} strokeWidth={focused ? 3.5 : 2.25} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={edge.relation_type === 'backup' ? '8 7' : undefined} opacity={dimmed ? 0.18 : 1} />
                                         <path d={path} fill="none" stroke="transparent" strokeWidth="16" style={{ pointerEvents: 'stroke' }} className="cursor-pointer" onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(null)} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.id); }} onDoubleClick={(event) => addWaypoint(edge, event)} />
                                         {selected && routeFor(edge).map((point, index) => (
-                                            <circle key={`${edge.id}-${index}`} cx={point.x * boardSize.width} cy={point.y * boardSize.height} r="6" fill="white" stroke="#7444d4" strokeWidth="3" style={{ pointerEvents: 'all' }} className="cursor-move" onPointerDown={(event) => {
-                                                event.preventDefault();
-                                                event.stopPropagation();
-                                                const next = { ...edgeRoutesRef.current, [String(edge.id)]: { points: [...routeFor(edge)] } };
-                                                updateRoutes(next);
-                                                setMovingWaypoint({ edgeId: edge.id, index });
-                                            }} onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => { event.stopPropagation(); removeWaypoint(edge, index); }} />
+                                            <circle key={`${edge.id}-${index}`} cx={point.x * boardSize.width} cy={point.y * boardSize.height} r="6" fill="white" stroke="#7444d4" strokeWidth="3" style={{ pointerEvents: 'all' }} className="cursor-move" onPointerDown={(event) => beginWaypointDrag(edge, index, event)} onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => { event.stopPropagation(); removeWaypoint(edge, index); }} />
                                         ))}
                                     </g>
                                 );
@@ -963,6 +970,24 @@ export default function OrganizationChart() {
                                 </div>
                             );
                         })}
+                        {geometryReady && selectedEdge && (() => {
+                            const endpoints = edgeEndpoints(selectedEdge);
+                            if (!endpoints) return null;
+                            return (
+                                <svg className="pointer-events-none absolute inset-0 z-50 overflow-visible" width={boardSize.width} height={boardSize.height}>
+                                    {(['start', 'end'] as const).map((end) => {
+                                        const anchor = end === 'start' ? endpoints.startAnchor : endpoints.endAnchor;
+                                        return <circle key={end} cx={endpoints[end].x} cy={endpoints[end].y} r="7" fill="#7444d4" stroke="white" strokeWidth="3"
+                                            data-edge-end={end} style={{ pointerEvents: 'all' }}
+                                            className={routeFor(selectedEdge).length === 0 ? 'cursor-move' : anchor.side === 'top' || anchor.side === 'bottom' ? 'cursor-ew-resize' : 'cursor-ns-resize'}
+                                            onPointerDown={(event) => beginEndpointDrag(selectedEdge, end, event)}
+                                            onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+                                            <title>{end === 'start' ? 'Geser titik sambungan atasan' : 'Geser titik sambungan bawahan'}</title>
+                                        </circle>;
+                                    })}
+                                </svg>
+                            );
+                        })()}
                     </div>
                 </div>
             </section>}

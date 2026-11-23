@@ -470,7 +470,11 @@ class OrganizationChartTest extends TestCase
             'location_id' => 'GBB', 'supervisor_id' => 'spv-1',
             'nodes' => ['spv-1' => ['x' => 0.3, 'y' => 0.6], 'spv-2' => ['x' => 0.1, 'y' => 0.1]],
             'edges' => [
-                (string) $firstLine->id => ['points' => [['x' => 0.4, 'y' => 0.4]]],
+                (string) $firstLine->id => [
+                    'points' => [['x' => 0.4, 'y' => 0.4]],
+                    'start_anchor' => ['side' => 'bottom', 'position' => 0.3],
+                    'end_anchor' => ['side' => 'top', 'position' => 0.7],
+                ],
                 (string) $hiddenLine->id => ['points' => []],
             ],
         ])->assertOk()->assertJsonPath('layout.nodes.spv-1.x', 0.3)->assertJsonMissingPath('layout.nodes.spv-2')
@@ -481,7 +485,9 @@ class OrganizationChartTest extends TestCase
         $this->assertSame($root['edges'], $stored['edges']);
         $this->assertSame($otherView, $stored['views']['spv-2']);
         $this->getJson('/api/organization-chart?location_id=GBB&supervisor_id=spv-1')
-            ->assertOk()->assertJsonPath('layout.nodes.spv-1.x', 0.3);
+            ->assertOk()->assertJsonPath('layout.nodes.spv-1.x', 0.3)
+            ->assertJsonPath('layout.edges.' . $firstLine->id . '.start_anchor.position', 0.3)
+            ->assertJsonPath('layout.edges.' . $firstLine->id . '.end_anchor.side', 'top');
         $this->getJson('/api/organization-chart?location_id=GBB&view=all')
             ->assertOk()->assertJsonPath('layout.nodes.spv-2.x', 0.8);
 
@@ -496,6 +502,71 @@ class OrganizationChartTest extends TestCase
         $this->patchJson('/api/organization-chart/layout', ['location_id' => 'GBB', 'nodes' => [], 'edges' => []])->assertOk();
         $this->assertSame($otherView, $record->fresh()->layout['views']['spv-2']);
         $this->assertDatabaseCount('reporting_lines', 2);
+    }
+
+    public function test_endpoint_anchors_round_trip_without_changing_relations_or_other_layout_data(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $sm = $this->createUser('sm-1', 'Store Manager', 'sm', 'manager');
+        $spv = $this->createUser('spv-1', 'Supervisor', 'spv', 'supervisor');
+        $line = $this->line($sm, $spv);
+        $route = [
+            'points' => [['x' => 0.4, 'y' => 0.5], ['x' => 0.7, 'y' => 0.8]],
+            'start_anchor' => ['side' => 'right', 'position' => 0.1234567],
+            'end_anchor' => ['side' => 'left', 'position' => 0.75],
+        ];
+
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/layout', [
+            'location_id' => 'GBB', 'nodes' => ['spv-1' => ['x' => 0.6, 'y' => 0.4]], 'edges' => [(string) $line->id => $route],
+        ])->assertOk()->assertJsonPath('layout.edges.' . $line->id . '.start_anchor.position', 0.12346);
+
+        $response = $this->getJson('/api/organization-chart?location_id=GBB')->assertOk();
+        $this->assertSame($route['points'], $response->json('layout.edges.' . $line->id . '.points'));
+        $response->assertJsonPath('layout.edges.' . $line->id . '.start_anchor.side', 'right')
+            ->assertJsonPath('layout.edges.' . $line->id . '.end_anchor.position', 0.75)
+            ->assertJsonPath('layout.nodes.spv-1.x', 0.6);
+        $this->assertDatabaseCount('reporting_lines', 1);
+        $this->assertDatabaseHas('reporting_lines', ['id' => $line->id, 'status' => 'active']);
+    }
+
+    public function test_endpoint_anchors_reject_invalid_sides_positions_and_incomplete_objects(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $sm = $this->createUser('sm-1', 'Store Manager', 'sm', 'manager');
+        $spv = $this->createUser('spv-1', 'Supervisor', 'spv', 'supervisor');
+        $line = $this->line($sm, $spv);
+        $this->actingAs($admin, 'sanctum');
+
+        foreach (['start_anchor', 'end_anchor'] as $key) {
+            foreach ([
+                ['side' => 'centre', 'position' => 0.5],
+                ['side' => 'top', 'position' => -0.1],
+                ['side' => 'top', 'position' => 1.1],
+                ['side' => 'top'],
+                ['position' => 0.5],
+                [],
+            ] as $anchor) {
+                $this->patchJson('/api/organization-chart/layout', [
+                    'location_id' => 'GBB', 'nodes' => [], 'edges' => [(string) $line->id => ['points' => [], $key => $anchor]],
+                ])->assertUnprocessable();
+            }
+        }
+        $this->assertDatabaseCount('organization_chart_layouts', 0);
+        $this->assertDatabaseCount('reporting_lines', 1);
+    }
+
+    public function test_legacy_layout_with_only_checkpoints_remains_supported(): void
+    {
+        $admin = $this->createUser('admin', 'Admin', 'sc', 'sc', $this->adminRole->id);
+        $sm = $this->createUser('sm-1', 'Store Manager', 'sm', 'manager');
+        $spv = $this->createUser('spv-1', 'Supervisor', 'spv', 'supervisor');
+        $line = $this->line($sm, $spv);
+        $route = ['points' => [['x' => 0.4, 'y' => 0.5]]];
+        $this->actingAs($admin, 'sanctum')->patchJson('/api/organization-chart/layout', [
+            'location_id' => 'GBB', 'nodes' => [], 'edges' => [(string) $line->id => $route],
+        ])->assertOk()->assertJsonMissingPath('layout.edges.' . $line->id . '.start_anchor');
+        $this->getJson('/api/organization-chart?location_id=GBB')->assertOk()
+            ->assertJsonPath('layout.edges.' . $line->id, $route);
     }
 
     private function createUser(string $username, string $name, string $jobLevelKey, string $appRole, ?int $roleId = null): User
