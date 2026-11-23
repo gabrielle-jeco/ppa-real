@@ -84,6 +84,12 @@ class OrganizationChartController extends Controller
             'edges.*.points.*' => ['required', 'array'],
             'edges.*.points.*.x' => ['required', 'numeric', 'between:0,1'],
             'edges.*.points.*.y' => ['required', 'numeric', 'between:0,1'],
+            'edges.*.start_anchor' => ['sometimes', 'array:side,position', 'required_array_keys:side,position'],
+            'edges.*.start_anchor.side' => ['required_with:edges.*.start_anchor', 'in:top,right,bottom,left'],
+            'edges.*.start_anchor.position' => ['required_with:edges.*.start_anchor', 'numeric', 'between:0,1'],
+            'edges.*.end_anchor' => ['sometimes', 'array:side,position', 'required_array_keys:side,position'],
+            'edges.*.end_anchor.side' => ['required_with:edges.*.end_anchor', 'in:top,right,bottom,left'],
+            'edges.*.end_anchor.position' => ['required_with:edges.*.end_anchor', 'numeric', 'between:0,1'],
         ]);
         $layout = $this->chartService->saveLayout(
             Auth::user(),
