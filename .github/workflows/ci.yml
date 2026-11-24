@@ -141,10 +141,18 @@ jobs:
         cache-from: type=gha,scope=frontend-production
         cache-to: type=gha,mode=max,scope=frontend-production
 
+    - name: Promote completed release to production
+      env:
+        PREFIX: ${{ steps.images.outputs.prefix }}
+        TAG: ${{ steps.images.outputs.tag }}
+      run: |
+        docker buildx imagetools create --tag "$PREFIX-backend:production" "$PREFIX-backend:$TAG"
+        docker buildx imagetools create --tag "$PREFIX-frontend:production" "$PREFIX-frontend:$TAG"
+
     - name: Record published release
       env:
         PREFIX: ${{ steps.images.outputs.prefix }}
         TAG: ${{ steps.images.outputs.tag }}
       run: |
-        printf '### Published images\n\n- `%s-backend:%s`\n- `%s-frontend:%s`\n\nSet `IMAGE_TAG=%s` on the server.\n' \
+        printf '### Published images\n\n- `%s-backend:%s`\n- `%s-frontend:%s`\n\nBoth images are also tagged `production`. Servers can keep `IMAGE_TAG=production`; rollback tag: `%s`.\n' \
           "$PREFIX" "$TAG" "$PREFIX" "$TAG" "$TAG" >> "$GITHUB_STEP_SUMMARY"

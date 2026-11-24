@@ -1,6 +1,6 @@
 services:
   backend:
-    image: "${GHCR_IMAGE_PREFIX:?Set GHCR_IMAGE_PREFIX}-backend:${IMAGE_TAG:?Set IMAGE_TAG to a published sha tag}"
+    image: "${GHCR_IMAGE_PREFIX:?Set GHCR_IMAGE_PREFIX}-backend:${IMAGE_TAG:-production}"
     container_name: perf-app-backend
     restart: unless-stopped
     env_file: ./.env
@@ -25,7 +25,7 @@ services:
     networks: [app-network]
 
   scheduler:
-    image: "${GHCR_IMAGE_PREFIX:?Set GHCR_IMAGE_PREFIX}-backend:${IMAGE_TAG:?Set IMAGE_TAG to a published sha tag}"
+    image: "${GHCR_IMAGE_PREFIX:?Set GHCR_IMAGE_PREFIX}-backend:${IMAGE_TAG:-production}"
     container_name: perf-app-scheduler
     restart: unless-stopped
     env_file: ./.env
@@ -45,7 +45,7 @@ services:
     networks: [app-network]
 
   frontend:
-    image: "${GHCR_IMAGE_PREFIX:?Set GHCR_IMAGE_PREFIX}-frontend:${IMAGE_TAG:?Set IMAGE_TAG to a published sha tag}"
+    image: "${GHCR_IMAGE_PREFIX:?Set GHCR_IMAGE_PREFIX}-frontend:${IMAGE_TAG:-production}"
     container_name: perf-app-frontend
     restart: unless-stopped
     ports:

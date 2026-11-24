@@ -7,7 +7,8 @@ PR/push ke `main` dan `develop`. Hanya push ke `main` (termasuk merge PR) yang
 mem-publish image, setelah kedua job tersebut sukses. Lint frontend masih mengikuti
 perilaku CI sebelumnya: dilaporkan tetapi tidak memblokir build.
 
-Image Linux AMD64 dipublish dengan tag `sha-<40 karakter commit SHA>`:
+Image Linux AMD64 dipublish dengan tag commit `sha-<40 karakter commit SHA>` dan
+tag tetap `production` untuk update rutin:
 
 | Repository | GHCR_IMAGE_PREFIX |
 | --- | --- |
@@ -15,9 +16,11 @@ Image Linux AMD64 dipublish dengan tag `sha-<40 karakter commit SHA>`:
 | ppa-real (folder Copy) | ghcr.io/gabrielle-jeco/ppa-real |
 
 Nama image adalah `<prefix>-frontend:<tag>` dan `<prefix>-backend:<tag>`.
-Scheduler memakai image backend yang sama. Tidak ada tag `latest`; gunakan pasangan
-image dari satu workflow yang seluruhnya sukses. Bila salah satu build gagal,
-jangan deploy tag tersebut meskipun image lainnya sudah ter-publish.
+Scheduler memakai image backend yang sama. Tag `production` baru diperbarui setelah
+kedua image bertag commit berhasil dipublish. Deployment harus menunggu seluruh
+workflow sukses. Pembaruan dua tag registry dilakukan berurutan, bukan transaksi
+atomik; jika promosi tag gagal di tengah, jangan deploy sampai workflow berhasil
+diulang. Tag commit tetap tersedia untuk memilih versi atau rollback.
 
 Workflow hanya mem-publish image, tidak mengakses atau men-deploy server kantor.
 Build tidak membutuhkan `.env` production atau database production. Migrations dan
@@ -79,7 +82,7 @@ APP_DEBUG=false
 DB_HOST=db
 DB_PORT=5432
 GHCR_IMAGE_PREFIX=ghcr.io/gabrielle-jeco/ppa-real
-IMAGE_TAG=sha-PASTE_FULL_COMMIT_SHA_FROM_SUCCESSFUL_WORKFLOW
+IMAGE_TAG=production
 COMPOSE_PROJECT_NAME=PASTE_EXISTING_PROJECT_NAME
 DB_VOLUME_NAME=PASTE_EXISTING_DB_VOLUME_NAME
 LARAVEL_STORAGE_PATH=/home/deployer/ppa-real/backend/storage
@@ -118,9 +121,21 @@ Startup tidak mengganti password role DB yang sudah ada hanya karena `.env` beru
 
 ## Menjalankan rilis / update berikutnya
 
-Ambil tag dari ringkasan workflow sukses, catat tag sebelumnya, lalu ubah `IMAGE_TAG`
-di `.env`. Perubahan Compose/config pada rilis baru juga harus disalin ke server.
-Tidak perlu `git pull` source aplikasi untuk update kode biasa.
+Tunggu workflow `main` sukses. `IMAGE_TAG=production` cukup diset sekali; jika
+variabel tidak diisi, Compose juga menggunakan `production`. Server yang sebelumnya
+memakai `IMAGE_TAG=sha-...` perlu menggantinya ke `production` sekali saja.
+Perubahan Compose/config pada rilis baru tetap harus disalin ke server. Tidak perlu
+`git pull` source aplikasi atau mengedit tag untuk update kode biasa.
+
+Untuk rilis tanpa perubahan schema, update rutin cukup:
+
+```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Jika ada migration, gunakan urutan maintenance berikut. Catat tag commit rilis
+sebelumnya dari riwayat Actions sebelum update untuk kebutuhan rollback.
 
 ```bash
 docker compose -f docker-compose.prod.yml config --quiet
@@ -150,7 +165,6 @@ docker compose -f docker-compose.prod.yml exec backend php artisan backup:sync
 ini untuk migrasi server dengan data lama, bukan pembuatan demo baru.
 
 Untuk rilis frontend saja yang memang tidak membutuhkan perubahan backend/schema,
-pertahankan tag backend/scheduler yang berjalan; setelah memperbarui `IMAGE_TAG`,
 jalankan hanya:
 
 ```bash
@@ -158,12 +172,15 @@ docker compose -f docker-compose.prod.yml pull frontend
 docker compose -f docker-compose.prod.yml up -d --no-deps frontend
 ```
 
-`IMAGE_TAG` sekarang adalah target rilis penuh untuk command selanjutnya; backend
-yang belum direcreate masih memakai tag lamanya sampai operator meng-updatenya.
+Backend/scheduler yang belum direcreate masih memakai image lamanya sampai operator
+meng-updatenya. Jangan menjalankan update bersamaan dengan proses publish/promosi
+tag `production`.
 
 ## Rollback
 
-Ubah `IMAGE_TAG` ke tag rilis sebelumnya dan deploy ulang image yang sesuai. Rollback
+Untuk rollback saja, ubah `IMAGE_TAG` ke `sha-...` rilis sebelumnya dan deploy ulang
+image yang sesuai. Setelah siap mengikuti rilis rutin lagi, kembalikan nilainya ke
+`production`. Rollback
 image tidak membatalkan migrations atau mengembalikan data. Pastikan schema tetap
 kompatibel atau gunakan prosedur pemulihan backup yang telah diuji. Jangan menjalankan
 `down -v` atau prune volume untuk update/rollback.
