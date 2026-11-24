@@ -1,0 +1,92 @@
+services:
+  backend:
+    image: "${GHCR_IMAGE_PREFIX:?Set GHCR_IMAGE_PREFIX}-backend:${IMAGE_TAG:?Set IMAGE_TAG to a published sha tag}"
+    container_name: perf-app-backend
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+    volumes:
+      - type: bind
+        source: "${LARAVEL_STORAGE_PATH:?Set absolute path to existing Laravel storage}"
+        target: /var/www/storage
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "php", "-r", "$$s=@fsockopen('127.0.0.1',9000); if (!$$s) exit(1); fclose($$s);"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [app-network]
+
+  scheduler:
+    image: "${GHCR_IMAGE_PREFIX:?Set GHCR_IMAGE_PREFIX}-backend:${IMAGE_TAG:?Set IMAGE_TAG to a published sha tag}"
+    container_name: perf-app-scheduler
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+    command: ["php", "artisan", "schedule:work", "--no-interaction"]
+    volumes:
+      - type: bind
+        source: "${LARAVEL_STORAGE_PATH:?Set absolute path to existing Laravel storage}"
+        target: /var/www/storage
+        bind:
+          create_host_path: false
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [app-network]
+
+  frontend:
+    image: "${GHCR_IMAGE_PREFIX:?Set GHCR_IMAGE_PREFIX}-frontend:${IMAGE_TAG:?Set IMAGE_TAG to a published sha tag}"
+    container_name: perf-app-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8081}:80"
+    volumes:
+      - type: bind
+        source: "${LARAVEL_STORAGE_PATH:?Set absolute path to existing Laravel storage}/app/public"
+        target: /var/www/storage/app/public
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [app-network]
+
+  db:
+    image: postgres:15
+    container_name: perf-app-db
+    restart: unless-stopped
+    ports:
+      - "${DB_FORWARD_PORT:-5758}:5432"
+    environment:
+      POSTGRES_DB: "${DB_DATABASE:?Set DB_DATABASE}"
+      POSTGRES_USER: "${DB_USERNAME:?Set DB_USERNAME}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?Set DB_PASSWORD}"
+      TZ: "${TZ:-Asia/Jakarta}"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [app-network]
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  db-data:
+    external: true
+    name: "${DB_VOLUME_NAME:?Set DB_VOLUME_NAME to the existing PostgreSQL volume}"

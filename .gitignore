@@ -1,5 +1,7 @@
 AGENTS.md
-/.env
-/.env.bak
+.env
+.env.*
+!.env.example
+*.log
 PRODUCTION_HARDENING.md
-.gitignore
+/docker-compose.yml

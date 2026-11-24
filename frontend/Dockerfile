@@ -2,7 +2,7 @@
 FROM node:22.23.4-alpine as build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 COPY . .
 ARG VITE_WEB_PUSH_PUBLIC_KEY=""
 ARG VITE_ENABLE_BULK_ASSIGNMENT="false"
