@@ -414,7 +414,7 @@ export default function ScoreReportPanel({ locations, regionals, apiBase = '/api
     const summary = report?.summary;
 
     return (
-        <div className="flex h-[calc(100dvh-2rem)] min-h-[720px] flex-col overflow-hidden">
+        <div className="flex min-h-[calc(100dvh-4rem)] shrink-0 flex-col pb-4">
             <header className="mb-6">
                 <p className="text-xs font-bold uppercase tracking-[0.3em] text-gray-400">{lockedRegional ? 'YoDaily' : 'YoDaily CMS'}</p>
                 <h1 className="mt-2 text-3xl font-extrabold text-gray-900">REPORT PENILAIAN</h1>
@@ -457,7 +457,7 @@ export default function ScoreReportPanel({ locations, regionals, apiBase = '/api
 
             {error && <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{error}</div>}
 
-            <section className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+            <section className="mt-5 flex shrink-0 flex-col rounded-3xl border border-gray-100 bg-white shadow-sm">
                 <div className="flex items-end gap-2 border-b border-gray-100 px-5 pt-4">
                     {(['daily', 'monthly'] as ReportMode[]).map((item) => (
                         <button key={item} type="button" onClick={() => changeMode(item)} className={`rounded-t-xl px-5 py-3 text-sm font-black transition ${mode === item ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
@@ -473,8 +473,20 @@ export default function ScoreReportPanel({ locations, regionals, apiBase = '/api
                     </button>
                 </div>
 
-                <div className="min-h-[260px] flex-1 overflow-auto px-5 pb-4">
-                    <table className="w-full min-w-[1050px] border-separate border-spacing-0 text-left text-xs">
+                <div className="min-h-[420px] overflow-x-auto px-5 pb-4">
+                    <table className="w-full min-w-[1050px] table-fixed border-separate border-spacing-0 text-left text-xs [&_td]:break-words">
+                        <colgroup>
+                            <col style={{ width: '16%' }} />
+                            <col style={{ width: '15%' }} />
+                            <col style={{ width: '20%' }} />
+                            <col style={{ width: '20%' }} />
+                            {mode === 'daily' ? (
+                                <><col style={{ width: '10%' }} /><col style={{ width: '11%' }} /></>
+                            ) : (
+                                <><col style={{ width: '7%' }} /><col style={{ width: '7%' }} /><col style={{ width: '7%' }} /></>
+                            )}
+                            <col style={{ width: '8%' }} />
+                        </colgroup>
                         <thead className="sticky top-0 z-10 bg-purple-50 text-gray-600">
                             <tr>
                                 <th className="rounded-l-xl px-4 py-3 font-black">Tanggal</th>
@@ -509,6 +521,13 @@ export default function ScoreReportPanel({ locations, regionals, apiBase = '/api
                             {report?.groups.map((group) => {
                                 const expanded = expandedKey === group.key;
                                 const rows = detailRows[group.key] || [];
+                                const periods = new Map<string, ReportRow[]>();
+                                if (expanded) rows.forEach(row => {
+                                    const key = row.date.slice(0, mode === 'monthly' ? 7 : 10);
+                                    const members = periods.get(key) || [];
+                                    members.push(row);
+                                    periods.set(key, members);
+                                });
                                 return [
                                     <tr key={group.key} onClick={() => toggleGroup(group)} className="cursor-pointer border-b border-gray-100 bg-white font-bold text-gray-700 transition hover:bg-purple-50/50">
                                         <td className="border-b border-gray-100 px-4 py-4">{periodLabel}</td>
@@ -527,20 +546,25 @@ export default function ScoreReportPanel({ locations, regionals, apiBase = '/api
                                             ? <tr key={`${group.key}-loading`}><td colSpan={mode === 'daily' ? 7 : 8} className="bg-gray-50 py-6 text-center text-gray-400">Memuat daftar bawahan...</td></tr>
                                             : rows.length === 0
                                                 ? <tr key={`${group.key}-empty`}><td colSpan={mode === 'daily' ? 7 : 8} className="bg-gray-50 py-6 text-center text-gray-400">Tidak ada detail bawahan.</td></tr>
-                                                : rows.map((row, index) => (
-                                                    <tr key={`${group.key}-${row.subordinate_id}-${row.date}-${index}`} className="bg-gray-50/70 text-gray-600">
-                                                        <td className="border-b border-white px-4 py-3 pl-8">{formatDate(row.date, mode)}</td>
-                                                        <td className="border-b border-white px-4 py-3">{row.branch}</td>
-                                                        <td className="border-b border-white px-4 py-3 font-bold text-gray-700">{row.subordinate_id} - {row.subordinate_name}</td>
-                                                        <td className="border-b border-white px-4 py-3">{row.leader_id ? `${row.leader_id} - ${row.leader_name}` : row.leader_name}</td>
-                                                        {mode === 'daily' ? (
-                                                            <><td className="border-b border-white px-4 py-3 text-center">{row.approved_tasks}</td><td className="border-b border-white px-4 py-3 text-center">{row.unapproved_tasks}</td></>
-                                                        ) : (
-                                                            <><td className="border-b border-white px-4 py-3 text-center">{score(row.task_score)}</td><td className="border-b border-white px-4 py-3 text-center">{score(row.attendance_score)}</td><td className="border-b border-white px-4 py-3 text-center">{score(row.evaluation_score)}</td></>
-                                                        )}
-                                                        <td className="border-b border-white px-4 py-3 text-center font-bold text-primary">{score(row.percentage)}</td>
-                                                    </tr>
-                                                )),
+                                                : [...periods.entries()].sort(([a], [b]) => a.localeCompare(b)).flatMap(([date, members]) => [
+                                                    <tr key={`${group.key}-${date}-heading`} data-detail-period={date}>
+                                                        <td colSpan={mode === 'daily' ? 7 : 8} className="border-y border-purple-100 bg-purple-50 px-8 py-3 text-left text-sm font-black text-primary">{formatDate(date, mode)}</td>
+                                                    </tr>,
+                                                    ...members.map((row, index) => (
+                                                        <tr key={`${group.key}-${date}-${row.subordinate_id}-${index}`} className="bg-gray-50/70 text-gray-600">
+                                                            <td className="border-b border-white px-4 py-3 pl-8"><span className="sr-only">{formatDate(date, mode)}</span></td>
+                                                            <td className="border-b border-white px-4 py-3">{row.branch}</td>
+                                                            <td className="border-b border-white px-4 py-3 font-bold text-gray-700">{row.subordinate_id} - {row.subordinate_name}</td>
+                                                            <td className="border-b border-white px-4 py-3">{row.leader_id ? `${row.leader_id} - ${row.leader_name}` : row.leader_name}</td>
+                                                            {mode === 'daily' ? (
+                                                                <><td className="border-b border-white px-4 py-3 text-center">{row.approved_tasks}</td><td className="border-b border-white px-4 py-3 text-center">{row.unapproved_tasks}</td></>
+                                                            ) : (
+                                                                <><td className="border-b border-white px-4 py-3 text-center">{score(row.task_score)}</td><td className="border-b border-white px-4 py-3 text-center">{score(row.attendance_score)}</td><td className="border-b border-white px-4 py-3 text-center">{score(row.evaluation_score)}</td></>
+                                                            )}
+                                                            <td className="border-b border-white px-4 py-3 text-center font-bold text-primary">{score(row.percentage)}</td>
+                                                        </tr>
+                                                    )),
+                                                ]),
                                     ] : []),
                                 ];
                             })}
