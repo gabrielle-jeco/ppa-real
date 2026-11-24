@@ -1,3 +1,6 @@
+Deployment production menggunakan image GHCR dijelaskan di
+[Deployment GHCR](DEPLOYMENT_GHCR.md), dengan file mandiri `docker-compose.prod.yml`.
+
 ## 🚀 Local Setup Guide
 
 Follow the steps below to run the project locally using Docker.
