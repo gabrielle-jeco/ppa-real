@@ -45,6 +45,22 @@ Nilai `VITE_*` masuk ke JavaScript saat build dan dapat dibaca pengguna browser.
 Jangan menaruh DB password, APP_KEY, atau VAPID private key di sana. Mengubah
 repository variables baru memengaruhi image hasil build berikutnya.
 
+## Script Otomatis (Rekomendasi untuk Operator Server)
+
+Repository menyediakan dua script helper untuk meminimalkan langkah manual:
+
+- **`initial-setup-prod.sh`** (dipakai 1× saat perpindahan awal dari Compose lama ke GHCR; langsung mendeteksi `COMPOSE_PROJECT_NAME`, `DB_VOLUME_NAME`, `LARAVEL_STORAGE_PATH`, `GHCR_IMAGE_PREFIX` dari git remote, dan `IMAGE_TAG=production`, mem-backup `.env`, lalu menuliskannya ke `.env` secara otomatis tanpa menimpa secret lama):
+  ```bash
+  docker login ghcr.io -u <github-user>
+  ./initial-setup-prod.sh
+  ```
+  Opsi tambahan: `--prefix ghcr.io/<owner>/<repo>` (bila folder deploy bukan clone Git), `--prepare-env` (hanya deteksi & isi `.env` tanpa menyentuh container), `--inspect` (read-only cek nilai), `--force-env` (timpa nilai GHCR existing), `--skip-backup`.
+- **`deploy-prod.sh`** (dipakai untuk setiap update rutin setelah workflow `main` hijau):
+  - `./deploy-prod.sh` — pull image `:production`, hentikan aplikasi sementara, jalankan `migrate --force`, dan nyalakan kembali semua container.
+  - `./deploy-prod.sh --frontend-only` — pull & update container frontend saja.
+  - `./deploy-prod.sh --skip-migrate` — update tanpa langkah migrasi (hanya jika rilis tidak membawa migration baru).
+  - `./deploy-prod.sh --tag sha-<commit>` — rollback/deploy ke tag commit tertentu.
+
 ## Persiapan server dan perpindahan pertama
 
 Gunakan Docker Compose v2+ dan server Linux AMD64 (`uname -m`: `x86_64`).
