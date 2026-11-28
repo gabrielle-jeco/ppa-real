@@ -12,6 +12,9 @@ interface MobileCrewTaskPreviewProps {
     initialIndex?: number;
     onDelete?: (evidenceId: number) => void;
     readOnly?: boolean;
+    resultOnly?: boolean;
+    renderEvidence?: (evidence: any) => React.ReactNode;
+    onDownloadEvidence?: (evidence: any) => void;
 }
 
 export default function MobileCrewTaskPreview({
@@ -21,7 +24,10 @@ export default function MobileCrewTaskPreview({
     activeTab,
     onTabChange,
     initialIndex = 0,
-    readOnly = false
+    readOnly = false,
+    resultOnly = false,
+    renderEvidence,
+    onDownloadEvidence
 }: MobileCrewTaskPreviewProps) {
     const [animateIn, setAnimateIn] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -45,7 +51,7 @@ export default function MobileCrewTaskPreview({
         return url.startsWith('http') || url.startsWith('blob:') || url.startsWith('/storage/') ? url : `/storage/${url}`;
     };
 
-    const currentEvidences = (task?.evidences || []).filter((e: any) => e.type === activeTab);
+    const currentEvidences = (task?.evidences || []).filter((e: any) => resultOnly || e.type === activeTab);
 
     if (!isOpen && !animateIn) return null;
     const safeIndex = selectedIndex >= currentEvidences.length ? Math.max(0, currentEvidences.length - 1) : selectedIndex;
@@ -53,16 +59,16 @@ export default function MobileCrewTaskPreview({
     const currentImage = currentEvidence ? getFullUrl(currentEvidence.file_path) : null;
 
     return (
-        <div className={`fixed inset-0 z-[10000] flex items-center justify-center p-4 transition-colors duration-300 ${animateIn ? 'bg-black/90 backdrop-blur-sm' : 'bg-black/0 pointer-events-none'}`}>
+        <div role="dialog" aria-modal="true" aria-label="Preview Bukti" className={`fixed inset-0 z-[10000] flex items-center justify-center p-4 transition-colors duration-300 ${animateIn ? 'bg-black/90 backdrop-blur-sm' : 'bg-black/0 pointer-events-none'}`}>
             <div className={`bg-white w-full max-w-sm rounded-[30px] overflow-hidden shadow-2xl relative transition-all duration-300 ease-out transform ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-5'}`}>
                 {/* Header Image Area */}
                 <div className="relative w-full aspect-[3/4] bg-gray-900 group">
-                    {currentImage ? (
+                    {renderEvidence&&currentEvidence?renderEvidence(currentEvidence):currentImage ? (
                         <img src={currentImage} alt={activeTab} className="w-full h-full object-cover transition-opacity duration-300" />
                     ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 bg-gray-100">
                             <span className="text-4xl mb-4">📷</span>
-                            <p className="text-sm font-medium">Belum Ada Foto</p>
+                            <p className="text-sm font-medium">{resultOnly ? 'Belum Ada Bukti' : 'Belum Ada Foto'}</p>
                         </div>
                     )}
 
@@ -71,7 +77,7 @@ export default function MobileCrewTaskPreview({
 
                     {/* Top Bar */}
                     <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-10">
-                        <button onClick={handleClose} className="bg-black/20 hover:bg-black/40 backdrop-blur-md text-white p-2 rounded-full transition">
+                        <button aria-label="Tutup preview bukti" onClick={handleClose} className="bg-black/20 hover:bg-black/40 backdrop-blur-md text-white p-2 rounded-full transition">
                             <X size={20} />
                         </button>
                         <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-white shadow-lg backdrop-blur-md ${readOnly ? 'bg-gray-500/80' : (task.status === 'approved' ? 'bg-green-500/80' : 'bg-blue-500/80')}`}>
@@ -126,18 +132,18 @@ export default function MobileCrewTaskPreview({
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <User size={12} />
-                                    Unggahan Crew
+                                    {resultOnly?'Unggahan Supervisor':'Unggahan Crew'}
                                 </span>
                             </div>
                             {/* Tab Switcher Button (Small) */}
-                            <button
+                            {!resultOnly&&<button
                                 onClick={() => {
                                     setSelectedIndex(0);
                                     onTabChange(activeTab === 'before' ? 'after' : 'before');
                                 }}
                                 className="bg-white/20 text-xs px-2 py-1 rounded-full hover:bg-white/30 transition">
                                 Ke {activeTab === 'before' ? 'Sesudah' : 'Sebelum'}
-                            </button>
+                            </button>}
                         </div>
                     </div>
                 </div>
@@ -146,14 +152,12 @@ export default function MobileCrewTaskPreview({
                 <div className="p-5 bg-white flex items-center justify-between gap-4">
                     {currentEvidence ? (
                         <div className="flex-1">
-                            <p className="text-xs text-gray-500 mb-1">Bukti {activeTab === 'before' ? 'Sebelum Bekerja' : 'Sesudah Bekerja'} {currentEvidences.length > 1 ? `(${safeIndex + 1}/${currentEvidences.length})` : ''}</p>
-                            <div className="py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium">
-                                Bukti hanya dapat dilihat
-                            </div>
+                            <p className="text-xs text-gray-500 mb-1">Bukti {resultOnly ? 'Hasil' : activeTab === 'before' ? 'Sebelum Bekerja' : 'Sesudah Bekerja'} {currentEvidences.length > 1 ? `(${safeIndex + 1}/${currentEvidences.length})` : ''}</p>
+                            {onDownloadEvidence&&/\.xlsx$/i.test(currentEvidence.file_path)?<button onClick={()=>onDownloadEvidence(currentEvidence)} className="w-full py-3 px-4 rounded-xl bg-blue-600 text-white text-center text-sm font-medium">Unduh XLSX</button>:<div className="py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium">Bukti hanya dapat dilihat</div>}
                         </div>
                     ) : (
                         <div className="w-full py-3 px-4 rounded-xl bg-gray-50 text-gray-400 text-center text-sm font-medium">
-                            Belum ada foto untuk bagian ini.
+                            {resultOnly ? 'Belum ada bukti untuk bagian ini.' : 'Belum ada foto untuk bagian ini.'}
                         </div>
                     )}
                 </div>

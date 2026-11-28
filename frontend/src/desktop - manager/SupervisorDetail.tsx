@@ -1,11 +1,11 @@
+import DesktopTaskCalendar from '../general/DesktopTaskCalendar';
 import { useEffect, useRef, useState } from 'react';
-import { Camera, ChevronDown, Edit3, Trash2 } from 'lucide-react';
+import { Camera, Edit3, Trash2 } from 'lucide-react';
 import AddTaskModal from '../general/AddTaskModal';
 import TaskPreview from '../general/TaskPreview';
 import TaskStartStatus from '../general/TaskStartStatus';
 import ManagerReviewForm from './ManagerReviewForm';
 import { getAttendanceColor as getAttendanceStatusColor, getAttendanceDay } from '../utils/attendanceCalendar';
-import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
 import { formatDisplayNumber } from '../general/numberFormat';
 import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
@@ -127,18 +127,7 @@ export default function SupervisorDetail({ supervisor, selectedCrewId, onSelectC
         return () => window.clearInterval(timer);
     }, []);
 
-    const getCalendarDays = () => {
-        const year = selectedDate.getFullYear();
-        const month = selectedDate.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const days: Array<Date | null> = [];
 
-        for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
-        for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
-
-        return days;
-    };
 
     const isFutureDate = (date: Date) => {
         const d = new Date(date);
@@ -147,8 +136,6 @@ export default function SupervisorDetail({ supervisor, selectedCrewId, onSelectC
         today.setHours(0, 0, 0, 0);
         return d > today;
     };
-
-    const isUnavailableTaskDate = (date: Date) => isAfterTaskWindow(date);
 
     const getAttendanceColor = (day: Date) => {
         const attendanceDay = getAttendanceDay(stats?.attendance_calendar, day);
@@ -273,101 +260,13 @@ export default function SupervisorDetail({ supervisor, selectedCrewId, onSelectC
                         </div>
                         <p className="text-[10px] text-gray-400">Selected Crew Task Completed: {completedTasks}/{totalTasks}</p>
 
-                        <div className="bg-white rounded-2xl p-6 mt-6 border border-gray-100 shadow-sm relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-50 rounded-bl-full -z-0 opacity-50"></div>
+                        <DesktopTaskCalendar selectedDate={selectedDate} onChange={setSelectedDate}
+                            renderDay={viewMode === 'REVIEW' ? (day) => {
+                                const now = new Date();
+                                const isToday = day.toDateString() === now.toDateString();
+                                return <div className="flex justify-center"><div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-medium ${getAttendanceColor(day)} ${isToday ? 'ring-2 ring-purple-500 ring-offset-2 z-10 font-bold' : ''}`}>{day.getDate()}</div></div>;
+                            } : undefined}/>
 
-                            <div className="flex justify-between items-center mb-6 text-sm font-semibold text-gray-700 relative z-10 px-2">
-                                <div className="flex items-center gap-2 w-full">
-                                    <div className="relative group flex-1">
-                                        <select
-                                            value={selectedDate.getMonth()}
-                                            onChange={(event) => {
-                                                const newDate = new Date(selectedDate);
-                                                newDate.setMonth(parseInt(event.target.value));
-                                                setSelectedDate(clampToTaskWindow(newDate));
-                                            }}
-                                            className="w-full appearance-none bg-gray-50 border border-transparent hover:border-primary rounded-xl px-3 py-2 font-bold text-gray-700 text-sm cursor-pointer outline-none transition-colors"
-                                        >
-                                            {Array.from({ length: 12 }, (_, i) => i)
-                                                .filter((month) => getAvailableTaskMonths(selectedDate.getFullYear()).includes(month))
-                                                .map((month) => (
-                                                    <option key={month} value={month}>
-                                                        {new Date(0, month).toLocaleString('en-US', { month: 'long' })}
-                                                    </option>
-                                                ))}
-                                        </select>
-                                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
-                                    </div>
-
-                                    <div className="relative group w-24">
-                                        <select
-                                            value={selectedDate.getFullYear()}
-                                            onChange={(event) => {
-                                                const newDate = new Date(selectedDate);
-                                                const year = parseInt(event.target.value);
-                                                newDate.setFullYear(year);
-                                                setSelectedDate(clampToTaskWindow(newDate));
-                                            }}
-                                            className="w-full appearance-none bg-gray-50 border border-transparent hover:border-primary rounded-xl px-3 py-2 text-gray-700 font-bold text-sm cursor-pointer outline-none transition-colors"
-                                        >
-                                            {getAvailableTaskYears().map((year) => (
-                                                <option key={year} value={year}>{year}</option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-7 text-center text-[10px] text-gray-400 font-medium uppercase tracking-wider gap-y-4 mb-2 relative z-10">
-                                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-                            </div>
-                            <div className="grid grid-cols-7 text-center text-xs font-medium text-gray-700 gap-y-3 relative z-10">
-                                {getCalendarDays().map((day, idx) => {
-                                    if (!day) return <div key={idx}></div>;
-
-                                    const isSelected = day.getDate() === selectedDate.getDate()
-                                        && day.getMonth() === selectedDate.getMonth()
-                                        && day.getFullYear() === selectedDate.getFullYear();
-
-                                    if (viewMode === 'REVIEW') {
-                                        const now = new Date();
-                                        const isToday = day.getDate() === now.getDate()
-                                            && day.getMonth() === now.getMonth()
-                                            && day.getFullYear() === now.getFullYear();
-
-                                        return (
-                                            <div key={idx} className="flex justify-center">
-                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-medium ${getAttendanceColor(day)} ${isToday ? 'ring-2 ring-purple-500 ring-offset-2 z-10 font-bold' : ''}`}>
-                                                    {day.getDate()}
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-
-                                    const isFuture = isUnavailableTaskDate(day);
-
-                                    return (
-                                        <div key={idx} className="flex justify-center">
-                                            <button
-                                                onClick={() => {
-                                                    if (!isFuture) setSelectedDate(day);
-                                                }}
-                                                disabled={isFuture}
-                                                className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] transition ${isSelected
-                                                    ? 'bg-primary text-white shadow-md transform scale-110'
-                                                    : isFuture
-                                                        ? 'text-gray-300 cursor-not-allowed'
-                                                        : 'hover:bg-purple-100 text-gray-700'
-                                                    }`}
-                                            >
-                                                {day.getDate()}
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
                     </div>
                 </div>
 

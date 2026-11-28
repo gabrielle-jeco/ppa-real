@@ -8,10 +8,13 @@ interface TaskPreviewProps {
     onClose: () => void;
     onDeleteProof?: (evidenceId: number) => void;
     readOnly?: boolean;
+    resultOnly?: boolean;
+    renderEvidence?: (evidence: any) => React.ReactNode;
+    renderThumbnail?: (evidence: any) => React.ReactNode;
 }
 
-export default function TaskPreview({ task, onClose }: TaskPreviewProps) {
-    const [activeTab, setActiveTab] = useState<'before' | 'after'>('before');
+export default function TaskPreview({ task, onClose, resultOnly = false, renderEvidence, renderThumbnail }: TaskPreviewProps) {
+    const [activeTab, setActiveTab] = useState<'before' | 'after'>(resultOnly ? 'after' : 'before');
     const [selectedIndex, setSelectedIndex] = useState(0);
 
     if (!task) return null;
@@ -21,7 +24,7 @@ export default function TaskPreview({ task, onClose }: TaskPreviewProps) {
         return url.startsWith('http') || url.startsWith('blob:') || url.startsWith('/storage/') ? url : `/storage/${url}`;
     };
 
-    const currentEvidences = (task.evidences || []).filter((e: any) => e.type === activeTab);
+    const currentEvidences = (task.evidences || []).filter((e: any) => resultOnly || e.type === activeTab);
 
     // Ensure index is within bounds if an item is deleted
     const safeIndex = selectedIndex >= currentEvidences.length ? Math.max(0, currentEvidences.length - 1) : selectedIndex;
@@ -29,7 +32,7 @@ export default function TaskPreview({ task, onClose }: TaskPreviewProps) {
     const currentImage = currentEvidence ? getFullUrl(currentEvidence.file_path) : null;
 
     return (
-        <div className="flex flex-col h-full relative">
+        <div className="flex flex-col h-full min-h-0 relative">
             {/* Header */}
             <div className="flex justify-between items-center mb-4">
                 <div>
@@ -50,45 +53,44 @@ export default function TaskPreview({ task, onClose }: TaskPreviewProps) {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 mb-4">
+            {!resultOnly && <div className="flex gap-2 mb-4">
                 <button onClick={() => { setActiveTab('before'); setSelectedIndex(0); }} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'before' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Sebelum Bekerja</button>
                 <button onClick={() => { setActiveTab('after'); setSelectedIndex(0); }} className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'after' ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Sesudah Bekerja</button>
-            </div>
+            </div>}
 
             {/* Main Preview (Gray Box) */}
             <div className="flex-1 bg-gray-200 rounded-2xl mb-4 flex items-center justify-center relative overflow-hidden shadow-inner group">
-                {currentImage ? (
-                    <>
-                        <img src={currentImage} alt="Bukti" className="w-full h-full object-contain" />
-
-                        {/* Navigation Arrows for Multiple Images */}
-                        {currentEvidences.length > 1 && (
-                            <>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); setSelectedIndex(prev => Math.max(0, prev - 1)); }}
-                                    disabled={safeIndex === 0}
-                                    className="absolute left-2 p-2 bg-black/30 hover:bg-black/50 disabled:opacity-30 text-white rounded-full transition"
-                                >
-                                    <ChevronLeft size={20} />
-                                </button>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); setSelectedIndex(prev => Math.min(currentEvidences.length - 1, prev + 1)); }}
-                                    disabled={safeIndex === currentEvidences.length - 1}
-                                    className="absolute right-2 p-2 bg-black/30 hover:bg-black/50 disabled:opacity-30 text-white rounded-full transition"
-                                >
-                                    <ChevronRight size={20} />
-                                </button>
-                                <div className="absolute bottom-3 bg-black/50 px-3 py-1 rounded-full text-white text-xs font-bold shadow items-center gap-1">
-                                    {safeIndex + 1} / {currentEvidences.length}
-                                </div>
-                            </>
-                        )}
-                    </>
+                {renderEvidence && currentEvidence ? renderEvidence(currentEvidence) : currentImage ? (
+                    <img src={currentImage} alt="Bukti" className="w-full h-full object-contain" />
                 ) : (
                     <div className="flex flex-col items-center justify-center text-gray-400 text-sm">
                         <span className="text-4xl mb-2">📷</span>
                         Belum ada foto.
                     </div>
+                )}
+                {/* Navigation Arrows for Multiple Images */}
+                {currentEvidence && currentEvidences.length > 1 && (
+                    <>
+                        <button
+                            aria-label="Bukti sebelumnya"
+                            onClick={(e) => { e.stopPropagation(); setSelectedIndex(prev => Math.max(0, prev - 1)); }}
+                            disabled={safeIndex === 0}
+                            className="absolute left-2 p-2 bg-black/30 hover:bg-black/50 disabled:opacity-30 text-white rounded-full transition"
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+                        <button
+                            aria-label="Bukti berikutnya"
+                            onClick={(e) => { e.stopPropagation(); setSelectedIndex(prev => Math.min(currentEvidences.length - 1, prev + 1)); }}
+                            disabled={safeIndex === currentEvidences.length - 1}
+                            className="absolute right-2 p-2 bg-black/30 hover:bg-black/50 disabled:opacity-30 text-white rounded-full transition"
+                        >
+                            <ChevronRight size={20} />
+                        </button>
+                        <div className="absolute bottom-3 bg-black/50 px-3 py-1 rounded-full text-white text-xs font-bold shadow items-center gap-1">
+                            {safeIndex + 1} / {currentEvidences.length}
+                        </div>
+                    </>
                 )}
             </div>
 
@@ -101,7 +103,7 @@ export default function TaskPreview({ task, onClose }: TaskPreviewProps) {
                             onClick={() => setSelectedIndex(idx)}
                             className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition snap-center ${idx === safeIndex ? 'border-primary shadow-md opacity-100' : 'border-transparent opacity-60 hover:opacity-100'}`}
                         >
-                            <img src={getFullUrl(evidence.file_path)!} alt="Thumb" className="w-full h-full object-cover" />
+                            {renderThumbnail ? renderThumbnail(evidence) : <img src={getFullUrl(evidence.file_path)!} alt="Thumb" className="w-full h-full object-cover" />}
                         </button>
                     ))}
                 </div>

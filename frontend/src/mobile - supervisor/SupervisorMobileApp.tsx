@@ -1,3 +1,4 @@
+import MobileManagerTasks from './MobileManagerTasks';
 import React, { useState, useEffect } from 'react';
 import SupervisorDashboardMobile from './SupervisorDashboardMobile';
 import MobileCrewList from './MobileCrewList';
@@ -13,7 +14,7 @@ import MobilePushSellingDetail from './MobilePushSellingDetail';
 import type { TeamScoreFilter, TeamScoreMember } from '../utils/teamScoreReport';
 
 type MobileView = 'DASHBOARD' | 'EMPLOYEE_LIST' | 'CREW_DETAIL' | 'HISTORY' | 'EVALUATION' | 'REPORT'
-    | 'TEAM_SCORE_RESULTS' | 'TEAM_SCORE_DETAIL' | 'BACKUP_HISTORY' | 'CASHIER' | 'PUSH_SELLING_DETAIL';
+    | 'ASSIGNED_TASKS' | 'TEAM_SCORE_RESULTS' | 'TEAM_SCORE_DETAIL' | 'BACKUP_HISTORY' | 'CASHIER' | 'PUSH_SELLING_DETAIL';
 type ReportViewData = { filter: TeamScoreFilter; member?: TeamScoreMember };
 
 const SupervisorMobileApp: React.FC = () => {
@@ -82,6 +83,8 @@ const SupervisorMobileApp: React.FC = () => {
     // Render Logic
     const renderContent = () => {
         switch (currentView) {
+            case 'ASSIGNED_TASKS':
+                return <MobileManagerTasks supervisor={{id:currentUser?.username || currentUser?.id,name:currentUser?.name || ''}} onBack={()=>handleNavigate('DASHBOARD',null,false)}/>;
             case 'DASHBOARD':
                 return <SupervisorDashboardMobile onNavigate={handleNavigate} user={currentUser} />;
             case 'EMPLOYEE_LIST':

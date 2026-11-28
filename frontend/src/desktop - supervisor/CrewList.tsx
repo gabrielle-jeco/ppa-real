@@ -7,9 +7,16 @@ interface CrewListProps {
     data: any;
     selectedId: string | null;
     onSelect: (id: string) => void;
+    heading?: string;
+    welcomeLabel?: string;
+    compactHeader?: boolean;
+    headerAction?: React.ReactNode;
+    locationControl?: React.ReactNode;
+    searchPlaceholder?: string;
+    emptyLabel?: string;
 }
 
-export default function CrewList({ data, selectedId, onSelect }: CrewListProps) {
+export default function CrewList({ data, selectedId, onSelect, headerAction, compactHeader = false, heading = 'Karyawan', welcomeLabel = 'Selamat datang, Supervisor Fashion', locationControl, searchPlaceholder = 'Cari nama atau NIK...', emptyLabel = 'Service crew tidak ditemukan.' }: CrewListProps) {
     const { supervisor, location_name, location_avg_progress, crews } = data;
     const [searchTerm, setSearchTerm] = useState('');
     const normalizedSearch = searchTerm.trim().toLocaleLowerCase('id-ID');
@@ -20,20 +27,21 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
     return (
         <div className="bg-white h-full border-r border-gray-200 flex flex-col w-full md:w-64 lg:w-64 xl:w-64 2xl:w-96 flex-shrink-0 z-10 transition-all duration-300">
             {/* Header Area */}
-            <div className="p-8 pb-4">
-                <h1 className="text-xl font-bold text-gray-900 mb-6">Karyawan</h1>
+            <div className="relative p-8 pb-4">
+                {headerAction && <div className="absolute right-8 top-8">{headerAction}</div>}
+                <h1 className={`text-xl font-bold text-gray-900 ${compactHeader ? 'mb-3' : 'mb-6'}`}>{heading}</h1>
 
-                <div className="mb-6">
-                    <p className="text-xs text-gray-500 mb-1">Selamat datang, Supervisor Fashion</p>
+                <div className={compactHeader ? 'mb-5' : 'mb-6'}>
+                    <p className="text-xs text-gray-500 mb-1">{welcomeLabel}</p>
                     <h2 className="text-lg font-bold text-gray-800">{supervisor?.name || 'User'}!</h2>
                 </div>
 
                 {/* Location (Static for Supervisor) */}
                 <div className="relative mb-6">
-                    <div className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between shadow-sm">
+                    {locationControl || <div className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between shadow-sm">
                         <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">{location_name}</span>
                         <ChevronDown size={16} className="text-gray-400" />
-                    </div>
+                    </div>}
                 </div>
 
                 {/* Average Task Progress */}
@@ -52,7 +60,7 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
                 <div className="relative mt-4">
                     <input
                         type="search"
-                        placeholder="Cari nama atau NIK..."
+                        placeholder={searchPlaceholder}
                         className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-4 pr-11 text-sm text-gray-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-purple-100"
                         value={searchTerm}
                         onChange={(event) => setSearchTerm(event.target.value)}
@@ -67,7 +75,7 @@ export default function CrewList({ data, selectedId, onSelect }: CrewListProps) 
             {/* List Area */}
             <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4">
                 {filteredCrews.length === 0 && (
-                    <div className="py-10 text-center text-sm text-gray-400">Service crew tidak ditemukan.</div>
+                    <div className="py-10 text-center text-sm text-gray-400">{emptyLabel}</div>
                 )}
 
                 {filteredCrews.map((crew: any, index: number) => (

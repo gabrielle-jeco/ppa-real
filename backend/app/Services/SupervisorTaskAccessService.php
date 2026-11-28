@@ -13,6 +13,10 @@ class SupervisorTaskAccessService
 {
     public function canReviewTask(User $reviewer, Task $task, Carbon $date): bool
     {
+        if ($task->task_context === 'manager_supervisor') {
+            return app(TaskAssignmentAccessService::class)->canReview($reviewer, $task);
+        }
+
         if ($task->employer_id === $reviewer->username) {
             return true;
         }
@@ -74,12 +78,14 @@ class SupervisorTaskAccessService
     public function constrainReviewableTasks(
         Builder $query,
         User $reviewer,
-        Collection $backupPairs
+        Collection $backupPairs,
+        ?Collection $permanentCrewIds = null
     ): Builder {
-        $permanentCrewIds = $reviewer->subordinateLines()
+        $permanentCrewIds = ($permanentCrewIds ?? $reviewer->subordinateLines()
             ->where('status', 'active')
             ->where('relation_type', 'permanent')
-            ->pluck('subordinate_id')
+            ->pluck('subordinate_id'))
+            ->filter()
             ->unique()
             ->values();
 

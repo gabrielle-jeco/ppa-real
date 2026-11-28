@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Services\ManagerScopeService;
 use App\Services\ScoringService;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
@@ -35,10 +36,13 @@ class ManagerController extends Controller
             : null;
         $filterLocationName = $selectedLocation?->name ?? 'Semua Lokasi';
         $supervisorsCollection = $managerScope->supervisors($user, $selectedLocationId);
+        if ($supervisorsCollection->isNotEmpty()) {
+            EloquentCollection::make($supervisorsCollection->all())->loadMissing('locations');
+        }
+        $scoresBySupervisor = $scoringService->getSupervisorMonthlyMyAvgPoints($supervisorsCollection, Carbon::now());
 
-        $supervisors = $supervisorsCollection->values()->map(function ($spv) use ($scoringService) {
-            $stats = $scoringService->getSupervisorMonthlyDetailedScore($spv, Carbon::now());
-            $score = $stats['my_avg_point'] ?? 0;
+        $supervisors = $supervisorsCollection->values()->map(function ($spv) use ($scoresBySupervisor) {
+            $score = $scoresBySupervisor[$spv->username] ?? 0;
 
             return [
                 'id' => $spv->username,
@@ -139,22 +143,42 @@ class ManagerController extends Controller
             ? Carbon::parse($request->date)
             : Carbon::today();
 
-        $crews = $supervisor->subordinateLines()
+        $supervisor->loadMissing('locations');
+
+        $activeCrews = $supervisor->subordinateLines()
             ->where('status', 'active')
-            ->with(['subordinate.locations'])
+            ->with(['subordinate.locations', 'subordinate.userLocations'])
             ->get()
             ->pluck('subordinate')
             ->filter(function ($crew) {
                 return $crew && $crew->active;
             })
-            ->values()
-            ->map(function ($crew) use ($supervisor, $targetDate, $scoringService) {
-                $tasks = \App\Models\Task::with(['evidences', 'workStation', 'taskDefinition.taskArea'])
-                    ->where('employee_id', $crew->username)
-                    ->where('employer_id', $supervisor->username)
-                    ->activeOnDate($targetDate)
-                    ->orderBy('due_at', 'asc')
-                    ->get();
+            ->values();
+
+        $eloquentCrews = EloquentCollection::make($activeCrews->all());
+        if ($eloquentCrews->contains(fn (User $crew) => !empty($crew->role_id))) {
+            $eloquentCrews->loadMissing('accountRole');
+        }
+        if ($eloquentCrews->contains(fn (User $crew) => !empty($crew->job_level_id))) {
+            $eloquentCrews->loadMissing('jobLevel');
+        }
+
+        $crewIds = $activeCrews->pluck('username')->filter()->unique()->values();
+        $tasksByCrew = $crewIds->isNotEmpty()
+            ? \App\Models\Task::with(['evidences', 'workStation', 'taskDefinition.taskArea'])
+                ->whereIn('employee_id', $crewIds)
+                ->where('employer_id', $supervisor->username)
+                ->activeOnDate($targetDate)
+                ->orderBy('due_at', 'asc')
+                ->get()
+                ->groupBy('employee_id')
+            : collect();
+
+        $metricsByCrew = $scoringService->getCrewDashboardMetricsBatch($activeCrews, $targetDate, $targetDate);
+
+        $crews = $activeCrews
+            ->map(function ($crew) use ($tasksByCrew, $metricsByCrew) {
+                $tasks = $tasksByCrew->get($crew->username, collect())->values();
 
                 $approvedCount = $tasks->whereIn('status', ['approved', 'completed'])->count();
                 $overdueCount = $tasks->filter(function ($task) {
@@ -162,15 +186,21 @@ class ManagerController extends Controller
                         && Carbon::parse($task->due_at)->isPast();
                 })->count();
 
-                $crewStats = $scoringService->getCrewMonthlyDetailedStats($crew, $targetDate);
-                $dailyScore = $scoringService->getCrewDailyScoreDisplay($crew, $targetDate);
+                $metrics = $metricsByCrew[$crew->username] ?? [];
+                $dailyScore = $metrics['daily_score'] ?? [
+                    'score' => null,
+                    'score_date' => null,
+                    'available' => false,
+                    'availability_mode' => 'H',
+                    'unavailable_reason' => 'attendance_missing',
+                ];
 
                 return [
                     'id' => $crew->username,
                     'name' => $crew->name,
                     'role' => $crew->role_type,
                     'location' => $crew->locations->first() ? $crew->locations->first()->name : 'N/A',
-                    'activity_percentage' => $crewStats['active_percentage'] ?? 0,
+                    'activity_percentage' => $metrics['active_percentage'] ?? 0,
                     'daily_score' => $dailyScore['score'],
                     'daily_score_date' => $dailyScore['score_date'],
                     'daily_score_available' => $dailyScore['available'],

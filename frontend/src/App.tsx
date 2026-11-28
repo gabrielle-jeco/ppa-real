@@ -14,6 +14,7 @@ import SupervisorPerformance from './desktop - supervisor/SupervisorPerformance'
 import SupervisorCashier from './desktop - supervisor/SupervisorCashier';
 import CrewMobileApp from './mobile - crew/CrewMobileApp';
 import { registerPushSubscription, requestNotificationPermission } from './utils/browserNotifications';
+import { logoutSession } from './utils/authSession';
 
 function App() {
   const [user, setUser] = useState<any>(null);
@@ -162,9 +163,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user_data');
-    localStorage.removeItem('session_expires_at');
+    void logoutSession();
     setUser(null);
     setActiveSupervisorPage('dashboard');
     setActiveManagerPage('dashboard');

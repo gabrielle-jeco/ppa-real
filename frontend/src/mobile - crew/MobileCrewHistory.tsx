@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Check, ChevronDown } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 import TaskStartStatus from '../general/TaskStartStatus';
 import MobileDraggableSheet from '../general/MobileDraggableSheet';
 import { clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
+import { markNotificationSeen, notifyOnce, notifyUpcomingTask } from '../utils/browserNotifications';
 import { featureFlags } from '../utils/featureFlags';
 import { formatTaskTitleWithArea } from '../utils/taskDisplay';
 
@@ -13,9 +14,12 @@ interface MobileCrewHistoryProps {
     onSelectTask: (task: any, selectedDate?: string) => void;
     refreshTrigger?: number;
     selectedRole: string;
+    taskSource?: 'crew' | 'manager';
+    title?: string;
+    toolbar?: React.ReactNode;
 }
 
-export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshTrigger, selectedRole }: MobileCrewHistoryProps) {
+export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshTrigger, selectedRole, taskSource = 'crew', title = 'Riwayat', toolbar }: MobileCrewHistoryProps) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [viewMode, setViewMode] = useState<'ACTIVITY' | 'TASKS'>('TASKS'); // Default to TASKS for now
     const [showRoleDropdown, setShowRoleDropdown] = useState(false);
@@ -24,43 +28,58 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
     const [tasks, setTasks] = useState<any[]>([]);
     const [activityLogs, setActivityLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const requestRef = useRef(0);
 
     const fetchData = async (silent = false) => {
         if (!user?.user_id) return;
+        const requestId = ++requestRef.current;
 
         if (!silent) setLoading(true);
         try {
             const dateStr = selectedDate.toLocaleDateString('en-CA');
             const token = localStorage.getItem('auth_token') || '';
 
-            const taskReq = fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}&role=${selectedRole}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+            const taskReq = fetch(taskSource === 'manager' ? `/api/supervisor/manager-tasks?date=${dateStr}` : `/api/crews/${user.user_id}/tasks?date=${dateStr}&role=${selectedRole}`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
             });
 
-            const activityReq = fetch(`/api/crew/activity-logs?date=${dateStr}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const activityReq = taskSource === 'crew' ? fetch(`/api/crew/activity-logs?date=${dateStr}`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+            }) : Promise.resolve(null);
 
             const [taskRes, activityRes] = await Promise.all([taskReq, activityReq]);
+            const taskData = taskRes.ok ? await taskRes.json() : [];
+            const activityData = activityRes?.ok ? await activityRes.json() : [];
+            if (requestId !== requestRef.current) return;
 
             if (taskRes.ok) {
-                setTasks(await taskRes.json());
+                setTasks(taskSource === 'manager' ? taskData.map((task: any) => ({ ...task, task_id: task.id })) : taskData);
+                setError('');
             } else {
                 setTasks([]);
+                if (taskSource === 'manager') setError('Gagal memuat tugas. Silakan pilih kembali tanggal riwayat.');
             }
-            if (activityRes.ok) setActivityLogs(await activityRes.json());
+            setActivityLogs(activityData);
 
         } catch (error) {
             console.error("Gagal mengambil data riwayat", error);
+            if (requestId === requestRef.current && taskSource === 'manager') {
+                setTasks([]);
+                setActivityLogs([]);
+                setError('Gagal memuat tugas. Silakan pilih kembali tanggal riwayat.');
+            }
         } finally {
-            if (!silent) setLoading(false);
+            if (requestId === requestRef.current) setLoading(false);
         }
     };
 
     // Fetch Tasks & Activities
     useEffect(() => {
+        const requestCounter = requestRef;
         fetchData();
-    }, [selectedDate, user?.user_id, refreshTrigger, selectedRole]);
+        return () => { requestCounter.current++; };
+    }, [selectedDate, user?.user_id, refreshTrigger, selectedRole, taskSource]);
 
     useEffect(() => {
         if (!user?.user_id) return;
@@ -69,9 +88,35 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
             if (document.visibilityState === 'visible') fetchData(true);
         }, 60000);
         return () => window.clearInterval(timer);
-    }, [selectedDate, user?.user_id, selectedRole]);
+    }, [selectedDate, user?.user_id, selectedRole, taskSource]);
 
+    useEffect(() => {
+        if (taskSource !== 'manager' || tasks.length === 0 || !user?.user_id) return;
 
+        const dateStr = selectedDate.toLocaleDateString('en-CA');
+        if (dateStr !== new Date().toLocaleDateString('en-CA')) return;
+
+        const prefix = 'manager';
+        const seenKey = `${prefix}_seen_tasks_${user.user_id}_${selectedRole}_${dateStr}`;
+        const previousSeen = JSON.parse(localStorage.getItem(seenKey) || 'null') as number[] | null;
+        const currentIds = tasks.map(task => Number(task.task_id)).filter(Boolean);
+
+        if (!previousSeen) {
+            localStorage.setItem(seenKey, JSON.stringify(currentIds));
+            currentIds.forEach(taskId => markNotificationSeen(`${prefix}_new_task_${taskId}`));
+        } else {
+            tasks
+                .filter(task => !previousSeen.includes(Number(task.task_id)))
+                .forEach(task => notifyOnce(`${prefix}_new_task_${task.task_id}`, 'Pekerjaan Baru', {
+                    body: task.title || 'Ada pekerjaan baru yang perlu dikerjakan.',
+                    tag: `${prefix}-new-task-${task.task_id}`,
+                }));
+
+            localStorage.setItem(seenKey, JSON.stringify(Array.from(new Set([...previousSeen, ...currentIds]))));
+        }
+
+        tasks.forEach(task => notifyUpcomingTask(task, prefix));
+    }, [tasks, selectedDate, selectedRole, user?.user_id, taskSource]);
 
     const isFutureDate = (date: Date) => isAfterTaskWindow(date);
 
@@ -79,16 +124,17 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
         return getAvailableTaskMonths(year);
     };
 
+    const buildClampedDate = (year: number, month: number, day: number) => {
+        const maxDay = new Date(year, month + 1, 0).getDate();
+        return clampToTaskWindow(new Date(year, month, Math.min(day, maxDay)));
+    };
+
     const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newDate = new Date(selectedDate);
-        newDate.setMonth(parseInt(e.target.value));
-        setSelectedDate(clampToTaskWindow(newDate));
+        setSelectedDate(buildClampedDate(selectedDate.getFullYear(), parseInt(e.target.value), selectedDate.getDate()));
     };
 
     const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newDate = new Date(selectedDate);
-        newDate.setFullYear(parseInt(e.target.value));
-        setSelectedDate(clampToTaskWindow(newDate));
+        setSelectedDate(buildClampedDate(parseInt(e.target.value), selectedDate.getMonth(), selectedDate.getDate()));
     };
 
     const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -131,9 +177,11 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
         return days;
     };
 
+    const completedCount = tasks.filter(task => task.status === 'approved').length;
+
     return (
         <CrewLayout
-            title="Riwayat"
+            title={title}
             showBack={true}
             onBack={onBack}
             allowScroll={false} // Use internal scroll for list
@@ -185,6 +233,8 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                     </div>
                 </div>
 
+                {toolbar && <div className="mb-4 shrink-0">{toolbar}</div>}
+                {error && <p role="alert" className="mb-3 text-xs text-red-500">{error}</p>}
                 {/* List Card */}
                 <MobileDraggableSheet
                     className="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.03)] flex-1 flex flex-col min-h-0 relative -mx-2 px-4 pt-4"
@@ -195,7 +245,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                         <h3 className="font-bold text-gray-800 text-sm">
                             {selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}
                         </h3>
-                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg capitalize">
+                        {taskSource === 'crew' && <><span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg capitalize">
                             {selectedRole}
                         </span>
 
@@ -226,7 +276,12 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                     </button>
                                 </div>
                             )}
-                        </div>
+                        </div></>}
+                        {taskSource === 'manager' && (
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg">
+                                {completedCount}/{tasks.length} Selesai
+                            </span>
+                        )}
                     </div>
 
                     <div className="overflow-y-auto flex-1 pb-20 -mx-2 px-2 space-y-3">
@@ -261,14 +316,19 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-bold text-gray-800 text-sm leading-tight mb-0.5">{formatTaskTitleWithArea(task)}</p>
-                                                <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
+                                                <p className={`text-[10px] text-blue-600 font-bold mb-0.5 ${taskSource === 'manager' ? 'whitespace-pre-wrap break-words' : 'capitalize'}`}>{taskSource === 'manager' ? `Target: ${task.target}` : `Kategori: ${task.work_station?.name || 'Umum'}`}</p>
                                                 <TaskStartStatus
                                                     task={task}
                                                     scheduleClassName="text-[10px] text-gray-400 mb-0.5"
                                                     statusClassName="text-[10px] text-amber-500 font-semibold mb-0.5"
                                                 />
                                                 <p className="text-[10px] text-gray-400 mb-0.5">Tenggat {new Date(task.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                                {featureFlags.taskWeight && (
+                                                {taskSource === 'manager' && (task.note || task.description) && (
+                                                    <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">
+                                                        {task.note || task.description}
+                                                    </div>
+                                                )}
+                                                {taskSource === 'crew' && featureFlags.taskWeight && (
                                                     <p className="text-[10px] text-gray-400 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
                                                 )}
                                             </div>
@@ -278,7 +338,7 @@ export default function MobileCrewHistory({ user, onBack, onSelectTask, refreshT
                                             className="bg-blue-600 text-white shadow-blue-200 text-[10px] font-bold py-2 px-4 rounded-xl shadow-md active:scale-95 transition-transform flex items-center gap-1"
                                         >
                                             <Camera size={14} />
-                                            Foto
+                                            {taskSource === 'manager' ? 'Bukti' : 'Foto'}
                                         </button>
                                     </div>
                                 ))

@@ -34,6 +34,11 @@ class TaskController extends Controller
     {
     }
 
+    protected function taskModel(): string { return Task::class; }
+    protected function batchModel(): string { return TaskAssignmentBatch::class; }
+    protected function isManagerTaskEndpoint(): bool { return false; }
+    protected function notificationPrefix(): string { return $this->isManagerTaskEndpoint() ? 'manager-' : ''; }
+
     public function taskCatalog()
     {
         return response()->json(
@@ -50,7 +55,7 @@ class TaskController extends Controller
     {
         $request->validate([
             'date' => 'nullable|date_format:Y-m-d',
-            'role' => 'nullable|string|max:255',
+            'role' => $this->isManagerTaskEndpoint() ? 'prohibited' : 'nullable|string|max:255',
         ]);
 
         $user = Auth::user();
@@ -91,7 +96,15 @@ class TaskController extends Controller
             }
         }
 
-        $query = Task::where('employee_id', $supervisorId);
+        if ($user->role_type === 'manager') {
+            abort_unless(app(\App\Services\TaskAssignmentAccessService::class)->canAssign($user, $supervisorId), 403);
+        }
+        if ($request->input('task_context') === 'manager_supervisor' && $user->username !== $supervisorId && $user->role_type !== 'manager') abort(403);
+        $query = $this->taskModel()::where('employee_id', $supervisorId);
+        if ($request->filled('task_context')) {
+            $request->validate(['task_context' => 'required|in:crew,manager_supervisor']);
+            abort_unless($request->task_context === ($this->isManagerTaskEndpoint() ? 'manager_supervisor' : 'crew'), 422);
+        }
 
         if ($request->has('date')) {
             $query->activeOnDate($targetDate);
@@ -132,9 +145,10 @@ class TaskController extends Controller
 
     public function store(Request $request)
     {
+        $managerTask = $this->isManagerAssignment($request);
         $request->validate([
             'supervisor_id' => 'required|exists:users,username',
-            'task_definition_id' => ['required', 'integer', 'exists:task_definitions,id'],
+            'task_definition_id' => [$managerTask ? 'nullable' : 'required', 'integer', 'exists:task_definitions,id'],
             'due_at' => 'required|date',
             'start_at' => 'nullable|date',
             'weight_label' => ['nullable', Rule::in(array_keys(self::TASK_WEIGHTS))],
@@ -144,32 +158,32 @@ class TaskController extends Controller
         $employer = Auth::user();
         $assignee = User::where('username', $request->supervisor_id)->firstOrFail();
 
-        if ($employer->role_type === 'manager') {
+        if (!$managerTask && $employer->role_type === 'manager') {
             return response()->json([
                 'message' => 'Penugasan manager ke supervisor dilakukan melalui review manager, bukan ceklis pekerjaan.'
             ], 422);
         }
 
-        if (
+        if (!$managerTask && (
             $employer->role_type !== 'supervisor'
             || !in_array($assignee->role_type, ['employee', 'crew'], true)
             || $employer->username === $assignee->username
-        ) {
+        )) {
             return response()->json([
                 'message' => 'Tidak memiliki akses. Ceklis pekerjaan hanya dapat diberikan oleh supervisor kepada crew.'
             ], 403);
         }
 
-        $isSubordinate = $employer->subordinateLines()
-            ->where('subordinate_id', $assignee->username)
-            ->where('status', 'active')
-            ->exists();
+        $isSubordinate = $managerTask
+            ? $assignee->active && $assignee->role_type === 'supervisor'
+                && app(\App\Services\TaskAssignmentAccessService::class)->canAssign($employer, $assignee->username, $request->input('location_id'))
+            : $employer->subordinateLines()->where('subordinate_id', $assignee->username)->where('status', 'active')->exists();
 
         if (!$isSubordinate) {
             return response()->json(['message' => 'Tidak memiliki akses. Anda hanya dapat memberi tugas kepada bawahan Anda.'], 403);
         }
 
-        $taskDefinition = $this->activeTaskDefinition((int) $request->input('task_definition_id'));
+        $taskDefinition = $managerTask ? null : $this->activeTaskDefinition((int) $request->input('task_definition_id'));
 
         $dueAt = Carbon::parse($request->due_at);
         $isTodayTask = $dueAt->isSameDay(Carbon::today());
@@ -207,10 +221,10 @@ class TaskController extends Controller
 
         $weightLabel = $this->normalizeWeightLabel($request->input('weight_label'));
 
-        $task = Task::create([
+        $task = $this->taskModel()::create([
             'employee_id' => $request->supervisor_id,
             'employer_id' => $employer->username,
-            ...$this->taskIdentityAttributes($taskDefinition),
+            ...($managerTask ? $this->managerTaskIdentity($request) : $this->taskIdentityAttributes($taskDefinition)),
             'assignment_type' => 'individual',
             'description' => $request->note,
             'start_at' => $startAt,
@@ -230,9 +244,9 @@ class TaskController extends Controller
             [
                 'task_id' => $task->id,
                 'url' => '/',
-                'tag' => 'task-new-' . $task->id,
+                'tag' => $this->notificationPrefix() . 'task-new-' . $task->id,
             ],
-            'task-created-' . $task->id
+            $this->notificationPrefix() . 'task-created-' . $task->id
         );
 
         return response()->json($task->load(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea']), 201);
@@ -240,10 +254,12 @@ class TaskController extends Controller
 
     public function bulkStore(Request $request)
     {
+        $managerTask = $this->isManagerAssignment($request);
+        if ($managerTask) $request->merge(['crew_ids' => $request->input('supervisor_ids')]);
         $request->validate([
             'crew_ids' => 'required|array|min:1|max:200',
             'crew_ids.*' => 'required|exists:users,username',
-            'task_definition_id' => ['required', 'integer', 'exists:task_definitions,id'],
+            'task_definition_id' => [$managerTask ? 'nullable' : 'required', 'integer', 'exists:task_definitions,id'],
             'note' => 'nullable|string|max:5000',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
@@ -255,22 +271,25 @@ class TaskController extends Controller
         ]);
 
         $employer = Auth::user();
-        if ($employer->role_type !== 'supervisor') {
+        if (!$managerTask && $employer->role_type !== 'supervisor') {
             return response()->json(['message' => 'Penugasan massal hanya dapat dibuat oleh supervisor.'], 403);
         }
 
         $crewIds = collect($request->crew_ids)->unique()->values();
-        $validCrewIds = $employer->subordinateLines()
-            ->where('status', 'active')
-            ->whereIn('subordinate_id', $crewIds)
-            ->pluck('subordinate_id');
+        $validCrewIds = $managerTask
+            ? app(\App\Services\TaskAssignmentAccessService::class)->recipientIds($employer, $request->input('location_id'))->intersect($crewIds)->values()
+            : $employer->subordinateLines()->where('status', 'active')->whereIn('subordinate_id', $crewIds)->pluck('subordinate_id');
 
         if ($validCrewIds->count() !== $crewIds->count()) {
-            return response()->json(['message' => 'Beberapa karyawan bukan bawahan aktif Anda.'], 403);
+            return response()->json([
+                'message' => $managerTask
+                    ? 'Beberapa supervisor bukan bawahan aktif dalam cakupan Anda.'
+                    : 'Beberapa karyawan bukan bawahan aktif Anda.',
+            ], 403);
         }
 
-        $taskDefinition = $this->activeTaskDefinition((int) $request->input('task_definition_id'));
-        $taskIdentity = $this->taskIdentityAttributes($taskDefinition);
+        $taskDefinition = $managerTask ? null : $this->activeTaskDefinition((int) $request->input('task_definition_id'));
+        $taskIdentity = $managerTask ? $this->managerTaskIdentity($request) : $this->taskIdentityAttributes($taskDefinition);
         $weightLabel = $this->normalizeWeightLabel($request->input('weight_label'));
         $repeatDays = collect($request->input('repeat_days', []))
             ->map(fn ($day) => (int) $day)
@@ -318,7 +337,7 @@ class TaskController extends Controller
         }
 
         $tasks = DB::transaction(function () use ($request, $employer, $validCrewIds, $weightLabel, $taskIdentity, $repeatDays, $startDate, $endDate, $dates) {
-            $batch = TaskAssignmentBatch::create([
+            $batch = $this->batchModel()::create([
                 'created_by' => $employer->username,
                 'assignment_type' => $startDate->isSameDay($endDate) && $repeatDays->isEmpty() ? 'broadcast' : 'recurring',
                 ...$taskIdentity,
@@ -336,7 +355,7 @@ class TaskController extends Controller
             foreach ($validCrewIds as $crewId) {
                 foreach ($dates as [$startAt, $dueAt]) {
                     $approvalDeadline = $this->approvalDeadlineFor($employer, $dueAt);
-                    $created->push(Task::create([
+                    $created->push($this->taskModel()::create([
                         'employee_id' => $crewId,
                         'employer_id' => $employer->username,
                         ...$taskIdentity,
@@ -362,21 +381,21 @@ class TaskController extends Controller
                 $crewId,
                 'task_created',
                 'Pekerjaan Baru',
-                'Anda mendapat penugasan baru: ' . $taskDefinition->title,
+                'Anda mendapat penugasan baru: ' . $taskIdentity['title'],
                 'Periksa jadwal pekerjaan yang telah dibuat untuk Anda.',
                 [
                     'assignment_batch_id' => $batchId,
                     'url' => '/',
-                    'tag' => 'task-bulk-' . $batchId,
+                    'tag' => $this->notificationPrefix() . 'task-bulk-' . $batchId,
                 ],
-                'batch-created-' . $batchId
+                $this->notificationPrefix() . 'batch-created-' . $batchId
             );
         }
 
         return response()->json([
             'message' => 'Penugasan massal berhasil dibuat.',
             'created' => $tasks->count(),
-            'tasks' => Task::with(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea'])
+            'tasks' => $this->taskModel()::with(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea'])
                 ->whereIn('id', $tasks->pluck('id'))
                 ->orderBy('due_at', 'asc')
                 ->get(),
@@ -394,7 +413,7 @@ class TaskController extends Controller
         ]);
 
         $actor = Auth::user();
-        $task = Task::with('evidences')->findOrFail($id);
+        $task = $this->taskModel()::with('evidences')->findOrFail($id);
 
         if (!$actor || !$this->canManageTask($actor, $task)) {
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
@@ -410,9 +429,9 @@ class TaskController extends Controller
             return response()->json(['message' => 'Tugas ini sudah melewati tenggat dan tidak dapat diedit.'], 400);
         }
 
-        $taskDefinition = $this->taskDefinitionForUpdate(
-            $request->input('task_definition_id'),
-            $task->task_definition_id
+        $managerIdentity = $task->task_context === 'manager_supervisor' ? $this->managerTaskIdentity($request) : [];
+        $taskDefinition = $managerIdentity ? null : $this->taskDefinitionForUpdate(
+            $request->input('task_definition_id'), $task->task_definition_id
         );
 
         $dueAt = $request->filled('due_at') ? Carbon::parse($request->due_at) : Carbon::parse($task->due_at);
@@ -448,6 +467,7 @@ class TaskController extends Controller
         $weightLabel = $this->normalizeWeightLabel($request->input('weight_label', $task->weight_label));
 
         $task->fill([
+            ...$managerIdentity,
             ...($taskDefinition ? $this->taskIdentityAttributes($taskDefinition) : []),
             'description' => $request->input('note', $task->description),
             'start_at' => $startAt,
@@ -466,7 +486,7 @@ class TaskController extends Controller
             [
                 'task_id' => $task->id,
                 'url' => '/',
-                'tag' => 'task-updated-' . $task->id,
+                'tag' => $this->notificationPrefix() . 'task-updated-' . $task->id,
             ]
         );
 
@@ -475,6 +495,14 @@ class TaskController extends Controller
 
     public function updateBatch(Request $request, $id)
     {
+        $existingBatch = $this->batchModel()::findOrFail($id);
+        $managerTask = $existingBatch->task_context === 'manager_supervisor';
+        if ($managerTask) {
+            abort_unless(Auth::user()->role_type === 'manager' && $existingBatch->created_by === Auth::user()->username, 403);
+            $request->merge(['task_context' => 'manager_supervisor', 'crew_ids' => $request->input('supervisor_ids')]);
+            $this->isManagerAssignment($request);
+            foreach ($existingBatch->tasks as $existingTask) abort_unless($this->canManageTask(Auth::user(), $existingTask), 403);
+        }
         $request->validate([
             'crew_ids' => 'required|array|min:1|max:200',
             'crew_ids.*' => 'required|exists:users,username',
@@ -490,25 +518,24 @@ class TaskController extends Controller
         ]);
 
         $employer = Auth::user();
-        $batch = TaskAssignmentBatch::findOrFail($id);
+        $batch = $this->batchModel()::findOrFail($id);
 
-        if ($employer->role_type !== 'supervisor' || $batch->created_by !== $employer->username) {
+        if ((!$managerTask && $employer->role_type !== 'supervisor') || $batch->created_by !== $employer->username) {
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
-        $taskDefinition = $this->taskDefinitionForUpdate(
-            $request->input('task_definition_id'),
-            $batch->task_definition_id
+        $taskDefinition = $managerTask ? null : $this->taskDefinitionForUpdate(
+            $request->input('task_definition_id'), $batch->task_definition_id
         );
-        $taskIdentity = $taskDefinition
+        $taskIdentity = $managerTask ? $this->managerTaskIdentity($request) : ($taskDefinition
             ? $this->taskIdentityAttributes($taskDefinition)
             : [
                 'task_definition_id' => $batch->task_definition_id,
                 'work_station_id' => $batch->work_station_id,
                 'title' => $batch->title,
-            ];
+            ]);
 
-        $batchTasks = Task::where('assignment_batch_id', $batch->id)->with('evidences')->get();
+        $batchTasks = $this->taskModel()::where('assignment_batch_id', $batch->id)->with('evidences')->get();
         $previousCrewIds = $batchTasks->pluck('employee_id')->unique();
         $isProtectedTask = fn (Task $task) => $task->status === 'approved'
             || $task->evidences->isNotEmpty()
@@ -522,13 +549,16 @@ class TaskController extends Controller
         });
 
         $crewIds = collect($request->crew_ids)->unique()->values();
-        $validCrewIds = $employer->subordinateLines()
-            ->where('status', 'active')
-            ->whereIn('subordinate_id', $crewIds)
-            ->pluck('subordinate_id');
+        $validCrewIds = $managerTask
+            ? app(\App\Services\TaskAssignmentAccessService::class)->recipientIds($employer, $request->input('location_id'))->intersect($crewIds)->values()
+            : $employer->subordinateLines()->where('status', 'active')->whereIn('subordinate_id', $crewIds)->pluck('subordinate_id');
 
         if ($validCrewIds->count() !== $crewIds->count()) {
-            return response()->json(['message' => 'Beberapa karyawan bukan bawahan aktif Anda.'], 403);
+            return response()->json([
+                'message' => $managerTask
+                    ? 'Beberapa supervisor bukan bawahan aktif dalam cakupan Anda.'
+                    : 'Beberapa karyawan bukan bawahan aktif Anda.',
+            ], 403);
         }
 
         $weightLabel = $this->normalizeWeightLabel($request->input('weight_label'));
@@ -589,7 +619,7 @@ class TaskController extends Controller
 
         $tasks = DB::transaction(function () use ($batch, $request, $employer, $validCrewIds, $weightLabel, $taskIdentity, $repeatDays, $startDate, $endDate, $dates, $editableTaskIds, $protectedTaskKeys) {
             if ($editableTaskIds->isNotEmpty()) {
-                Task::whereIn('id', $editableTaskIds)->delete();
+                $this->taskModel()::whereIn('id', $editableTaskIds)->delete();
             }
 
             $batch->update([
@@ -613,7 +643,7 @@ class TaskController extends Controller
                     }
 
                     $approvalDeadline = $this->approvalDeadlineFor($employer, $dueAt);
-                    $created->push(Task::create([
+                    $created->push($this->taskModel()::create([
                         'employee_id' => $crewId,
                         'employer_id' => $employer->username,
                         ...$taskIdentity,
@@ -643,7 +673,7 @@ class TaskController extends Controller
                 [
                     'assignment_batch_id' => $batch->id,
                     'url' => '/',
-                    'tag' => 'task-batch-updated-' . $batch->id,
+                    'tag' => $this->notificationPrefix() . 'task-batch-updated-' . $batch->id,
                 ]
             );
         });
@@ -654,7 +684,7 @@ class TaskController extends Controller
                 : 'Penugasan massal berhasil diperbarui. Tugas yang sudah berjalan atau memiliki bukti tetap dipertahankan.',
             'updated' => $tasks->count(),
             'protected' => $protectedTasks->count(),
-            'tasks' => Task::with(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea'])
+            'tasks' => $this->taskModel()::with(['evidences', 'workStation', 'assignmentBatch', 'taskDefinition.taskArea'])
                 ->where('assignment_batch_id', $batch->id)
                 ->orderBy('due_at', 'asc')
                 ->get(),
@@ -663,15 +693,17 @@ class TaskController extends Controller
 
     public function destroy($id)
     {
-        $task = Task::with('evidences')->findOrFail($id);
+        $task = $this->taskModel()::with('evidences')->findOrFail($id);
 
         $actor = Auth::user();
         if (!$actor || !$this->canManageTask($actor, $task)) {
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
+        $actorLabel = $this->isManagerTaskEndpoint() ? 'manager' : 'supervisor';
+
         if ($task->assignment_batch_id) {
-            $batchTasks = Task::where('assignment_batch_id', $task->assignment_batch_id)
+            $batchTasks = $this->taskModel()::where('assignment_batch_id', $task->assignment_batch_id)
                 ->with('evidences')
                 ->get();
             $batchCrewIds = $batchTasks->pluck('employee_id')->unique();
@@ -687,21 +719,21 @@ class TaskController extends Controller
             }
 
             DB::transaction(function () use ($task) {
-                Task::where('assignment_batch_id', $task->assignment_batch_id)->delete();
-                TaskAssignmentBatch::where('id', $task->assignment_batch_id)->delete();
+                $this->taskModel()::where('assignment_batch_id', $task->assignment_batch_id)->delete();
+                $this->batchModel()::where('id', $task->assignment_batch_id)->delete();
             });
 
-            $batchCrewIds->each(function ($crewId) use ($batchId, $batchTitle) {
+            $batchCrewIds->each(function ($crewId) use ($batchId, $batchTitle, $actorLabel) {
                 app(UserNotificationService::class)->createAndPush(
                     $crewId,
                     'task_deleted',
                     'Penugasan Dibatalkan',
-                    'Penugasan "' . $batchTitle . '" telah dibatalkan oleh supervisor.',
+                    'Penugasan "' . $batchTitle . '" telah dibatalkan oleh ' . $actorLabel . '.',
                     null,
                     [
                         'assignment_batch_id' => $batchId,
                         'url' => '/',
-                        'tag' => 'task-batch-deleted-' . $batchId,
+                        'tag' => $this->notificationPrefix() . 'task-batch-deleted-' . $batchId,
                     ]
                 );
             });
@@ -722,8 +754,8 @@ class TaskController extends Controller
         }
 
         foreach ($task->evidences as $evidence) {
-            if (Storage::disk('public')->exists($evidence->file_path)) {
-                Storage::disk('public')->delete($evidence->file_path);
+            if (Storage::disk($task->task_context === 'manager_supervisor' ? 'local' : 'public')->exists($evidence->file_path)) {
+                Storage::disk($task->task_context === 'manager_supervisor' ? 'local' : 'public')->delete($evidence->file_path);
             }
         }
 
@@ -736,12 +768,12 @@ class TaskController extends Controller
             $employeeId,
             'task_deleted',
             'Pekerjaan Dibatalkan',
-            'Pekerjaan "' . $taskTitle . '" telah dibatalkan oleh supervisor.',
+            'Pekerjaan "' . $taskTitle . '" telah dibatalkan oleh ' . $actorLabel . '.',
             null,
             [
                 'task_id' => $taskId,
                 'url' => '/',
-                'tag' => 'task-deleted-' . $taskId,
+                'tag' => $this->notificationPrefix() . 'task-deleted-' . $taskId,
             ]
         );
 
@@ -759,12 +791,14 @@ class TaskController extends Controller
             'action_date' => 'nullable|date_format:Y-m-d',
         ]);
 
-        $task = Task::findOrFail($id);
+        $task = $this->taskModel()::findOrFail($id);
 
         $reviewer = Auth::user();
         if (!$reviewer || !$taskAccess->canReviewTask($reviewer, $task, Carbon::today())) {
             return response()->json([
-                'message' => 'Tidak memiliki akses. Hanya pemberi tugas, atasan permanen aktif, atau supervisor cadangan yang sedang aktif yang dapat mengubah status tugas.'
+                'message' => $task->task_context === 'manager_supervisor'
+                    ? 'Tidak memiliki akses. Hanya manager yang berwenang atas cabang supervisor ini yang dapat mengubah status tugas.'
+                    : 'Tidak memiliki akses. Hanya pemberi tugas, atasan permanen aktif, atau supervisor cadangan yang sedang aktif yang dapat mengubah status tugas.'
             ], 403);
         }
 
@@ -777,7 +811,7 @@ class TaskController extends Controller
         }
 
         $task = DB::transaction(function () use ($id, $request, $reviewer, $taskAccess) {
-            $lockedTask = Task::lockForUpdate()->findOrFail($id);
+            $lockedTask = $this->taskModel()::lockForUpdate()->findOrFail($id);
 
             if (!$taskAccess->canReviewTask($reviewer, $lockedTask, Carbon::today())) {
                 abort(403, 'Tidak memiliki akses untuk memeriksa tugas ini.');
@@ -798,10 +832,14 @@ class TaskController extends Controller
                     ->first();
 
                 if ($request->status === 'approved') {
-                    $hasBefore = $lockedTask->evidences()->where('type', 'before')->exists();
+                    $hasBefore = $lockedTask->task_context === 'manager_supervisor' || $lockedTask->evidences()->where('type', 'before')->exists();
                     if (!$hasBefore || !$latestAfter || $latestAfter->review_status !== 'pending') {
                         throw ValidationException::withMessages([
-                            'status' => ['Tugas hanya dapat disetujui setelah bukti before dan bukti after yang menunggu pemeriksaan tersedia.'],
+                            'status' => [
+                                $lockedTask->task_context === 'manager_supervisor'
+                                    ? 'Tugas hanya dapat disetujui setelah bukti tugas yang menunggu pemeriksaan tersedia.'
+                                    : 'Tugas hanya dapat disetujui setelah bukti before dan bukti after yang menunggu pemeriksaan tersedia.',
+                            ],
                         ]);
                     }
 
@@ -834,8 +872,9 @@ class TaskController extends Controller
             return $lockedTask->load('evidences');
         });
 
+        $approverLabel = $task->task_context === 'manager_supervisor' ? 'manager' : 'supervisor';
         $statusMessages = [
-            'approved' => ['Pekerjaan Disetujui', 'Pekerjaan "' . $task->title . '" telah disetujui oleh supervisor.'],
+            'approved' => ['Pekerjaan Disetujui', 'Pekerjaan "' . $task->title . '" telah disetujui oleh ' . $approverLabel . '.'],
             'pending' => ['Status Pekerjaan Diperbarui', 'Persetujuan pekerjaan "' . $task->title . '" dibatalkan dan kembali menunggu pemeriksaan.'],
         ];
         [$notificationTitle, $notificationMessage] = $statusMessages[$request->status];
@@ -850,7 +889,7 @@ class TaskController extends Controller
                 'task_id' => $task->id,
                 'status' => $task->status,
                 'url' => '/',
-                'tag' => 'task-status-' . $task->id,
+                'tag' => $this->notificationPrefix() . 'task-status-' . $task->id,
             ]
         );
 
@@ -869,12 +908,14 @@ class TaskController extends Controller
             'action_date' => 'nullable|date_format:Y-m-d',
         ]);
 
-        $task = Task::findOrFail($id);
+        $task = $this->taskModel()::findOrFail($id);
         $reviewer = Auth::user();
 
         if (!$reviewer || !$taskAccess->canReviewTask($reviewer, $task, Carbon::today())) {
             return response()->json([
-                'message' => 'Tidak memiliki akses. Hanya pemberi tugas, atasan permanen aktif, atau supervisor cadangan yang sedang aktif yang dapat menolak bukti tugas.'
+                'message' => $task->task_context === 'manager_supervisor'
+                    ? 'Tidak memiliki akses. Hanya manager yang berwenang atas cabang supervisor ini yang dapat menolak bukti tugas.'
+                    : 'Tidak memiliki akses. Hanya pemberi tugas, atasan permanen aktif, atau supervisor cadangan yang sedang aktif yang dapat menolak bukti tugas.'
             ], 403);
         }
 
@@ -887,7 +928,7 @@ class TaskController extends Controller
         }
 
         $task = DB::transaction(function () use ($id, $request, $reviewer, $taskAccess) {
-            $lockedTask = Task::lockForUpdate()->findOrFail($id);
+            $lockedTask = $this->taskModel()::lockForUpdate()->findOrFail($id);
 
             if (!$taskAccess->canReviewTask($reviewer, $lockedTask, Carbon::today())) {
                 abort(403, 'Tidak memiliki akses untuk memeriksa tugas ini.');
@@ -908,7 +949,11 @@ class TaskController extends Controller
 
             if (!$latestAfter || $latestAfter->review_status !== 'pending') {
                 throw ValidationException::withMessages([
-                    'status' => ['Tidak ada bukti after yang sedang menunggu pemeriksaan.'],
+                    'status' => [
+                        $lockedTask->task_context === 'manager_supervisor'
+                            ? 'Tidak ada bukti tugas yang sedang menunggu pemeriksaan.'
+                            : 'Tidak ada bukti after yang sedang menunggu pemeriksaan.',
+                    ],
                 ]);
             }
 
@@ -949,7 +994,7 @@ class TaskController extends Controller
                 'task_id' => $task->id,
                 'status' => $task->status,
                 'url' => '/',
-                'tag' => 'task-rejected-' . $task->id . '-' . optional($task->evidences->where('type', 'after')->sortByDesc('attempt_no')->first())->attempt_no,
+                'tag' => $this->notificationPrefix() . 'task-rejected-' . $task->id . '-' . optional($task->evidences->where('type', 'after')->sortByDesc('attempt_no')->first())->attempt_no,
             ]
         );
 
@@ -961,15 +1006,46 @@ class TaskController extends Controller
 
     public function uploadEvidence(Request $request, $id)
     {
-        $request->validate([
-            'before' => 'nullable|array|max:1',
+        $evidenceTask = $this->taskModel()::findOrFail($id);
+        $managerEvidence = $evidenceTask->task_context === 'manager_supervisor';
+        if ($managerEvidence) {
+            abort_unless(Auth::user()->active && $evidenceTask->employee_id === Auth::user()->username && Auth::user()->role_type === 'supervisor', 403);
+            $request->validate([
+                'before' => 'prohibited', 'after' => 'required|array|size:1',
+                'after.*' => 'required|file|mimes:jpg,jpeg,png,webp,xlsx|max:10240',
+                'action_date' => 'nullable|date_format:Y-m-d',
+            ]);
+            $file = $request->file('after')[0];
+            if (strtolower($file->getClientOriginalExtension()) === 'xlsx') {
+                if (!class_exists(\ZipArchive::class)) {
+                    Log::error('XLSX upload validation unavailable: PHP zip extension is not enabled.');
+                    return $this->evidenceUploadError(
+                        $request,
+                        $evidenceTask,
+                        'XLSX_EXTENSION_UNAVAILABLE',
+                        'Unggah file XLSX sementara tidak tersedia karena ekstensi server belum aktif.',
+                        503
+                    );
+                }
+                $zip = new \ZipArchive();
+                $opened = $zip->open($file->getRealPath()) === true;
+                $valid = $opened && $zip->locateName('[Content_Types].xml') !== false && $zip->locateName('xl/workbook.xml') !== false;
+                if ($opened) $zip->close();
+                if (!$valid) throw ValidationException::withMessages(['after' => ['File XLSX tidak valid.']]);
+            } elseif (!@getimagesize($file->getRealPath())) {
+                throw ValidationException::withMessages(['after' => ['Bukti harus berupa foto atau XLSX.']]);
+            }
+        } else {
+            $request->validate([
+                'before' => 'nullable|array|max:1',
             'before.*' => 'nullable|file|image|mimes:jpg,jpeg,png,webp|mimetypes:image/jpeg,image/png,image/webp|max:10240',
             'after' => 'nullable|array|max:3',
             'after.*' => 'nullable|file|image|mimes:jpg,jpeg,png,webp|mimetypes:image/jpeg,image/png,image/webp|max:10240',
             'action_date' => 'nullable|date_format:Y-m-d',
         ]);
+        }
 
-        $task = Task::with('evidences')->findOrFail($id);
+        $task = $this->taskModel()::with('evidences')->findOrFail($id);
 
         if ($task->status === 'approved') {
             return $this->evidenceUploadError(
@@ -1020,7 +1096,9 @@ class TaskController extends Controller
                 $request,
                 $task,
                 'EVIDENCE_FILE_MISSING',
-                'Foto tidak terdeteksi atau terlalu besar (Maks 10MB).',
+                $managerEvidence
+                    ? 'File bukti tidak terdeteksi atau terlalu besar (Maks 10MB).'
+                    : 'Foto tidak terdeteksi atau terlalu besar (Maks 10MB).',
                 400
             );
         }
@@ -1065,6 +1143,8 @@ class TaskController extends Controller
             }
         }
 
+        $storedPaths = [];
+
         DB::beginTransaction();
 
         try {
@@ -1072,6 +1152,7 @@ class TaskController extends Controller
                 foreach ($request->file('before') as $file) {
                     if ($file->isValid()) {
                         $path = $file->store('tasks', 'public');
+                        $storedPaths[] = $path;
                         $task->evidences()->create([
                             'file_path' => $path,
                             'type' => 'before'
@@ -1084,6 +1165,7 @@ class TaskController extends Controller
                 foreach ($request->file('after') as $file) {
                     if ($file->isValid()) {
                         $path = $file->store('tasks', 'public');
+                        $storedPaths[] = $path;
                         $task->evidences()->create([
                             'file_path' => $path,
                             'type' => 'after'
@@ -1093,13 +1175,31 @@ class TaskController extends Controller
             }
 
             DB::commit();
+        } catch (Throwable $e) {
+            DB::rollBack();
+            foreach ($storedPaths as $path) {
+                Storage::disk('public')->delete($path);
+            }
+            report($e);
 
-            if ($authUser->username === $task->employee_id) {
+            return $this->evidenceUploadError(
+                $request,
+                $task,
+                'EVIDENCE_UPLOAD_FAILED',
+                $managerEvidence
+                    ? 'Terdapat kesalahan ketika mengunggah bukti. Silakan coba lagi.'
+                    : 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.',
+                500
+            );
+        }
+
+        if ($authUser->username === $task->employee_id) {
+            try {
                 $pendingApprovalCount = $this->pendingApprovalCount($task->employer_id);
 
                 app(UserNotificationService::class)->createOrRefreshAggregateAndPush(
                     $task->employer_id,
-                    'approval-needed-' . $task->employer_id,
+                    $this->notificationPrefix() . 'approval-needed-' . $task->employer_id,
                     'approval_needed',
                     'Persetujuan',
                     'Anda memiliki ' . $pendingApprovalCount . ' pekerjaan yang membutuhkan persetujuan saat ini.',
@@ -1108,39 +1208,35 @@ class TaskController extends Controller
                         'task_id' => $task->id,
                         'crew_id' => $task->employee_id,
                         'url' => '/',
-                        'tag' => 'approval-needed-' . $task->employer_id,
+                        'tag' => $this->notificationPrefix() . 'approval-needed-' . $task->employer_id,
                     ]
                 );
+            } catch (Throwable $notificationException) {
+                report($notificationException);
             }
-
-            return response()->json($task->load('evidences'));
-        } catch (\Exception $e) {
-            DB::rollBack();
-            report($e);
-
-            return $this->evidenceUploadError(
-                $request,
-                $task,
-                'EVIDENCE_UPLOAD_FAILED',
-                'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.',
-                500
-            );
         }
+
+        return response()->json($task->load('evidences'));
     }
 
     private function uploadRevisionEvidence(Request $request, Task $task, User $authUser)
     {
+        $isManagerTask = $task->task_context === 'manager_supervisor';
+
         if ($request->hasFile('after') && count($request->file('after')) > 1) {
             return response()->json([
-                'message' => 'Setiap kesempatan revisi hanya dapat mengunggah 1 foto after.'
+                'message' => $isManagerTask
+                    ? 'Setiap kesempatan revisi hanya dapat mengunggah 1 file bukti.'
+                    : 'Setiap kesempatan revisi hanya dapat mengunggah 1 foto after.'
             ], 422);
         }
 
         $storedPaths = [];
+        $disk = $isManagerTask ? 'local' : 'public';
 
         try {
-            $task = DB::transaction(function () use ($request, $task, &$storedPaths) {
-                $lockedTask = Task::with('evidences')->lockForUpdate()->findOrFail($task->id);
+            $task = DB::transaction(function () use ($request, $task, &$storedPaths, $disk, $isManagerTask) {
+                $lockedTask = $this->taskModel()::with('evidences')->lockForUpdate()->findOrFail($task->id);
 
                 if ($lockedTask->status === 'approved') {
                     throw ValidationException::withMessages([
@@ -1179,21 +1275,33 @@ class TaskController extends Controller
                     if (!$latestAfter) {
                         if ($now->gt($dueAt)) {
                             throw ValidationException::withMessages([
-                                'after' => ['Bukti after pertama tidak dapat diunggah setelah tenggat tugas.'],
+                                'after' => [
+                                    $isManagerTask
+                                        ? 'Bukti tugas pertama tidak dapat diunggah setelah tenggat tugas.'
+                                        : 'Bukti after pertama tidak dapat diunggah setelah tenggat tugas.',
+                                ],
                             ]);
                         }
                         $nextAttempt = 1;
                     } else {
                         if ($latestAfter->review_status !== 'rejected') {
                             throw ValidationException::withMessages([
-                                'after' => ['Bukti after berikutnya hanya dapat diunggah setelah bukti sebelumnya ditolak.'],
+                                'after' => [
+                                    $isManagerTask
+                                        ? 'Bukti tugas berikutnya hanya dapat diunggah setelah bukti sebelumnya ditolak.'
+                                        : 'Bukti after berikutnya hanya dapat diunggah setelah bukti sebelumnya ditolak.',
+                                ],
                             ]);
                         }
 
                         $nextAttempt = (int) $latestAfter->attempt_no + 1;
                         if ($nextAttempt > $maxAttempts) {
                             throw ValidationException::withMessages([
-                                'after' => ['Kesempatan unggah bukti after sudah mencapai batas maksimal.'],
+                                'after' => [
+                                    $isManagerTask
+                                        ? 'Kesempatan unggah bukti tugas sudah mencapai batas maksimal.'
+                                        : 'Kesempatan unggah bukti after sudah mencapai batas maksimal.',
+                                ],
                             ]);
                         }
 
@@ -1207,7 +1315,7 @@ class TaskController extends Controller
 
                 if ($request->hasFile('before')) {
                     $file = $request->file('before')[0];
-                    $path = $file->store('tasks', 'public');
+                    $path = $file->store('tasks', $disk);
                     $storedPaths[] = $path;
                     $lockedTask->evidences()->create([
                         'file_path' => $path,
@@ -1217,7 +1325,7 @@ class TaskController extends Controller
 
                 if ($request->hasFile('after')) {
                     $file = $request->file('after')[0];
-                    $path = $file->store('tasks', 'public');
+                    $path = $file->store('tasks', $disk);
                     $storedPaths[] = $path;
                     $lockedTask->evidences()->create([
                         'file_path' => $path,
@@ -1232,7 +1340,7 @@ class TaskController extends Controller
             });
         } catch (ValidationException $exception) {
             foreach ($storedPaths as $path) {
-                Storage::disk('public')->delete($path);
+                Storage::disk($disk)->delete($path);
             }
 
             $errors = $exception->errors();
@@ -1249,7 +1357,7 @@ class TaskController extends Controller
             );
         } catch (Throwable $exception) {
             foreach ($storedPaths as $path) {
-                Storage::disk('public')->delete($path);
+                Storage::disk($disk)->delete($path);
             }
             report($exception);
 
@@ -1257,7 +1365,9 @@ class TaskController extends Controller
                 $request,
                 $task,
                 'EVIDENCE_UPLOAD_FAILED',
-                'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.',
+                $isManagerTask
+                    ? 'Terdapat kesalahan ketika mengunggah bukti. Silakan coba lagi.'
+                    : 'Terdapat kesalahan ketika mengunggah gambar. Silakan coba lagi.',
                 500
             );
         }
@@ -1267,7 +1377,7 @@ class TaskController extends Controller
 
             app(UserNotificationService::class)->createOrRefreshAggregateAndPush(
                 $task->employer_id,
-                'approval-needed-' . $task->employer_id,
+                $this->notificationPrefix() . 'approval-needed-' . $task->employer_id,
                 'approval_needed',
                 'Persetujuan',
                 'Anda memiliki ' . $pendingApprovalCount . ' pekerjaan yang membutuhkan persetujuan saat ini.',
@@ -1276,7 +1386,7 @@ class TaskController extends Controller
                     'task_id' => $task->id,
                     'crew_id' => $task->employee_id,
                     'url' => '/',
-                    'tag' => 'approval-needed-' . $task->employer_id,
+                    'tag' => $this->notificationPrefix() . 'approval-needed-' . $task->employer_id,
                 ]
             );
         }
@@ -1443,7 +1553,7 @@ class TaskController extends Controller
             ], 422);
         }
 
-        if (!Task::whereKey($task->id)->activeOnDate($actionDate)->exists()) {
+        if (!$this->taskModel()::whereKey($task->id)->activeOnDate($actionDate)->exists()) {
             if ($forEvidenceUpload) {
                 return $this->evidenceUploadError(
                     $request,
@@ -1541,8 +1651,38 @@ class TaskController extends Controller
         return ($task->start_at instanceof Carbon ? $task->start_at : Carbon::parse($task->start_at))->isFuture();
     }
 
+
+    public function downloadEvidence($taskId, $evidenceId)
+    {
+        $task = $this->taskModel()::findOrFail($taskId);
+        abort_unless($task->task_context === 'manager_supervisor' && app(\App\Services\TaskAssignmentAccessService::class)->canRead(Auth::user(), $task), 403);
+        $evidence = $task->evidences()->findOrFail($evidenceId);
+        abort_unless(Storage::disk('local')->exists($evidence->file_path), 404);
+        return Storage::disk('local')->download($evidence->file_path, 'bukti-' . $evidence->id . '.' . pathinfo($evidence->file_path, PATHINFO_EXTENSION), ['X-Content-Type-Options'=>'nosniff']);
+    }
+
+    private function isManagerAssignment(Request $request): bool
+    {
+        $request->validate(['task_context' => 'nullable|in:crew,manager_supervisor', 'location_id'=>'nullable|string|max:255']);
+        if (!$this->isManagerTaskEndpoint()) {
+            abort_if($request->input('task_context') === 'manager_supervisor', 422, 'Gunakan endpoint penugasan Manager.');
+            return false;
+        }
+        $request->validate(['task_context' => 'nullable|in:manager_supervisor']);
+        abort_unless(Auth::user()->active && Auth::user()->role_type === 'manager', 403);
+        $this->managerTaskIdentity($request);
+        return true;
+    }
+
+    private function managerTaskIdentity(Request $request): array
+    {
+        $request->validate(['title'=>'required|string|max:255', 'target'=>'required|string|max:5000']);
+        return ['target'=>$request->target, 'title'=>$request->title];
+    }
+
     private function canManageTask(User $actor, Task $task): bool
     {
+        if ($task->task_context === 'manager_supervisor') return app(\App\Services\TaskAssignmentAccessService::class)->canManage($actor, $task);
         if ($task->employer_id === $actor->username) {
             return true;
         }
@@ -1568,6 +1708,7 @@ class TaskController extends Controller
 
     private function taskWeightAttributes(?string $label): array
     {
+        if ($this->isManagerTaskEndpoint()) return [];
         return $label ? [
             'weight_label' => $label,
             'weight_value' => $this->weightValueFor($label),
@@ -1621,7 +1762,7 @@ class TaskController extends Controller
 
     private function pendingApprovalCount(string $supervisorId): int
     {
-        return Task::where('employer_id', $supervisorId)
+        return $this->taskModel()::where('employer_id', $supervisorId)
             ->awaitingReview()
             ->count();
     }
@@ -1632,11 +1773,11 @@ class TaskController extends Controller
 
         app(UserNotificationService::class)->refreshAggregate(
             $supervisorId,
-            'approval-needed-' . $supervisorId,
+            $this->notificationPrefix() . 'approval-needed-' . $supervisorId,
             'Anda memiliki ' . $pendingApprovalCount . ' pekerjaan yang membutuhkan persetujuan saat ini.',
             [
                 'url' => '/',
-                'tag' => 'approval-needed-' . $supervisorId,
+                'tag' => $this->notificationPrefix() . 'approval-needed-' . $supervisorId,
                 'pending_count' => $pendingApprovalCount,
             ],
             $pendingApprovalCount === 0

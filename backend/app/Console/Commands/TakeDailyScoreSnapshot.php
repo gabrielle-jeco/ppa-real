@@ -11,7 +11,9 @@ use Illuminate\Console\Command;
 
 class TakeDailyScoreSnapshot extends Command
 {
-    protected $signature = 'score:snapshot-daily {--date= : Score date in Y-m-d format; defaults to yesterday}';
+    protected $signature = 'score:snapshot-daily
+        {--date= : Score date in Y-m-d format; defaults to yesterday}
+        {--exclude-user=* : Usernames excluded from snapshot due to upstream sync failure}';
 
     protected $description = 'Store auditable daily scores for active service crew';
 
@@ -28,15 +30,26 @@ class TakeDailyScoreSnapshot extends Command
         }
 
         $rule = ScoringRule::configurationFor($scoreDate);
+        $excludedUsers = collect((array) $this->option('exclude-user'))
+            ->map(fn ($nik) => trim((string) $nik))
+            ->filter(fn ($nik) => $nik !== '')
+            ->unique()
+            ->values()
+            ->all();
         $processed = 0;
 
-        User::query()
+        $query = User::query()
             ->where('active', true)
             ->whereHas('userLocations', function ($query) {
                 $query->whereRaw('LOWER(TRIM(job_level)) = ?', ['sc']);
             })
-            ->with(['userLocations', 'accountRole'])
-            ->orderBy('id')
+            ->with(['userLocations', 'accountRole']);
+
+        if ($excludedUsers !== []) {
+            $query->whereNotIn('username', $excludedUsers);
+        }
+
+        $query->orderBy('id')
             ->chunkById(250, function ($users) use ($scoringService, $scoreDate, $rule, &$processed) {
                 foreach ($users as $user) {
                     $report = $scoringService->getCrewDailyReport($user, $scoreDate, $scoreDate);

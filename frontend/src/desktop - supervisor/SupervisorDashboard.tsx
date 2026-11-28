@@ -1,10 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
+import SupervisorAssignedTasks from '../general/SupervisorAssignedTasks';
+import CrewTaskExportModal from '../general/CrewTaskExportModal';
 import CrewList from './CrewList';
 import CrewDetail from './CrewDetail';
 
 export default function SupervisorDashboard() {
     const [dashboardData, setDashboardData] = useState<any>(null);
     const [selectedCrewId, setSelectedCrewId] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'crew' | 'assigned'>('crew');
+    const [assignedMounted, setAssignedMounted] = useState(false);
     const [loading, setLoading] = useState(true);
     const refreshTimerRef = useRef<number | null>(null);
 
@@ -62,7 +66,18 @@ export default function SupervisorDashboard() {
     const selectedCrew = dashboardData.crews.find((c: any) => c.id === selectedCrewId);
 
     return (
-        <div className="flex h-full w-full bg-gray-50 border-t border-gray-200">
+        <div className="flex h-full w-full flex-col bg-gray-50 border-t border-gray-200">
+            <div className="flex flex-wrap items-center gap-2 border-b bg-white p-3" role="tablist" aria-label="Dashboard Supervisor">
+                <button role="tab" aria-selected={activeTab === 'crew'} onClick={() => setActiveTab('crew')} className={`rounded-xl px-4 py-2 text-sm font-bold ${activeTab === 'crew' ? 'bg-primary text-white' : 'text-gray-500'}`}>Penugasan Crew</button>
+                <button role="tab" aria-selected={activeTab === 'assigned'} onClick={() => { setAssignedMounted(true); setActiveTab('assigned'); }} className={`rounded-xl px-4 py-2 text-sm font-bold ${activeTab === 'assigned' ? 'bg-primary text-white' : 'text-gray-500'}`}>Tugas dari Manager</button>
+                <div className="ml-auto"><CrewTaskExportModal /></div>
+            </div>
+            {assignedMounted && (
+                <div className={`${activeTab === 'assigned' ? 'flex' : 'hidden'} min-h-0 flex-1`}>
+                    <SupervisorAssignedTasks supervisor={dashboardData.supervisor} active={activeTab === 'assigned'} />
+                </div>
+            )}
+            <div className={`${activeTab === 'crew' ? 'flex' : 'hidden'} min-h-0 flex-1`}>
             {/* Left: Crew List */}
             <CrewList
                 data={dashboardData}
@@ -76,6 +91,7 @@ export default function SupervisorDashboard() {
                 ) : (
                     <div className="h-full flex items-center justify-center text-gray-400">Pilih karyawan untuk melihat detail.</div>
                 )}
+            </div>
             </div>
         </div>
     );

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\UserLoginEvent;
 use App\Models\User;
+use App\Services\ManagerScopeService;
 use App\Services\YoabsenAuthService;
 use App\Services\YojadwalPresenceService;
 use Carbon\Carbon;
@@ -17,7 +18,12 @@ class AuthController extends Controller
     /**
      * Handle the login request.
      */
-    public function login(Request $request, YoabsenAuthService $yoabsenAuth, YojadwalPresenceService $presenceService)
+    public function login(
+        Request $request,
+        YoabsenAuthService $yoabsenAuth,
+        YojadwalPresenceService $presenceService,
+        ManagerScopeService $managerScope
+    )
     {
         $credentials = $request->validate([
             'username' => 'required|string|max:100',
@@ -62,21 +68,22 @@ class AuthController extends Controller
             ]);
         }
 
-        if ($user->role_type === 'manager') {
-            if ($user->manager_type === 'SM') {
-                if (!$user->location_id) {
-                    Auth::logout();
-                    return response()->json(['message' => 'Kesalahan sistem: SM belum memiliki lokasi.'], 403);
-                }
+        if ($user->role_type === 'manager' && in_array($user->manager_type, ['SM', 'CO'], true)) {
+            $primaryLocationId = $managerScope->accessibleLocations($user)->first()?->initial;
 
-                if ($request->has('location_id') && $request->location_id != $user->location_id) {
-                    Auth::logout();
-                    throw ValidationException::withMessages([
-                        'location_id' => ['Akses ditolak: akun terkunci pada lokasi lain.'],
-                    ]);
-                }
+            if (!$primaryLocationId) {
+                Auth::logout();
+                return response()->json([
+                    'message' => 'Kesalahan sistem: ' . $user->manager_type . ' belum memiliki lokasi.',
+                ], 403);
             }
 
+            if ($request->filled('location_id') && $request->location_id != $primaryLocationId) {
+                Auth::logout();
+                throw ValidationException::withMessages([
+                    'location_id' => ['Akses ditolak: akun terkunci pada lokasi lain.'],
+                ]);
+            }
         }
 
         $tokenExpirationMinutes = config('sanctum.expiration');
@@ -112,7 +119,10 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()?->delete();
+        $token = $request->user()?->currentAccessToken();
+        if ($token && method_exists($token, 'delete')) {
+            $token->delete();
+        }
 
         return response()->json(['message' => 'Berhasil keluar.']);
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera } from 'lucide-react';
+import { Camera, Upload } from 'lucide-react';
 
 interface MobileActionModalProps {
     isOpen: boolean;
@@ -9,38 +9,54 @@ interface MobileActionModalProps {
     onHistory: () => void;
 }
 
-const MobileActionModal: React.FC<MobileActionModalProps> = ({ isOpen, onClose, onTakePhoto, onHistory }) => {
+const MobileActionModal: React.FC<MobileActionModalProps> = ({ isOpen, onClose, onTakePhoto, onHistory, onUpload }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="Tindakan Bukti" className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose}></div>
 
             {/* Modal Content */}
             <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm z-10 shadow-2xl animate-fade-in-up">
 
-                <div className="mb-6">
+                <div className={`mb-6 grid gap-3 ${onUpload ? 'grid-cols-2' : 'grid-cols-1'}`}>
                     <button
+                        type="button"
                         onClick={onTakePhoto}
-                        className="w-full py-8 bg-gray-50 border border-gray-100 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform hover:bg-gray-100"
+                        className="w-full py-8 px-3 bg-gray-50 border border-gray-100 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform hover:bg-gray-100"
                     >
                         <div className="bg-purple-100 p-3 rounded-full text-purple-600">
                             <Camera size={28} />
                         </div>
                         <span className="font-bold text-gray-700 text-sm">Ambil Foto</span>
                     </button>
+
+                    {onUpload && (
+                        <button
+                            type="button"
+                            onClick={onUpload}
+                            className="w-full py-8 px-3 bg-gray-50 border border-gray-100 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform hover:bg-gray-100"
+                        >
+                            <div className="bg-blue-100 p-3 rounded-full text-blue-600">
+                                <Upload size={28} />
+                            </div>
+                            <span className="font-bold text-gray-700 text-sm text-center">Pilih Foto / XLSX</span>
+                        </button>
+                    )}
                 </div>
 
                 {/* Bottom Actions */}
                 <div className="flex items-center gap-3">
                     <button
+                        type="button"
                         onClick={onHistory}
                         className="flex-1 bg-gray-100 text-gray-700 font-bold py-3.5 rounded-full shadow-sm active:scale-95 transition-transform text-sm hover:bg-gray-200"
                     >
                         Riwayat
                     </button>
                     <button
+                        type="button"
                         onClick={onClose}
                         className="flex-1 bg-blue-600 text-white font-bold py-3.5 rounded-full shadow-lg active:scale-95 transition-transform text-sm hover:bg-blue-700"
                     >

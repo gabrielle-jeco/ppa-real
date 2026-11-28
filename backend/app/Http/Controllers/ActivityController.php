@@ -83,7 +83,9 @@ class ActivityController extends Controller
                 return response()->json(['message' => 'Tidak memiliki akses.'], 403);
             }
 
-            $isSubordinate = $authUser->subordinateLines()->where('subordinate_id', $user->username)->where('status', 'active')->exists();
+            $isSubordinate = $authUser->role_type === 'manager' && $user->role_type === 'supervisor'
+                ? app(\App\Services\TaskAssignmentAccessService::class)->canAssign($authUser, $user->username)
+                : $authUser->subordinateLines()->where('subordinate_id', $user->username)->where('status', 'active')->exists();
             if (!$isSubordinate) {
                 return response()->json(['message' => 'Tidak memiliki akses. User ini bukan bawahan Anda.'], 403);
             }

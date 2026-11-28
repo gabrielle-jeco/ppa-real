@@ -25,6 +25,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/notifications/read-all', [App\Http\Controllers\UserNotificationController::class, 'markAllRead']);
     Route::patch('/notifications/{notification}/read', [App\Http\Controllers\UserNotificationController::class, 'markRead']);
 
+    Route::get('/supervisor/crew-tasks/export', App\Http\Controllers\SupervisorCrewTaskExportController::class)->middleware('throttle:10,1');
+
+    // Dedicated manager assignment store; crew task IDs and relationship constraints stay independent.
+    Route::get('/supervisor/manager-tasks', [App\Http\Controllers\ManagerTaskController::class, 'mine']);
+    Route::get('/manager/supervisors/{supervisorId}/tasks', [App\Http\Controllers\ManagerTaskController::class, 'index']);
+    Route::post('/manager/tasks', [App\Http\Controllers\ManagerTaskController::class, 'store']);
+    Route::post('/manager/tasks/bulk', [App\Http\Controllers\ManagerTaskController::class, 'bulkStore']);
+    Route::patch('/manager/task-batches/{id}', [App\Http\Controllers\ManagerTaskController::class, 'updateBatch']);
+    Route::patch('/manager/tasks/{id}', [App\Http\Controllers\ManagerTaskController::class, 'update']);
+    Route::delete('/manager/tasks/{id}', [App\Http\Controllers\ManagerTaskController::class, 'destroy']);
+    Route::patch('/manager/tasks/{id}/status', [App\Http\Controllers\ManagerTaskController::class, 'updateStatus']);
+    Route::post('/manager/tasks/{id}/reject', [App\Http\Controllers\ManagerTaskController::class, 'rejectEvidence']);
+    Route::post('/manager/tasks/{id}/evidence', [App\Http\Controllers\ManagerTaskController::class, 'uploadEvidence']);
+    Route::get('/manager/tasks/{taskId}/evidences/{evidenceId}/download', [App\Http\Controllers\ManagerTaskController::class, 'downloadEvidence']);
+
     // Manager Routes
     Route::get('/manager/supervisors', [App\Http\Controllers\ManagerController::class, 'getSupervisors']);
     Route::get('/manager/score-reports/options', [App\Http\Controllers\CmsScoreReportController::class, 'options']);

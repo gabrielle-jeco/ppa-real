@@ -3104,8 +3104,8 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                             <p className="font-black text-gray-900">{location.name}</p>
                                             <p className="text-xs text-gray-400">{location.initial} - Toko {location.store_code || '-'} - {location.city || '-'}</p>
                                         </div>
-                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full ${Boolean(location.is_active ?? true) ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            {Boolean(location.is_active ?? true) ? 'Aktif' : 'Tidak Aktif'}
+                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full ${(location.is_active ?? true) ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                            {(location.is_active ?? true) ? 'Aktif' : 'Tidak Aktif'}
                                         </span>
                                     </div>
                                 </button>
@@ -3473,6 +3473,7 @@ type SelectOption = { value: string; label: string; secondaryLabel?: string };
 
 function CustomSelect({ value, placeholder, options, onChange, searchable = true }: { value: string; placeholder: string; options: SelectOption[]; onChange: (value: string) => void; searchable?: boolean }) {
     const [open, setOpen] = useState(false);
+    const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | undefined>(undefined);
     const [search, setSearch] = useState('');
     const selected = options.find((option) => option.value === value);
     const ref = useRef<HTMLDivElement>(null);
@@ -3481,6 +3482,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
         const handleClickOutside = (event: MouseEvent) => {
             if (ref.current && !ref.current.contains(event.target as Node)) {
                 setOpen(false);
+                setDropdownStyle(undefined);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -3488,13 +3490,17 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
     }, []);
 
     const filteredOptions = searchable ? options.filter((option) => `${option.label} ${option.secondaryLabel || ''}`.toLowerCase().includes(search.toLowerCase())) : options;
-    const dropdownStyle = open ? getDropdownStyle(ref, 256) : undefined;
 
     return (
         <div className="relative" ref={ref}>
             <button
                 type="button"
-                onClick={() => { setOpen((current) => !current); setSearch(''); }}
+                onClick={() => {
+                    const nextOpen = !open;
+                    setDropdownStyle(nextOpen ? getDropdownStyle(ref, 256) : undefined);
+                    setOpen(nextOpen);
+                    setSearch('');
+                }}
                 className="input flex h-12 items-center justify-between gap-4 text-left"
             >
                 <span className={`flex min-w-0 flex-col ${selected ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
@@ -3525,6 +3531,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
                             event.preventDefault();
                             onChange('');
                             setOpen(false);
+                            setDropdownStyle(undefined);
                         }}
                         className={`w-full rounded-lg px-3 py-2 text-left text-sm ${!value ? 'bg-purple-50 font-bold text-primary' : 'text-gray-700 hover:bg-gray-50'}`}
                     >
@@ -3540,6 +3547,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
                                 event.preventDefault();
                                 onChange(option.value);
                                 setOpen(false);
+                                setDropdownStyle(undefined);
                             }}
                             className={`w-full rounded-lg px-3 py-2 text-left text-sm ${option.value === value ? 'bg-purple-50 font-bold text-primary' : 'text-gray-700 hover:bg-gray-50'}`}
                         >
@@ -3557,6 +3565,7 @@ function CustomSelect({ value, placeholder, options, onChange, searchable = true
 
 function CustomMultiSelect({ values, placeholder, options, onChange }: { values: string[]; placeholder: string; options: SelectOption[]; onChange: (values: string[]) => void }) {
     const [open, setOpen] = useState(false);
+    const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | undefined>(undefined);
     const [search, setSearch] = useState('');
     const ref = useRef<HTMLDivElement>(null);
 
@@ -3564,6 +3573,7 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
         const handleClickOutside = (event: MouseEvent) => {
             if (ref.current && !ref.current.contains(event.target as Node)) {
                 setOpen(false);
+                setDropdownStyle(undefined);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -3572,7 +3582,6 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
 
     const selectedOptions = options.filter((option) => values.includes(option.value));
     const filteredOptions = options.filter((option) => `${option.label} ${option.secondaryLabel || ''}`.toLowerCase().includes(search.toLowerCase()));
-    const dropdownStyle = open ? getDropdownStyle(ref, 288) : undefined;
     const summary = selectedOptions.length === 0
         ? placeholder
         : selectedOptions.length <= 2
@@ -3589,7 +3598,12 @@ function CustomMultiSelect({ values, placeholder, options, onChange }: { values:
         <div className="relative" ref={ref}>
             <button
                 type="button"
-                onClick={() => { setOpen((current) => !current); setSearch(''); }}
+                onClick={() => {
+                    const nextOpen = !open;
+                    setDropdownStyle(nextOpen ? getDropdownStyle(ref, 288) : undefined);
+                    setOpen(nextOpen);
+                    setSearch('');
+                }}
                 className="input flex h-12 items-center justify-between gap-4 text-left"
             >
                 <span className={`truncate ${selectedOptions.length ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>{summary}</span>
