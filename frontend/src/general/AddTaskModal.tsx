@@ -9,14 +9,15 @@ import { TaskDatePicker, TaskTimePicker } from './TaskSchedulePickers';
 interface AddTaskModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSubmit: (task: any) => void;
+    onSubmit: (task: any) => Promise<void> | void;
     defaultDate?: string; // YYYY-MM-DD
     requireCategory?: boolean;
     initialTask?: any;
     submitLabel?: string;
+    taskFields?: React.ReactNode;
 }
 
-export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false, initialTask, submitLabel = 'Simpan' }: AddTaskModalProps) {
+export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, requireCategory = false, initialTask, submitLabel = 'Simpan', taskFields }: AddTaskModalProps) {
     const initializedKeyRef = React.useRef<string | null>(null);
     const [date, setDate] = useState(defaultDate || '');
     const [startTime, setStartTime] = useState('');
@@ -26,6 +27,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
     const [taskAreaId, setTaskAreaId] = useState('');
     const [taskDefinitionId, setTaskDefinitionId] = useState('');
     const [weightLabel, setWeightLabel] = useState('mudah');
+    const [submitting, setSubmitting] = useState(false);
     const minTaskDate = toDateInputValue(new Date());
     const maxTaskDate = toDateInputValue(getTaskWindowEndDate());
     const isTodayTask = date === minTaskDate;
@@ -63,8 +65,9 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
 
     if (!isOpen) return null;
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (submitting) return;
         if (!date || !startTime || !dueTime) {
             alert('Lengkapi tanggal, jam mulai, dan tenggat pekerjaan.');
             return;
@@ -93,28 +96,36 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
             alert('Tenggat pekerjaan tidak boleh lebih awal dari jam mulai.');
             return;
         }
-        onSubmit({
-            task_definition_id: taskDefinitionId || null,
-            start_at: startAt,
-            due_at: dueAt,
-            ...(featureFlags.taskWeight ? { weight_label: weightLabel } : {}),
-            note,
-        });
-        onClose();
-        // Reset form
-        setDate('');
-        setStartTime('');
-        setDueTime('');
-        setNote('');
-        setWorkStationId('');
-        setTaskAreaId('');
-        setTaskDefinitionId('');
-        setWeightLabel('mudah');
+        setSubmitting(true);
+        try {
+            await onSubmit({
+                task_definition_id: taskDefinitionId || null,
+                start_at: startAt,
+                due_at: dueAt,
+                ...(featureFlags.taskWeight ? { weight_label: weightLabel } : {}),
+                note,
+            });
+            initializedKeyRef.current = null;
+            onClose();
+            // Reset form
+            setDate('');
+            setStartTime('');
+            setDueTime('');
+            setNote('');
+            setWorkStationId('');
+            setTaskAreaId('');
+            setTaskDefinitionId('');
+            setWeightLabel('mudah');
+        } catch {
+            // Keep modal open so the caller can show an alert and the user keeps their inputs.
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4">
-            <div
+            <div role="dialog" aria-modal="true" aria-labelledby="task-form-title"
                 className="relative w-full max-w-sm overflow-y-auto overscroll-contain rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200"
                 style={{ maxHeight: 'calc(100vh - 2rem)' }}
             >
@@ -126,10 +137,10 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">Tenggat Pekerjaan</h2>
+                <h2 id="task-form-title" className="text-xl font-bold text-gray-800 mb-6 text-center">Tenggat Pekerjaan</h2>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {shouldShowCatalog && (
+                    {taskFields || (shouldShowCatalog && (
                         <TaskCatalogFields
                             enabled={isOpen}
                             value={{ workStationId, taskAreaId, taskDefinitionId }}
@@ -141,7 +152,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                             allowLegacy={Boolean(initialTask && !initialTask.task_definition_id)}
                             legacyTitle={initialTask?.title || ''}
                         />
-                    )}
+                    ))}
 
                     {/* Date Picker */}
                     <div>
@@ -179,7 +190,7 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                         </div>
                     </div>
 
-                    {featureFlags.taskWeight && (
+                    {featureFlags.taskWeight && !taskFields && (
                         <div>
                             <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">Bobot</label>
                             <select
@@ -212,9 +223,10 @@ export default function AddTaskModal({ isOpen, onClose, onSubmit, defaultDate, r
                     <div className="pt-4 flex justify-end">
                         <button
                             type="submit"
-                            className="bg-primary text-white font-bold py-3 px-8 rounded-full hover:bg-purple-700 transition shadow-lg w-full md:w-auto"
+                            disabled={submitting}
+                            className="bg-primary text-white font-bold py-3 px-8 rounded-full hover:bg-purple-700 transition shadow-lg w-full md:w-auto disabled:opacity-60"
                         >
-                            {submitLabel}
+                            {submitting ? 'Menyimpan...' : submitLabel}
                         </button>
                     </div>
                 </form>

@@ -19,6 +19,8 @@ interface BulkTaskModalProps {
     initialBatch?: any;
     submitLabel?: string;
     mobileSheet?: boolean;
+    taskFields?: React.ReactNode;
+    recipientNoun?: string;
 }
 
 const dayOptions = [
@@ -31,7 +33,7 @@ const dayOptions = [
     { value: 0, label: 'Min' },
 ];
 
-export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaultDate, accent = 'purple', initialBatch, submitLabel = 'Buat Penugasan', mobileSheet = false }: BulkTaskModalProps) {
+export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaultDate, accent = 'purple', initialBatch, submitLabel = 'Buat Penugasan', mobileSheet = false, taskFields, recipientNoun = 'karyawan' }: BulkTaskModalProps) {
     const initializedKeyRef = useRef<string | null>(null);
     const [crewOptions, setCrewOptions] = useState<CrewOption[]>(crews || []);
     const [selectedCrewIds, setSelectedCrewIds] = useState<string[]>([]);
@@ -151,7 +153,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
             : selectedStartAt;
         const dueAt = new Date(`${startDate}T${dueTime}:00`);
 
-        if (selectedCrewIds.length === 0) return alert('Pilih minimal satu karyawan.');
+        if (selectedCrewIds.length === 0) return alert(`Pilih minimal satu ${recipientNoun}.`);
         if (isBeforeToday(startDateObject) || isAfterTaskWindow(endDateObject)) return alert('Tanggal pekerjaan di luar periode penugasan.');
         if (endDateObject < startDateObject) return alert('Tanggal selesai tidak boleh lebih awal dari tanggal mulai.');
         if (startsToday && dueAt < now) return alert('Tenggat pekerjaan hari ini sudah terlewati.');
@@ -190,6 +192,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
             }}
         >
             <div
+                role="dialog" aria-modal="true" aria-labelledby="bulk-task-form-title"
                 ref={contentRef}
                 className={`relative w-full max-w-3xl overflow-y-auto overscroll-contain bg-white p-6 ${mobileSheet ? 'shadow-[0_-12px_30px_rgba(15,23,42,0.16)] sm:shadow-2xl' : 'shadow-2xl'} ${mobileSheet
                     ? `rounded-t-3xl sm:rounded-3xl transform-gpu transition-[transform,opacity] duration-200 ease-out will-change-transform ${animateIn ? 'translate-y-0 opacity-100 sm:scale-100' : 'translate-y-full opacity-0 sm:translate-y-8 sm:scale-[0.98]'}`
@@ -203,12 +206,12 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-black text-gray-900 mb-1">{initialBatch ? 'Edit Bulk Assignment' : 'Bulk Assignment'}</h2>
-                <p className="text-xs text-gray-500 mb-5">{initialBatch ? 'Perbarui pengaturan Bulk Assignment yang belum berjalan.' : 'Buat pekerjaan untuk beberapa karyawan dan beberapa hari sekaligus.'}</p>
+                <h2 id="bulk-task-form-title" className="text-xl font-black text-gray-900 mb-1">{initialBatch ? 'Edit Bulk Assignment' : 'Bulk Assignment'}</h2>
+                <p className="text-xs text-gray-500 mb-5">{initialBatch ? 'Perbarui pengaturan Bulk Assignment yang belum berjalan.' : `Buat pekerjaan untuk beberapa ${recipientNoun} dan beberapa hari sekaligus.`}</p>
 
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                     <div className="space-y-4">
-                        <TaskCatalogFields
+                        {taskFields || (<TaskCatalogFields
                             enabled={isOpen}
                             value={{ workStationId, taskAreaId, taskDefinitionId }}
                             onChange={(selection) => {
@@ -219,7 +222,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
                             accent={accent}
                             allowLegacy={Boolean(initialBatch && !initialBatch.task_definition_id)}
                             legacyTitle={initialBatch?.title || ''}
-                        />
+                        />)}
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
@@ -259,7 +262,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
                             </div>
                         </div>
 
-                        {featureFlags.taskWeight && (
+                        {featureFlags.taskWeight && !taskFields && (
                             <>
                                 <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Bobot pekerjaan</label>
                                 <select className={`w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 ${focusClass} outline-none`} value={weightLabel} onChange={(e) => setWeightLabel(e.target.value)} required>
@@ -288,7 +291,7 @@ export default function BulkTaskModal({ isOpen, onClose, onSubmit, crews, defaul
 
                         <div className="rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-4 py-3 bg-gray-50 flex items-center justify-between">
-                                <p className="text-xs font-black text-gray-700">Pilih Karyawan</p>
+                                <p className="text-xs font-black text-gray-700">{recipientNoun === 'karyawan' ? 'Pilih Karyawan' : 'Pilih Supervisor'}</p>
                                 <button type="button" className="text-xs font-bold text-primary" onClick={() => setSelectedCrewIds(crewOptions.map((crew) => crew.id))}>Pilih Semua</button>
                             </div>
                             <div className="max-h-72 overflow-y-auto p-2 space-y-2">

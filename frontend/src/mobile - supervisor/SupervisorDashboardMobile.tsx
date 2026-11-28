@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LogOut, CheckSquare, BarChart2, Users, MapPin, ShoppingBasket, Star } from 'lucide-react';
 import MobileLayout from './MobileLayout';
 import { formatDisplayNumber } from '../general/numberFormat';
+import { logoutSession } from '../utils/authSession';
 
 interface DashboardProps {
     onNavigate: (view: any) => void;
@@ -49,10 +50,9 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
     const PROGRESS_PERCENTAGE = avgCrewProgress;
     const YEARLY_SCORE = stats ? stats.my_avg_point : 0;
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
         // Direct logout without confirmation on mobile as requested
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user_data');
+        await logoutSession();
         window.location.reload();
     };
 
@@ -113,7 +113,7 @@ const SupervisorDashboardMobile: React.FC<DashboardProps> = ({ onNavigate, user 
                 <MenuCard
                     icon={<CheckSquare size={32} className="text-blue-600" />}
                     label="Ceklis"
-                    onClick={() => { }}
+                    onClick={() => onNavigate('ASSIGNED_TASKS')}
                 />
                 <MenuCard
                     icon={<BarChart2 size={32} className="text-blue-600" />}

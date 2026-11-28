@@ -380,6 +380,103 @@ class TaskReviewWorkflowTest extends TestCase
         $this->assertDatabaseMissing('task_evidences', ['task_id' => $task->id]);
     }
 
+    public function test_legacy_evidence_upload_cleans_up_only_new_files_when_transaction_fails(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('tasks/existing-before.png', 'existing-image-bytes');
+
+        $crew = new User(['username' => 'crew-1']);
+        $crew->setRelation('accountRole', null);
+        $crew->setRelation('userLocations', collect());
+        $crew->setRelation('locations', collect());
+
+        $task = Task::create([
+            'employee_id' => 'crew-1',
+            'employer_id' => 'supervisor-1',
+            'title' => 'Tugas legacy',
+            'start_at' => '2026-10-09 08:00:00',
+            'due_at' => '2026-10-09 22:30:00',
+            'revision_deadline_at' => null,
+            'status' => 'pending',
+        ]);
+
+        TaskEvidence::create([
+            'task_id' => $task->id,
+            'file_path' => 'tasks/existing-before.png',
+            'type' => 'before',
+        ]);
+
+        $creatingCount = 0;
+        TaskEvidence::creating(function () use (&$creatingCount) {
+            $creatingCount++;
+            if ($creatingCount >= 2) {
+                throw new \RuntimeException('Simulated DB insert failure on second evidence');
+            }
+        });
+
+        try {
+            $this->actingAs($crew, 'sanctum')
+                ->post('/api/tasks/' . $task->id . '/evidence', [
+                    'after' => [
+                        $this->fakeImage('after-1.png'),
+                        $this->fakeImage('after-2.png'),
+                    ],
+                ], ['Accept' => 'application/json'])
+                ->assertStatus(500)
+                ->assertJsonPath('error_code', 'EVIDENCE_UPLOAD_FAILED');
+        } finally {
+            TaskEvidence::flushEventListeners();
+        }
+
+        $this->assertDatabaseCount('task_evidences', 1);
+        $this->assertDatabaseHas('task_evidences', [
+            'task_id' => $task->id,
+            'file_path' => 'tasks/existing-before.png',
+            'type' => 'before',
+        ]);
+        $this->assertSame(['tasks/existing-before.png'], Storage::disk('public')->allFiles('tasks'));
+    }
+
+    public function test_legacy_evidence_upload_preserves_data_and_files_when_post_commit_notification_fails(): void
+    {
+        Storage::fake('public');
+
+        $crew = new User(['username' => 'crew-1']);
+        $crew->setRelation('accountRole', null);
+        $crew->setRelation('userLocations', collect());
+        $crew->setRelation('locations', collect());
+
+        $task = Task::create([
+            'employee_id' => 'crew-1',
+            'employer_id' => 'supervisor-1',
+            'title' => 'Tugas legacy notifikasi gagal',
+            'start_at' => '2026-10-09 08:00:00',
+            'due_at' => '2026-10-09 22:30:00',
+            'revision_deadline_at' => null,
+            'status' => 'pending',
+        ]);
+
+        $notifications = Mockery::mock(UserNotificationService::class);
+        $notifications->shouldReceive('createOrRefreshAggregateAndPush')
+            ->once()
+            ->andThrow(new \RuntimeException('Notification gateway unavailable'));
+        $this->app->instance(UserNotificationService::class, $notifications);
+
+        $this->actingAs($crew, 'sanctum')
+            ->post('/api/tasks/' . $task->id . '/evidence', [
+                'before' => [$this->fakeImage('before-ok.png')],
+                'after' => [$this->fakeImage('after-ok.png')],
+            ], ['Accept' => 'application/json'])
+            ->assertOk();
+
+        $this->assertDatabaseCount('task_evidences', 2);
+        $files = Storage::disk('public')->allFiles('tasks');
+        $this->assertCount(2, $files);
+        foreach (TaskEvidence::where('task_id', $task->id)->pluck('file_path') as $path) {
+            Storage::disk('public')->assertExists($path);
+        }
+    }
+
     private function taskWithAttempt(int $attemptNo, bool $withBefore = false): array
     {
         $reviewer = new User(['username' => 'supervisor-1']);

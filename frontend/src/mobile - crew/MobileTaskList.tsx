@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Camera, Check } from 'lucide-react';
 import CrewLayout from './CrewLayout';
 import TaskStartStatus from '../general/TaskStartStatus';
@@ -26,10 +26,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
         if (!user?.user_id) return;
         if (!silent) setLoading(true);
         try {
-            // Format date as YYYY-MM-DD (Local Time)
-            const offset = selectedDate.getTimezoneOffset();
-            const localDate = new Date(selectedDate.getTime() - (offset * 60 * 1000));
-            const dateStr = localDate.toISOString().split('T')[0];
+            const dateStr = selectedDate.toLocaleDateString('en-CA');
             const response = await fetch(`/api/crews/${user.user_id}/tasks?date=${dateStr}&role=${selectedRole}`, {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -78,25 +75,26 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
         if (tasks.length === 0 || !user?.user_id) return;
 
         const dateStr = selectedDate.toLocaleDateString('en-CA');
-        const seenKey = `crew_seen_tasks_${user.user_id}_${selectedRole}_${dateStr}`;
+        const prefix = 'crew';
+        const seenKey = `${prefix}_seen_tasks_${user.user_id}_${selectedRole}_${dateStr}`;
         const previousSeen = JSON.parse(localStorage.getItem(seenKey) || 'null') as number[] | null;
         const currentIds = tasks.map(task => Number(task.task_id)).filter(Boolean);
 
         if (!previousSeen) {
             localStorage.setItem(seenKey, JSON.stringify(currentIds));
-            currentIds.forEach(taskId => markNotificationSeen(`crew_new_task_${taskId}`));
+            currentIds.forEach(taskId => markNotificationSeen(`${prefix}_new_task_${taskId}`));
         } else {
             tasks
                 .filter(task => !previousSeen.includes(Number(task.task_id)))
-                .forEach(task => notifyOnce(`crew_new_task_${task.task_id}`, 'Pekerjaan Baru', {
+                .forEach(task => notifyOnce(`${prefix}_new_task_${task.task_id}`, 'Pekerjaan Baru', {
                     body: task.title || 'Ada pekerjaan baru yang perlu dikerjakan.',
-                    tag: `crew-new-task-${task.task_id}`,
+                    tag: `${prefix}-new-task-${task.task_id}`,
                 }));
 
             localStorage.setItem(seenKey, JSON.stringify(Array.from(new Set([...previousSeen, ...currentIds]))));
         }
 
-        tasks.forEach(task => notifyUpcomingTask(task, 'crew'));
+        tasks.forEach(task => notifyUpcomingTask(task, prefix));
     }, [tasks, selectedDate, selectedRole, user?.user_id]);
 
     return (
@@ -160,7 +158,9 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                                                 <p className={`text-sm font-medium leading-tight mb-1 ${isCompleted ? 'text-gray-500' : 'text-gray-700'}`}>
                                                     {formatTaskTitleWithArea(task)}
                                                 </p>
-                                                <p className="text-[10px] text-blue-600 font-bold capitalize mb-0.5">Kategori: {task.work_station?.name || 'Umum'}</p>
+                                                <p className="text-[10px] text-blue-600 font-bold mb-0.5 capitalize">
+                                                    Kategori: {task.work_station?.name || 'Umum'}
+                                                </p>
                                                 <TaskStartStatus
                                                     task={task}
                                                     scheduleClassName="text-[10px] text-gray-400 mb-0.5"
@@ -170,7 +170,7 @@ export default function MobileTaskList({ user, onBack, onSelectTask, refreshTrig
                                                 {featureFlags.taskWeight && (
                                                     <p className="text-[10px] text-gray-400 mb-0.5 capitalize">Bobot {task.weight_label || 'mudah'} ({task.weight_value || 2})</p>
                                                 )}
-                                                {task.note && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note}</div>}
+                                                {(task.note || task.description) && <div className="text-[10px] text-gray-500 leading-snug whitespace-pre-line break-words">{task.note || task.description}</div>}
                                             </div>
                                         </div>
 

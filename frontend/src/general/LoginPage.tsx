@@ -1,4 +1,9 @@
 import React, { useState } from 'react';
+import {
+    NETWORK_ERROR_MESSAGE,
+    SERVER_ERROR_MESSAGE,
+    resolveLoginErrorMessage,
+} from '../utils/authSession';
 
 interface LoginPageProps {
     onLoginSuccess: (user: any) => void;
@@ -9,8 +14,6 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const loginErrorMessage = 'Username dan password yang Anda masukkan tidak sesuai';
-    const fallbackErrorMessage = 'Username dan password yang Anda masukkan tidak sesuai';
 
     const readJsonSafely = async (response: Response) => {
         const contentType = response.headers.get('content-type') || '';
@@ -41,11 +44,13 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             const data = await readJsonSafely(response);
 
             if (!response.ok) {
-                throw new Error(loginErrorMessage);
+                setError(resolveLoginErrorMessage(response.status, data));
+                return;
             }
 
             if (!data?.access_token || !data?.user) {
-                throw new Error(fallbackErrorMessage);
+                setError(SERVER_ERROR_MESSAGE);
+                return;
             }
 
             // Success
@@ -61,8 +66,8 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
             onLoginSuccess(data.user);
 
-        } catch (err: any) {
-            setError(err?.message === loginErrorMessage ? loginErrorMessage : fallbackErrorMessage);
+        } catch {
+            setError(NETWORK_ERROR_MESSAGE);
         } finally {
             setLoading(false);
         }

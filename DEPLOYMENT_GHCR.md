@@ -2,10 +2,10 @@
 
 ## Alur rilis
 
-Workflow `.github/workflows/ci.yml` menjalankan tes backend dan build frontend pada
-PR/push ke `main` dan `develop`. Hanya push ke `main` (termasuk merge PR) yang
-mem-publish image, setelah kedua job tersebut sukses. Lint frontend masih mengikuti
-perilaku CI sebelumnya: dilaporkan tetapi tidak memblokir build.
+Workflow `.github/workflows/ci.yml` menjalankan `backend-tests`, `backend-postgres-smoke`,
+dan `frontend-build` (ESLint strict tanpa `continue-on-error`, unit test frontend, serta
+build produksi) pada PR/push ke `main` dan `develop`. Hanya push ke `main` (termasuk
+merge PR) yang mem-publish image setelah seluruh job pemeriksaan tersebut sukses.
 
 Image Linux AMD64 dipublish dengan tag commit `sha-<40 karakter commit SHA>` dan
 tag tetap `production` untuk update rutin:

@@ -114,6 +114,7 @@ export function notifyUpcomingTask(task: any, prefix = 'crew') {
 }
 
 export function notifyApprovalGrace(task: any) {
+    const prefix = task?.task_context === 'manager_supervisor' ? 'manager_' : '';
     if (webPushPublicKey) return;
     if (!task?.task_id || task.status === 'approved') return;
 
@@ -126,11 +127,11 @@ export function notifyApprovalGrace(task: any) {
     if (now <= dueAt.getTime() || now > approvalEndsAt) return;
 
     notifyOnce(
-        `approval_grace_${task.task_id}`,
+        `${prefix}approval_grace_${task.task_id}`,
         'Persetujuan pekerjaan',
         {
             body: `${task.title || 'Pekerjaan'} sudah melewati tenggat. Persetujuan masih bisa dilakukan sampai ${new Date(approvalEndsAt).toLocaleString('id-ID')}.`,
-            tag: `approval-grace-${task.task_id}`,
+            tag: `${prefix}approval-grace-${task.task_id}`,
         }
     );
 }

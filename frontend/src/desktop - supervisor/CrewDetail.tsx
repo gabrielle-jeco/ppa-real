@@ -1,5 +1,8 @@
+import DesktopTaskActivity from '../general/DesktopTaskActivity';
+import DesktopTaskActions from '../general/DesktopTaskActions';
+import DesktopTaskCalendar from '../general/DesktopTaskCalendar';
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Trash2, ChevronDown, CheckCircle, XCircle, Ban, Edit3, LoaderCircle } from 'lucide-react';
+import { Camera, Trash2, CheckCircle, XCircle, Ban, Edit3, LoaderCircle } from 'lucide-react';
 import AddTaskModal from '../general/AddTaskModal';
 import BulkTaskModal from '../general/BulkTaskModal';
 import TaskPreview from '../general/TaskPreview';
@@ -7,7 +10,7 @@ import EvaluationForm from '../general/EvaluationForm';
 import SubmissionHistory from './SubmissionHistory';
 import TaskStartStatus from '../general/TaskStartStatus';
 import { getAttendanceColor, getAttendanceDay, normalizeAttendanceStatus } from '../utils/attendanceCalendar';
-import { canAssignTaskOnDate, clampToTaskWindow, getAvailableTaskMonths, getAvailableTaskYears, isAfterTaskWindow } from '../utils/taskDateWindow';
+import { canAssignTaskOnDate } from '../utils/taskDateWindow';
 import { isTaskNotStarted } from '../utils/taskTiming';
 import { notifyApprovalGrace } from '../utils/browserNotifications';
 import { featureFlags } from '../utils/featureFlags';
@@ -184,17 +187,6 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
         return date.getDate() === today.getDate() &&
             date.getMonth() === today.getMonth() &&
             date.getFullYear() === today.getFullYear();
-    };
-
-    const getCalendarDays = () => {
-        const year = selectedDate.getFullYear();
-        const month = selectedDate.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const days = [];
-        for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
-        for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
-        return days;
     };
 
     const handleAddTask = async (taskData: any) => {
@@ -657,7 +649,6 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                 }}
             />
 
-            <div className="items-center justify-between hidden lg:flex mb-6"></div>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 h-full flex-1 min-h-0">
 
                 {/* 1. Left Panel (Profile & Calendar) - Col Span 5 (LG) / 3 (XL) */}
@@ -699,33 +690,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
 
                         <div className="mb-0">
                             <h4 className="font-bold text-gray-800 text-sm mb-3">Tugas</h4>
-                            <div className={`relative mb-3 grid gap-2 ${featureFlags.bulkAssignment ? 'grid-cols-[1fr_auto]' : 'grid-cols-1'}`}>
-                                <button
-                                    onClick={() => setIsTaskModalOpen(true)}
-                                    disabled={!canAssignOnSelectedDate}
-                                    className={`h-12 border rounded-lg px-4 flex items-center justify-between text-xs font-semibold shadow-sm transition group ${canAssignOnSelectedDate
-                                        ? 'bg-white border-gray-200 hover:border-primary text-gray-600 hover:text-primary cursor-pointer'
-                                        : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                                        }`}
-                                >
-                                    <span>{canAssignOnSelectedDate ? 'Tambah Tugas' : 'Lihat Riwayat'}</span>
-                                    {canAssignOnSelectedDate && (
-                                        <span className="bg-gray-100 group-hover:bg-purple-100 text-gray-500 group-hover:text-primary rounded-full w-5 h-5 flex items-center justify-center text-lg leading-none pb-0.5">+</span>
-                                    )}
-                                </button>
-                                {featureFlags.bulkAssignment && (
-                                    <button
-                                        onClick={openBulkTaskModal}
-                                        disabled={!canAssignOnSelectedDate}
-                                        className={`h-12 px-4 rounded-lg text-xs font-bold shadow-sm transition ${canAssignOnSelectedDate
-                                            ? 'bg-primary text-white hover:bg-purple-700'
-                                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                            }`}
-                                    >
-                                        Bulk Assignment
-                                    </button>
-                                )}
-                            </div>
+                            <DesktopTaskActions canAssign={canAssignOnSelectedDate} bulkEnabled={featureFlags.bulkAssignment} onIndividual={() => setIsTaskModalOpen(true)} onBulk={openBulkTaskModal} />
                             <div className="flex items-center gap-2 mb-1">
                                 <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
                                     <div
@@ -737,109 +702,13 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                             <p className="text-[10px] text-gray-400">Tugas Selesai: {currentList.filter(t => t.status === 'approved').length}/{currentList.length}</p>
                         </div>
 
-                        {/* Calendar */}
-                        <div className="bg-white rounded-2xl p-6 mt-6 border border-gray-100 shadow-sm relative overflow-hidden">
-                            {/* Decorative Background Blob */}
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-50 rounded-bl-full -z-0 opacity-50"></div>
-
-                            {/* Calendar Header with Dropdowns */}
-                            <div className="flex justify-between items-center mb-6 text-sm font-semibold text-gray-700 relative z-10 px-2">
-                                <div className="flex items-center gap-2 w-full">
-                                    <div className="relative group flex-1">
-                                        <select
-                                            value={selectedDate.getMonth()}
-                                            onChange={(e) => {
-                                                const newDate = new Date(selectedDate);
-                                                newDate.setMonth(parseInt(e.target.value));
-                                                setSelectedDate(clampToTaskWindow(newDate));
-                                            }}
-                                            className="w-full appearance-none bg-gray-50 border border-transparent hover:border-primary rounded-xl px-3 py-2 font-bold text-gray-700 text-sm cursor-pointer outline-none transition-colors"
-                                        >
-                                            {Array.from({ length: 12 }, (_, i) => i)
-                                                .filter(m => getAvailableTaskMonths(selectedDate.getFullYear()).includes(m))
-                                                .map(i => (
-                                                    <option key={i} value={i} className="text-sm">
-                                                        {new Date(0, i).toLocaleString('id-ID', { month: 'long' })}
-                                                    </option>
-                                                ))}
-                                        </select>
-                                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-primary transition-colors" />
-                                    </div>
-
-                                    <div className="relative group w-24">
-                                        <select
-                                            value={selectedDate.getFullYear()}
-                                            onChange={(e) => {
-                                                const newDate = new Date(selectedDate);
-                                                newDate.setFullYear(parseInt(e.target.value));
-                                                setSelectedDate(clampToTaskWindow(newDate));
-                                            }}
-                                            className="w-full appearance-none bg-gray-50 border border-transparent hover:border-primary rounded-xl px-3 py-2 text-gray-700 font-bold text-sm cursor-pointer outline-none transition-colors"
-                                        >
-                                            {getAvailableTaskYears().map(year => (
-                                                <option key={year} value={year} className="text-sm">{year}</option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-primary transition-colors" />
-                                    </div>
-                                </div>
-                            </div>
-
-
-                            <div className="grid grid-cols-7 text-center text-[10px] text-gray-400 font-medium uppercase tracking-wider gap-y-4 mb-2 relative z-10">
-                                <span>MIN</span><span>SEN</span><span>SEL</span><span>RAB</span><span>KAM</span><span>JUM</span><span>SAB</span>
-                            </div>
-                            <div className="grid grid-cols-7 text-center text-xs font-medium text-gray-700 gap-y-3 relative z-10">
-                                {getCalendarDays().map((day, idx) => {
-                                    if (!day) return <div key={idx}></div>;
-
-                                    // Evaluation Mode: Attendance View
-                                    if (viewMode === 'EVALUATION') {
-                                        const now = new Date();
-                                        const isToday = day.getDate() === now.getDate() && day.getMonth() === now.getMonth() && day.getFullYear() === now.getFullYear();
-                                        const isFuture = day > now && !isToday;
-
-                                        const attendanceDay = getAttendanceDay(evalStats?.attendance_calendar, day);
-                                        const attendanceColor = getAttendanceColor(attendanceDay?.status_code, isFuture);
-
-                                        return (
-                                            <div key={idx} className="flex justify-center relative">
-                                                <div
-                                                    className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-medium transition-all cursor-default 
-                                                        ${attendanceColor} 
-                                                        ${isToday ? 'ring-2 ring-purple-500 ring-offset-2 z-10 font-bold' : ''}
-                                                    `}
-                                                >
-                                                    {day.getDate()}
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-
-                                    const isSelected = day.getDate() === selectedDate.getDate() && day.getMonth() === selectedDate.getMonth() && day.getFullYear() === selectedDate.getFullYear();
-                                    const isUnavailable = isAfterTaskWindow(day);
-
-                                    return (
-                                        <div key={idx} className="flex justify-center">
-                                            <button
-                                                onClick={() => {
-                                                    if (!isUnavailable) setSelectedDate(day);
-                                                }}
-                                                disabled={isUnavailable}
-                                                className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] transition ${isSelected
-                                                    ? 'bg-primary text-white shadow-md transform scale-110'
-                                                    : isUnavailable
-                                                        ? 'text-gray-300 cursor-not-allowed'
-                                                        : 'hover:bg-purple-100 text-gray-700'
-                                                    }`}
-                                            >
-                                                {day.getDate()}
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
+                        <DesktopTaskCalendar selectedDate={selectedDate} onChange={setSelectedDate} renderDay={viewMode === 'EVALUATION' ? (day) => {
+                            const now = new Date();
+                            const isToday = day.toDateString() === now.toDateString();
+                            const attendanceDay = getAttendanceDay(evalStats?.attendance_calendar, day);
+                            const attendanceColor = getAttendanceColor(attendanceDay?.status_code, day > now && !isToday);
+                            return <div className="flex justify-center relative"><div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-medium transition-all cursor-default ${attendanceColor} ${isToday ? 'ring-2 ring-purple-500 ring-offset-2 z-10 font-bold' : ''}`}>{day.getDate()}</div></div>;
+                        } : undefined} />
                     </div>
                 </div>
 
@@ -1075,28 +944,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                                 </div>
                             </div>
                         ) : (
-                            <div className="flex flex-col h-full min-h-0">
-                                <div className="mb-4 shrink-0">
-                                    <h2 className="font-bold text-gray-800 text-lg">Aktivitas</h2>
-                                    <p className="text-sm text-gray-400">
-                                        {selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                    </p>
-                                </div>
-                                <div className="space-y-4 flex-1 overflow-y-auto pr-2 min-h-0">
-                                    {activityLogs.length > 0 ? (
-                                        activityLogs.map((log: any, idx: number) => (
-                                            <div key={log.id || idx} className="bg-gray-200 rounded-xl p-4 flex items-center justify-between">
-                                                <span className="text-sm font-bold text-gray-700">{log.time}</span>
-                                                <span className="text-sm font-medium text-gray-600">Crew - {log.role}</span>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-center text-gray-400 py-10 bg-gray-50 rounded-2xl">
-                                            Belum ada log aktivitas pada tanggal ini.
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                            <DesktopTaskActivity date={selectedDate} logs={activityLogs}/>
                         )
                     ) : (
                         // PREVIEW / HISTORY MODE
@@ -1104,6 +952,7 @@ export default function CrewDetail({ crew, crews = [], onTaskChange }: CrewDetai
                             <SubmissionHistory task={previewTask} onClose={handleClosePreview} />
                         ) : (
                             <TaskPreview
+                                key={previewTask.task_id}
                                 task={previewTask}
                                 onClose={handleClosePreview}
                                 onDeleteProof={handleDeleteProof}

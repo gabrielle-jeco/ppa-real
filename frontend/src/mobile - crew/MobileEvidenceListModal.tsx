@@ -10,13 +10,17 @@ interface MobileEvidenceListModalProps {
     onSelectImage: (imageType: 'before' | 'after' | 'proof', index?: number) => void;
     onDelete?: (evidenceId: number) => void; // Optional delete capability
     readOnly?: boolean;
+    resultOnly?: boolean;
+    renderThumbnail?: (evidence: any) => React.ReactNode;
 }
 
 export default function MobileEvidenceListModal({
     isOpen,
     onClose,
     task,
-    onSelectImage
+    onSelectImage,
+    resultOnly = false,
+    renderThumbnail
 }: MobileEvidenceListModalProps) {
     const [animateIn, setAnimateIn] = useState(false);
 
@@ -61,8 +65,8 @@ export default function MobileEvidenceListModal({
                         onClick={() => onSelectImage(type, index)}
                     >
                         {/* Thumbnail */}
-                        <div className="w-12 h-12 rounded-xl bg-gray-600 overflow-hidden shrink-0 shadow-md">
-                            <img src={fullUrl} alt={label} className="w-full h-full object-cover opacity-90" />
+                        <div className="w-12 h-12 rounded-xl bg-gray-600 overflow-hidden shrink-0 shadow-md [&_img]:opacity-90">
+                            {renderThumbnail?renderThumbnail(evidence):<img src={fullUrl} alt={label} className="w-full h-full object-cover"/>}
                         </div>
 
                         {/* Text Info */}
@@ -102,7 +106,7 @@ export default function MobileEvidenceListModal({
     const hasImages = beforeEvidences.length > 0 || afterEvidences.length > 0;
 
     return createPortal(
-        <div className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-colors duration-300 ${animateIn ? 'bg-black/50 backdrop-blur-sm' : 'bg-black/0 pointer-events-none'}`}>
+        <div role="dialog" aria-modal="true" aria-label="Daftar Bukti" className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-colors duration-300 ${animateIn ? 'bg-black/50 backdrop-blur-sm' : 'bg-black/0 pointer-events-none'}`}>
             {/* Modal Content */}
             <div
                 className={`bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl relative transition-all duration-300 ease-out transform ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-10'}`}
@@ -146,9 +150,9 @@ export default function MobileEvidenceListModal({
                             )}
                             {afterEvidences.length > 0 && (
                                 <div>
-                                    <h3 className="text-gray-800 font-bold text-sm mb-2 ml-1">Sesudah</h3>
+                                    <h3 className="text-gray-800 font-bold text-sm mb-2 ml-1">{resultOnly?'Hasil':'Sesudah'}</h3>
                                     {afterEvidences.map((e: any, idx: number) =>
-                                        renderItem(e, 'after', `Sesudah Bekerja ${afterEvidences.length > 1 ? `#${idx + 1}` : ''}`, idx)
+                                        renderItem(e, 'after', `${resultOnly?'Bukti Hasil':'Sesudah Bekerja'} ${afterEvidences.length > 1 ? `#${idx + 1}` : ''}`, idx)
                                     )}
                                 </div>
                             )}

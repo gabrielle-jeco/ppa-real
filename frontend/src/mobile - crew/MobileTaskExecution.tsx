@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Camera, X, Image as ImageIcon } from 'lucide-react';
 import MobileEvidenceListModal from './MobileEvidenceListModal';
 import MobileCrewTaskPreview from './MobileCrewTaskPreview';
@@ -6,7 +6,8 @@ import MobileActionModal from '../general/MobileActionModal';
 import MobileCameraCapture from '../general/MobileCameraCapture';
 import { compressImage } from '../utils/imageCompressor';
 import { formatEvidenceUploadError } from '../utils/evidenceUploadError';
-import { isTaskNotStarted } from '../utils/taskTiming';
+import { getMobileEvidenceAccess } from '../utils/mobileTaskEvidence';
+import { validateEvidenceFile } from '../utils/managerAssignments';
 
 interface MobileTaskExecutionProps {
     task: any;
@@ -14,13 +15,15 @@ interface MobileTaskExecutionProps {
     onUpload: (formData: FormData) => Promise<void>;
     onDelete?: (evidenceId: number) => Promise<void>;
     readOnly?: boolean;
+    resultOnly?: boolean;
+    renderEvidenceThumbnail?: (evidence: any) => React.ReactNode;
+    renderEvidencePreview?: (evidence: any) => React.ReactNode;
+    onDownloadEvidence?: (evidence: any) => void;
+
 }
 
-export default function MobileTaskExecution({ task, onClose, onUpload, onDelete, readOnly = false }: MobileTaskExecutionProps) {
-    const isPastDue = new Date(task.due_at) < new Date();
-    const isBeforeStart = isTaskNotStarted(task);
+export default function MobileTaskExecution({ task, onClose, onUpload, onDelete, readOnly = false, resultOnly = false, renderEvidenceThumbnail, renderEvidencePreview, onDownloadEvidence }: MobileTaskExecutionProps) {
     const viewDate = task._selected_date;
-    const isNonTodayView = Boolean(viewDate && viewDate !== new Date().toLocaleDateString('en-CA'));
 
     const getInitialPreview = (imgUrl: string | null) => {
         if (!imgUrl) return null;
@@ -29,13 +32,8 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
 
     const beforeEvidences = task.evidences?.filter((e: any) => e.type === 'before') || [];
     const afterEvidences = task.evidences?.filter((e: any) => e.type === 'after') || [];
-    const baseReadOnly = readOnly || task.status === 'approved' || isBeforeStart || isNonTodayView;
-    const canUploadBefore = !baseReadOnly && !isPastDue && beforeEvidences.length === 0;
-    const canUploadAfter = !baseReadOnly && (task.review_summary
-        ? task.review_summary.can_upload_after
-        : !isPastDue && afterEvidences.length < 3);
-    const isReadOnly = baseReadOnly || (!canUploadBefore && !canUploadAfter);
-
+    const { canUploadBefore, canUploadAfter, isReadOnly } = getMobileEvidenceAccess(task, { resultOnly, readOnly });
+    const fileInput = useRef<HTMLInputElement>(null);
 
     // View States
     const [showHistory, setShowHistory] = useState(false); // Acts as "Preview Mode"
@@ -52,7 +50,11 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
     const [isUploading, setIsUploading] = useState(false);
 
     // Preview State
-    const [activeTab, setActiveTab] = useState<'before' | 'after'>('before');
+    const [activeTab, setActiveTab] = useState<'before' | 'after'>(resultOnly ? 'after' : 'before');
+
+    useEffect(() => {
+        if (resultOnly) setActiveTab('after');
+    }, [resultOnly]);
 
     // Modal State
     const [showActionModal, setShowActionModal] = useState(false);
@@ -96,6 +98,21 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
         }
     };
 
+    const handleFileUpload = async (file: File) => {
+        if (!resultOnly || !canUploadAfter || isUploading) return;
+        const problem = validateEvidenceFile(file);
+        if (problem) { alert(problem); return; }
+        setIsUploading(true);
+        try {
+            const uploadFile = /\.xlsx$/i.test(file.name) ? file : await compressImage(file, 1200, 1200, 0.7);
+            const data = new FormData();
+            if (viewDate) data.append('action_date', viewDate);
+            data.append('after[]', uploadFile);
+            await onUpload(data);
+        } catch (error) { alert(formatEvidenceUploadError(error, task)); }
+        finally { setIsUploading(false); }
+    };
+
     const handleClose = () => {
         if (showEvidenceList) {
             if (isReadOnly) {
@@ -129,6 +146,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
     // STACKED RENDER
     return (
         <>
+            {resultOnly&&<input ref={fileInput} aria-label="Pilih bukti tugas" type="file" accept=".jpg,.jpeg,.png,.webp,.xlsx" className="sr-only" disabled={isUploading||!canUploadAfter} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void handleFileUpload(file);}}/>}
             {showCamera && (
                 <MobileCameraCapture
                     onCapture={handleCameraCapture}
@@ -138,7 +156,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
 
             {/* 1. Underlying Upload View */}
             {!isReadOnly && (
-                <div key="upload-view" className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                <div key="upload-view" role="dialog" aria-modal="true" aria-label="Unggah Bukti" className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
                     {/* Backdrop */}
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose}></div>
 
@@ -154,7 +172,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
 
                         {task.review_summary?.latest_after_status === 'rejected' && (
                             <div className="mb-5 rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-700">
-                                <p className="font-bold">Bukti after ditolak</p>
+                                <p className="font-bold">{resultOnly ? 'Bukti ditolak' : 'Bukti after ditolak'}</p>
                                 <p className="mt-1">{afterEvidences[afterEvidences.length - 1]?.rejection_reason}</p>
                                 {canUploadAfter && <p className="mt-2 font-semibold">Silakan unggah revisi attempt berikutnya.</p>}
                             </div>
@@ -163,7 +181,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                         {/* Upload Grid */}
                         <div className="grid grid-cols-2 gap-4 mb-6">
                             {/* Before Button Slot */}
-                            <div className="relative group">
+                            {!resultOnly&&<div className="relative group">
                                 <div
                                     onClick={() => handleSlotClick('before')}
                                     className={`aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform ${isUploading ? 'opacity-50 pointer-events-none' : ''} ${canUploadBefore ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50' : 'cursor-default opacity-70'}`}
@@ -192,34 +210,34 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                                         </>
                                     )}
                                 </div>
-                            </div>
+                            </div>}
 
                             {/* After Button Slot */}
-                            <div className="relative group">
-                                <div
+                            <div className={resultOnly ? 'relative group col-span-2 mx-auto' : 'relative group'} style={resultOnly ? { width: 'calc((100% - 1rem) / 2)' } : undefined}>
+                                <div role={resultOnly ? 'button' : undefined} aria-label={resultOnly ? 'Unggah bukti hasil' : undefined} aria-disabled={resultOnly ? isUploading || !canUploadAfter : undefined}
                                     onClick={() => handleSlotClick('after')}
-                                    className={`aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform ${isUploading ? 'opacity-50 pointer-events-none' : ''} ${canUploadAfter ? 'cursor-pointer hover:border-purple-400 hover:bg-purple-50' : 'cursor-default opacity-70'}`}
+                                    className={`aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform ${isUploading ? 'opacity-50 pointer-events-none' : ''} ${canUploadAfter ? (resultOnly ? 'cursor-pointer hover:border-blue-400 hover:bg-blue-50' : 'cursor-pointer hover:border-purple-400 hover:bg-purple-50') : 'cursor-default opacity-70'}`}
                                 >
                                     {afterPreview ? (
                                         <div className="relative w-full h-full">
-                                            <img src={afterPreview} alt="After" className="w-full h-full object-cover rounded-3xl shadow-sm opacity-60" />
+                                            <div className="w-full h-full rounded-3xl overflow-hidden shadow-sm opacity-60">{renderEvidenceThumbnail ? renderEvidenceThumbnail(afterEvidences[afterEvidences.length - 1]) : <img src={afterPreview} alt="After" className="w-full h-full object-cover" />}</div>
                                             {/* Count Badge Overlay */}
                                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/10 rounded-3xl backdrop-blur-[1px]">
-                                                <div className="bg-purple-500/90 text-white font-bold text-xl px-4 py-2 rounded-2xl shadow flex items-center gap-2">
+                                                <div className={`${resultOnly ? 'bg-blue-500/90' : 'bg-purple-500/90'} text-white font-bold text-xl px-4 py-2 rounded-2xl shadow flex items-center gap-2`}>
                                                     <ImageIcon size={20} />
                                                     +{afterEvidences.length}
                                                 </div>
-                                                <span className="text-white font-bold text-xs mt-2 drop-shadow-md">Sesudah</span>
+                                                <span className="text-white font-bold text-xs mt-2 drop-shadow-md">{resultOnly ? 'Bukti Hasil' : 'Sesudah'}</span>
                                             </div>
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="bg-white p-3 rounded-full shadow-sm text-gray-400 group-hover:text-purple-500 transition-colors">
+                                            <div className={`bg-white p-3 rounded-full shadow-sm text-gray-400 ${resultOnly ? 'group-hover:text-blue-500' : 'group-hover:text-purple-500'} transition-colors`}>
                                                 <ImageIcon size={24} />
                                             </div>
-                                            <span className="font-bold text-gray-500 text-sm group-hover:text-purple-600">Sesudah</span>
+                                            <span className={`font-bold text-gray-500 text-sm ${resultOnly ? 'group-hover:text-blue-600' : 'group-hover:text-purple-600'}`}>{resultOnly ? 'Bukti Hasil' : 'Sesudah'}</span>
                                             {!canUploadAfter && (
-                                                <span className="text-[10px] text-gray-400 text-center px-3">Maks. 3 foto</span>
+                                                <span className="text-[10px] text-gray-400 text-center px-3">{resultOnly ? 'Unggah terkunci' : 'Maks. 3 foto'}</span>
                                             )}
                                         </>
                                     )}
@@ -252,6 +270,7 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                 onClose={() => setShowActionModal(false)}
                 onTakePhoto={openCamera}
                 onHistory={handleHistoryClick}
+                onUpload={resultOnly?()=>{setShowActionModal(false);fileInput.current?.click();}:undefined}
             />
 
 
@@ -267,6 +286,8 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                 }}
                 onDelete={task.review_summary ? undefined : handleDeleteEvidence}
                 readOnly={isReadOnly}
+                resultOnly={resultOnly}
+                renderThumbnail={renderEvidenceThumbnail}
             />
 
             {/* 3. Deepest History Preview */}
@@ -279,6 +300,9 @@ export default function MobileTaskExecution({ task, onClose, onUpload, onDelete,
                 initialIndex={initialPreviewIndex}
                 onDelete={handleDeleteEvidence}
                 readOnly={isReadOnly}
+                resultOnly={resultOnly}
+                renderEvidence={renderEvidencePreview}
+                onDownloadEvidence={onDownloadEvidence}
             />
         </>
     );

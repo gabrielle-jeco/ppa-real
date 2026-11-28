@@ -3,5 +3,14 @@ AGENTS.md
 .env.*
 !.env.example
 *.log
-PRODUCTION_HARDENING.md
 /docker-compose.yml
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
+.playwright/
+.agents/
+GEMINI.md
+skills-lock.json
+.serena/
+/docs/
+.DS_Store
+Thumbs.db

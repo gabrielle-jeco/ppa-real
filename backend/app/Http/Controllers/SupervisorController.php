@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\ScoringService;
 use App\Services\SupervisorTaskAccessService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
@@ -27,37 +28,79 @@ class SupervisorController extends Controller
             return response()->json(['message' => 'Tidak memiliki akses.'], 403);
         }
 
-        $subordinates = $user->subordinateLines()->with('subordinate.locations')->get();
+        $user->loadMissing('locations');
+
+        $subordinates = $user->subordinateLines()
+            ->where('status', 'active')
+            ->with(['subordinate.locations', 'subordinate.userLocations'])
+            ->get();
         $today = Carbon::today();
         $crewIds = $subordinates->pluck('subordinate_id');
         $backupPairs = $taskAccess->reviewableBackupPairs($user, $crewIds, $today);
+        $permanentCrewIds = $subordinates
+            ->where('relation_type', 'permanent')
+            ->pluck('subordinate_id')
+            ->filter()
+            ->unique()
+            ->values();
 
-        $crews = $subordinates->pluck('subordinate')->filter(function ($crew) {
+        $activeCrews = $subordinates->pluck('subordinate')->filter(function ($crew) {
             return $crew && $crew->active;
-        })
-            ->values()
-            ->map(function ($crew) use ($user, $today, $scoringService, $taskAccess, $backupPairs) {
-                $crewStats = $scoringService->getCrewMonthlyDetailedStats($crew, Carbon::now());
-                $score = $crewStats['active_percentage'] ?? 0;
-                $dailyScore = $scoringService->getCrewDailyScoreDisplay($crew, $today);
+        })->values();
 
-                $reviewableTasks = Task::where('employee_id', $crew->user_id)
-                    ->activeOnDate($today);
-                $taskAccess->constrainReviewableTasks($reviewableTasks, $user, $backupPairs);
+        $eloquentCrews = EloquentCollection::make($activeCrews->all());
+        if ($eloquentCrews->contains(fn (User $crew) => !empty($crew->role_id))) {
+            $eloquentCrews->loadMissing('accountRole');
+        }
+        if ($eloquentCrews->contains(fn (User $crew) => !empty($crew->job_level_id))) {
+            $eloquentCrews->loadMissing('jobLevel');
+        }
 
-                $totalTasks = (clone $reviewableTasks)->count();
-                $approvedTasks = (clone $reviewableTasks)
-                    ->whereIn('status', ['approved', 'completed'])
-                    ->count();
+        $activeCrewIds = $activeCrews->pluck('username')->filter()->unique()->values();
+        $metricsByCrew = $scoringService->getCrewDashboardMetricsBatch($activeCrews, Carbon::now(), $today);
+
+        $taskCountsByCrew = collect();
+        $latestLogsByCrew = collect();
+        if ($activeCrewIds->isNotEmpty()) {
+            $taskStatsQuery = Task::whereIn('employee_id', $activeCrewIds)
+                ->activeOnDate($today);
+            $taskAccess->constrainReviewableTasks($taskStatsQuery, $user, $backupPairs, $permanentCrewIds);
+            $taskCountsByCrew = $taskStatsQuery
+                ->selectRaw("employee_id, COUNT(*) as total_tasks, SUM(CASE WHEN status IN ('approved', 'completed') THEN 1 ELSE 0 END) as approved_tasks")
+                ->groupBy('employee_id')
+                ->get()
+                ->keyBy('employee_id');
+
+            $latestLogsByCrew = ActivityLog::with('workStation')
+                ->whereIn('user_id', $activeCrewIds)
+                ->whereDate('created_at', $today)
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->get()
+                ->unique('user_id')
+                ->keyBy('user_id');
+        }
+
+        $crews = $activeCrews
+            ->map(function ($crew) use ($metricsByCrew, $taskCountsByCrew, $latestLogsByCrew) {
+                $metrics = $metricsByCrew[$crew->username] ?? [];
+                $score = $metrics['active_percentage'] ?? 0;
+                $dailyScore = $metrics['daily_score'] ?? [
+                    'score' => null,
+                    'score_date' => null,
+                    'available' => false,
+                    'availability_mode' => 'H',
+                    'unavailable_reason' => 'attendance_missing',
+                ];
+
+                $taskCountRow = $taskCountsByCrew->get($crew->username);
+                $totalTasks = (int) ($taskCountRow->total_tasks ?? 0);
+                $approvedTasks = (int) ($taskCountRow->approved_tasks ?? 0);
 
                 $taskProgress = $totalTasks > 0 ? round(($approvedTasks / $totalTasks) * 100, 1) : 0;
                 $hasTasks = $totalTasks > 0;
 
-                $latestLog = ActivityLog::with('workStation')
-                    ->where('user_id', $crew->user_id)
-                    ->whereDate('created_at', Carbon::today())
-                    ->orderBy('created_at', 'desc')
-                    ->first();
+                $latestLog = $latestLogsByCrew->get($crew->username);
 
                 $currentWorkstation = $latestLog && $latestLog->workStation
                     ? $latestLog->workStation->name
@@ -145,13 +188,22 @@ class SupervisorController extends Controller
             $targetDate = Carbon::today();
         }
 
+        $user->loadMissing('locations');
+
         $startOfMonth = $targetDate->copy()->startOfMonth();
         $endOfMonth = $targetDate->copy()->endOfMonth();
 
-        $subordinates = $user->subordinateLines()
+        $subordinateLines = $user->subordinateLines()
             ->where('status', 'active')
             ->with('subordinate.locations')
-            ->get()
+            ->get();
+        $permanentCrewIds = $subordinateLines
+            ->where('relation_type', 'permanent')
+            ->pluck('subordinate_id')
+            ->filter()
+            ->unique()
+            ->values();
+        $subordinates = $subordinateLines
             ->pluck('subordinate')
             ->filter(fn ($crew) => $crew && $crew->active)
             ->values();
@@ -163,7 +215,7 @@ class SupervisorController extends Controller
         $taskQuery = Task::with(['assignedTo', 'evidences'])
             ->whereIn('employee_id', $crewIds)
             ->activeOnDate($targetDate);
-        $taskAccess->constrainReviewableTasks($taskQuery, $user, $backupPairs);
+        $taskAccess->constrainReviewableTasks($taskQuery, $user, $backupPairs, $permanentCrewIds);
         $tasks = $taskQuery->get();
 
         $completedStatuses = ['approved', 'completed'];
@@ -173,10 +225,12 @@ class SupervisorController extends Controller
         $assignedCrewCount = $tasks->pluck('employee_id')->unique()->count();
         $unassignedCrewCount = max(0, $crewCount - $assignedCrewCount);
 
-        $crewScores = $subordinates->map(function ($crew) use ($scoringService, $targetDate, $tasks, $completedStatuses) {
+        $metricsByCrew = $scoringService->getCrewDashboardMetricsBatch($subordinates, $targetDate, null);
+
+        $crewScores = $subordinates->map(function ($crew) use ($metricsByCrew, $tasks, $completedStatuses) {
             $crewTasks = $tasks->where('employee_id', $crew->username);
             $completed = $crewTasks->whereIn('status', $completedStatuses)->count();
-            $score = $scoringService->getCrewMonthlyDetailedStats($crew, $targetDate)['active_percentage'] ?? 0;
+            $score = $metricsByCrew[$crew->username]['active_percentage'] ?? 0;
 
             return [
                 'id' => $crew->username,
@@ -335,8 +389,16 @@ class SupervisorController extends Controller
         $supervisor = $this->authorizedSupervisor();
         [$startDate, $endDate] = $this->dailyReportPeriod($request);
 
-        $members = $this->permanentTeam($supervisor)->map(function (User $crew) use ($scoringService, $startDate, $endDate) {
-            $report = $scoringService->getCrewDailyReport($crew, $startDate, $endDate);
+        $team = $this->permanentTeam($supervisor);
+        $reports = $scoringService->getCrewDailyReportsBatch($team, $startDate, $endDate);
+
+        $members = $team->map(function (User $crew) use ($reports) {
+            $report = $reports[$crew->username] ?? ['summary' => [
+                'approved_tasks' => 0,
+                'unapproved_tasks' => 0,
+                'score' => null,
+                'available_days' => 0,
+            ]];
 
             return [
                 'id' => $crew->username,
@@ -378,8 +440,16 @@ class SupervisorController extends Controller
         $supervisor = $this->authorizedSupervisor();
         [$startMonth, $endMonth] = $this->monthlyReportPeriod($request);
 
-        $members = $this->permanentTeam($supervisor)->map(function (User $crew) use ($scoringService, $startMonth, $endMonth) {
-            $report = $scoringService->getCrewMonthlyReport($crew, $startMonth, $endMonth);
+        $team = $this->permanentTeam($supervisor);
+        $reports = $scoringService->getCrewMonthlyReportsBatch($team, $startMonth, $endMonth);
+
+        $members = $team->map(function (User $crew) use ($reports) {
+            $report = $reports[$crew->username] ?? ['summary' => [
+                'task_score' => 0.0,
+                'attendance_score' => 0.0,
+                'evaluation_score' => 0.0,
+                'total_score' => 0.0,
+            ]];
 
             return [
                 'id' => $crew->username,

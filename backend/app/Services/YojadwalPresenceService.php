@@ -63,26 +63,45 @@ class YojadwalPresenceService
 
     public function syncMonth(string $nik, int $month, int $year): int
     {
+        return $this->syncMonthWithStatus($nik, $month, $year)['rows'];
+    }
+
+    /**
+     * @return array{ok: bool, rows: int, error: ?string}
+     */
+    public function syncMonthWithStatus(string $nik, int $month, int $year): array
+    {
         $payload = $this->fetchPresence($nik, $month, $year);
-        if (!$payload) {
-            return 0;
+        if (!is_array($payload)) {
+            return ['ok' => false, 'rows' => 0, 'error' => 'upstream_unavailable'];
         }
 
         $rows = $this->mapper->mapPresenceResponse($payload, $month, $year);
 
-        foreach ($rows as $row) {
-            Attendance::updateOrCreate(
-                [
-                    'user_id' => $nik,
-                    'date' => $row['date'],
-                ],
-                [
-                    'status_code' => $row['status_code'],
-                ]
-            );
+        try {
+            foreach ($rows as $row) {
+                Attendance::updateOrCreate(
+                    [
+                        'user_id' => $nik,
+                        'date' => $row['date'],
+                    ],
+                    [
+                        'status_code' => $row['status_code'],
+                    ]
+                );
+            }
+        } catch (\Throwable $error) {
+            Log::warning('YoJadwal attendance persistence failed.', [
+                'nik' => $nik,
+                'month' => $month,
+                'year' => $year,
+                'message' => $error->getMessage(),
+            ]);
+
+            return ['ok' => false, 'rows' => 0, 'error' => 'persistence_failed'];
         }
 
-        return count($rows);
+        return ['ok' => true, 'rows' => count($rows), 'error' => null];
     }
 
     public function syncMonthIfNeeded(string $nik, int $month, int $year): int

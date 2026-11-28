@@ -1,5 +1,6 @@
+import EvaluationRequestButton from '../general/EvaluationRequestButton';
 import { useEffect, useRef, useState } from 'react';
-import { BellRing, ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 import DesktopCrewCard from '../general/DesktopCrewCard';
 import { formatDisplayNumber } from '../general/numberFormat';
 
@@ -16,7 +17,7 @@ interface SupervisorListProps {
     onOpenRequests: () => void;
 }
 
-function SearchableSelect({ value, options, placeholder, searchPlaceholder, onChange }: {
+export function SearchableSelect({ value, options, placeholder, searchPlaceholder, onChange }: {
     value: string;
     options: Array<{ value: string; label: string; detail?: string }>;
     placeholder: string;
@@ -90,10 +91,7 @@ export default function SupervisorList({ data, selectedId, onSelect, selectedLoc
                         <p className="mt-3 text-xs text-gray-500">Selamat datang, {manager?.role || 'Manager'}</p>
                         <h2 className="mt-1 text-lg font-bold text-gray-800">{manager?.name || 'User'}!</h2>
                     </div>
-                    <button type="button" onClick={onOpenRequests} className="relative rounded-xl border border-purple-100 bg-purple-50 p-3 text-primary transition hover:bg-purple-100" title="Permintaan perpanjangan evaluasi">
-                        <BellRing size={20} />
-                        {pendingRequestCount > 0 && <span className="absolute -right-2 -top-2 min-w-[22px] rounded-full bg-red-500 px-1.5 py-1 text-center text-[10px] font-black text-white">{pendingRequestCount > 99 ? '99+' : pendingRequestCount}</span>}
-                    </button>
+                    <EvaluationRequestButton pendingRequestCount={pendingRequestCount} onOpenRequests={onOpenRequests}/>
                 </div>
 
                 <div className="space-y-3">

@@ -115,7 +115,7 @@ class Task extends Model
             ? $approvalDeadline->copy()
             : $revisionDeadline->copy()->subMinutes((int) config('task_review.minimum_revision_window_minutes', 30));
         $nextAttempt = min($attemptNo + 1, $maxAttempts);
-        $hasBefore = $this->evidences->contains('type', 'before');
+        $hasBefore = $this->task_context === 'manager_supervisor' || $this->evidences->contains('type', 'before');
         $potentialScore = 0;
 
         if ($hasBefore && $latestAfter?->review_status === 'approved') {

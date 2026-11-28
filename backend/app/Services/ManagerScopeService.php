@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Location;
 use App\Models\ReportingLine;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 
 class ManagerScopeService
@@ -75,13 +76,34 @@ class ManagerScopeService
         return $this->supervisorIds($manager)->contains($supervisorId);
     }
 
+    public function managersForSupervisor(User $supervisor): Collection
+    {
+        $directManagers = $this->activeLeaders(collect([$supervisor->username]))
+            ->filter(fn (User $user) => $user->role_type === 'manager')
+            ->values();
+
+        $chiefIds = $directManagers
+            ->filter(fn (User $user) => $user->manager_type === 'CO')
+            ->pluck('username');
+
+        if ($chiefIds->isNotEmpty()) {
+            $upperManagers = $this->activeLeaders($chiefIds)
+                ->filter(fn (User $user) => $user->role_type === 'manager');
+            $directManagers = $directManagers->merge($upperManagers);
+        }
+
+        return $directManagers
+            ->unique('username')
+            ->values();
+    }
+
     private function activeSubordinates(Collection $leaderIds): Collection
     {
         if ($leaderIds->isEmpty()) {
             return collect();
         }
 
-        return ReportingLine::query()
+        $users = ReportingLine::query()
             ->whereIn('leader_id', $leaderIds)
             ->where('status', 'active')
             ->with('subordinate.userLocations')
@@ -90,5 +112,47 @@ class ManagerScopeService
             ->filter(fn (?User $user) => $user?->active)
             ->unique('username')
             ->values();
+
+        $this->loadOptionalUserRelations($users);
+
+        return $users;
+    }
+
+    private function activeLeaders(Collection $subordinateIds): Collection
+    {
+        if ($subordinateIds->isEmpty()) {
+            return collect();
+        }
+
+        $users = ReportingLine::query()
+            ->whereIn('subordinate_id', $subordinateIds)
+            ->where('status', 'active')
+            ->with('leader.userLocations')
+            ->get()
+            ->pluck('leader')
+            ->filter(fn (?User $user) => $user?->active)
+            ->unique('username')
+            ->values();
+
+        $this->loadOptionalUserRelations($users);
+
+        return $users;
+    }
+
+    private function loadOptionalUserRelations(Collection $users): void
+    {
+        if ($users->isEmpty()) {
+            return;
+        }
+
+        $eloquentUsers = EloquentCollection::make($users->all());
+
+        if ($eloquentUsers->contains(fn (User $user) => !empty($user->role_id))) {
+            $eloquentUsers->loadMissing('accountRole');
+        }
+
+        if ($eloquentUsers->contains(fn (User $user) => !empty($user->job_level_id))) {
+            $eloquentUsers->loadMissing('jobLevel');
+        }
     }
 }

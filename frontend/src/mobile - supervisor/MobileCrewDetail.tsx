@@ -497,7 +497,6 @@ const MobileCrewDetail: React.FC<MobileCrewDetailProps> = ({ crew, onNavigate })
 
                     {tasks.map(task => {
                         const isApproved = task.status === 'approved';
-                        const isPastDue = isTaskPastDue(task);
                         return (
                             <div key={task.task_id} className="bg-gray-100/50 rounded-2xl p-4 flex items-center justify-between group border border-transparent hover:border-gray-200 transition">
                                 <div className="flex items-start gap-3 flex-1">

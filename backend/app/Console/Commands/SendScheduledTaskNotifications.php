@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Task;
+use App\Models\ManagerTask;
+use Illuminate\Support\Facades\Schema;
 use App\Services\UserNotificationService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -17,51 +19,61 @@ class SendScheduledTaskNotifications extends Command
     {
         $now = Carbon::now();
 
-        $this->sendStartReminders($notifications, $now);
-        $this->sendDeadlineReminders($notifications, $now);
-        $this->sendApprovalReminders($notifications, $now);
+        $models = [Task::class];
+        if (Schema::hasTable('manager_tasks')) $models[] = ManagerTask::class;
+        foreach ($models as $taskModel) {
+            $this->sendStartReminders($notifications, $now, $taskModel);
+            $this->sendDeadlineReminders($notifications, $now, $taskModel);
+            $this->sendApprovalReminders($notifications, $now, $taskModel);
+        }
 
         return self::SUCCESS;
     }
 
-    private function sendStartReminders(UserNotificationService $notifications, Carbon $now): void
+    private function sendStartReminders(UserNotificationService $notifications, Carbon $now, string $taskModel): void
     {
-        Task::query()
+        $taskModel::query()
             ->whereIn('status', ['pending', 'rejected'])
             ->whereNotNull('start_at')
             ->whereBetween('start_at', [$now, $now->copy()->addMinutes(15)])
             ->orderBy('id')
             ->chunkById(200, function ($tasks) use ($notifications) {
                 foreach ($tasks as $task) {
+                    $prefix = $task instanceof ManagerTask ? 'manager-' : '';
                     $notifications->createAndPush(
                         $task->employee_id,
                         'task_start_reminder',
                         'Pekerjaan Segera Dimulai',
                         'Pekerjaan "' . $task->title . '" akan dimulai pada ' . $task->start_at->format('H:i') . '.',
-                        'Siapkan diri dan periksa kembali panduan work station Anda.',
+                        $task instanceof ManagerTask ? 'Periksa arahan dan target tugas dari Manager.' : 'Siapkan diri dan periksa kembali panduan work station Anda.',
                         [
                             'task_id' => $task->id,
                             'url' => '/',
-                            'tag' => 'task-start-' . $task->id,
+                            'tag' => $prefix . 'task-start-' . $task->id,
                         ],
-                        'task-start-' . $task->id
+                        $prefix . 'task-start-' . $task->id
                     );
                 }
             });
     }
 
-    private function sendDeadlineReminders(UserNotificationService $notifications, Carbon $now): void
+    private function sendDeadlineReminders(UserNotificationService $notifications, Carbon $now, string $taskModel): void
     {
-        Task::query()
+        $taskModel::query()
             ->whereIn('status', ['pending', 'rejected'])
             ->whereBetween('due_at', [$now, $now->copy()->addMinutes(30)])
-            ->where(function ($query) {
-                $query->whereDoesntHave('evidences', fn ($evidence) => $evidence->where('type', 'before'))
-                    ->orWhereDoesntHave('evidences', fn ($evidence) => $evidence->where('type', 'after'));
+            ->where(function ($query) use ($taskModel) {
+                if ($taskModel === Task::class) {
+                    $query->whereDoesntHave('evidences', fn ($evidence) => $evidence->where('type', 'before'))
+                        ->orWhereDoesntHave('evidences', fn ($evidence) => $evidence->where('type', 'after'));
+                } else {
+                    $query->whereDoesntHave('evidences', fn ($evidence) => $evidence->where('type', 'after'));
+                }
             })
             ->orderBy('id')
             ->chunkById(200, function ($tasks) use ($notifications) {
                 foreach ($tasks as $task) {
+                    $prefix = $task instanceof ManagerTask ? 'manager-' : '';
                     $notifications->createAndPush(
                         $task->employee_id,
                         'task_deadline_reminder',
@@ -71,23 +83,24 @@ class SendScheduledTaskNotifications extends Command
                         [
                             'task_id' => $task->id,
                             'url' => '/',
-                            'tag' => 'task-due-' . $task->id,
+                            'tag' => $prefix . 'task-due-' . $task->id,
                         ],
-                        'task-due-' . $task->id
+                        $prefix . 'task-due-' . $task->id
                     );
                 }
             });
     }
 
-    private function sendApprovalReminders(UserNotificationService $notifications, Carbon $now): void
+    private function sendApprovalReminders(UserNotificationService $notifications, Carbon $now, string $taskModel): void
     {
-        Task::query()
+        $taskModel::query()
             ->awaitingReview()
             ->whereNotNull('approval_deadline_at')
             ->whereBetween('approval_deadline_at', [$now, $now->copy()->addHours(2)])
             ->orderBy('id')
             ->chunkById(200, function ($tasks) use ($notifications) {
                 foreach ($tasks as $task) {
+                    $prefix = $task instanceof ManagerTask ? 'manager-' : '';
                     $approvalEndsAt = $task->approval_deadline_at;
                     $notifications->createAndPush(
                         $task->employer_id,
@@ -99,9 +112,9 @@ class SendScheduledTaskNotifications extends Command
                             'task_id' => $task->id,
                             'crew_id' => $task->employee_id,
                             'url' => '/',
-                            'tag' => 'approval-ending-' . $task->id,
+                            'tag' => $prefix . 'approval-ending-' . $task->id,
                         ],
-                        'approval-ending-' . $task->id
+                        $prefix . 'approval-ending-' . $task->id
                     );
                 }
             });

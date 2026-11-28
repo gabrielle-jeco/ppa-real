@@ -88,13 +88,7 @@ class EvaluationReopenRequestController extends Controller
             throw $error;
         }
 
-        $supervisor->leaderLines()
-            ->where('status', 'active')
-            ->with('leader')
-            ->get()
-            ->pluck('leader')
-            ->filter(fn ($leader) => $leader && $leader->active && $leader->role_type === 'manager')
-            ->unique('username')
+        $this->managerScope->managersForSupervisor($supervisor)
             ->each(function (User $manager) use ($notifications, $reopenRequest, $supervisor, $evaluatee) {
                 $notifications->createAndPush(
                     $manager->username,

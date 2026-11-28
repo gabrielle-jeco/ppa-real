@@ -2,26 +2,41 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EvaluationMaster;
 use App\Models\EvaluationReopenRequest;
 use App\Models\MonthlyPersonalityEvaluation;
 use App\Models\User;
+use App\Services\ScoringService;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class EvaluationController extends Controller
 {
+    private const MANAGER_REVIEW_CRITERIA = [
+        'direction_execution',
+        'crew_follow_up',
+        'assignment_quality',
+    ];
+
+    private const FALLBACK_PERSONALITY_CRITERIA = [
+        'self_development',
+        'teamwork',
+    ];
+
     public function store(Request $request)
     {
         try {
             $request->validate([
                 'user_id' => 'required|exists:users,username',
                 'scores' => 'required|array|min:1|max:100',
-                'scores.*' => 'required|numeric|min:1|max:100',
-                'total_score' => 'required|numeric|min:0|max:100',
+                'scores.*' => 'required|integer|min:1|max:5',
+                'total_score' => 'nullable|numeric|min:0|max:100',
                 'date' => 'required|date_format:Y-m-d',
                 'notes' => 'nullable|string|max:5000'
             ]);
@@ -38,6 +53,16 @@ class EvaluationController extends Controller
             }
 
             $evaluationType = $this->resolveEvaluationType($evaluator, $evaluatee);
+            $expectedKeys = $this->resolveExpectedCriteriaKeys($evaluationType);
+            $submittedScores = $request->input('scores', []);
+            $missingKeys = array_diff($expectedKeys, array_keys($submittedScores));
+            $unexpectedKeys = array_diff(array_keys($submittedScores), $expectedKeys);
+            if ($missingKeys !== [] || $unexpectedKeys !== []) {
+                throw ValidationException::withMessages([
+                    'scores' => ['Kriteria evaluasi tidak lengkap atau tidak valid.'],
+                ]);
+            }
+
             $period = Carbon::parse($request->date)->startOfMonth();
             $targetPeriod = $this->evaluationTargetPeriod($evaluationType);
 
@@ -54,9 +79,13 @@ class EvaluationController extends Controller
                 ], 422);
             }
 
-            $totalScore = round((float) $request->total_score, 2);
+            $normalizedScores = [];
+            foreach ($expectedKeys as $key) {
+                $normalizedScores[$key] = (int) $submittedScores[$key];
+            }
+            $totalScore = round((array_sum($normalizedScores) / count($normalizedScores)) * 20, 2);
 
-            $evaluation = DB::transaction(function () use ($request, $evaluator, $evaluatee, $period, $evaluationType, $normalWindowOpen, $totalScore) {
+            $evaluation = DB::transaction(function () use ($request, $evaluator, $evaluatee, $period, $evaluationType, $normalWindowOpen, $normalizedScores, $totalScore) {
                 $extension = null;
                 if (!$normalWindowOpen) {
                     $extension = EvaluationReopenRequest::where('requester_id', $evaluator->username)
@@ -76,19 +105,30 @@ class EvaluationController extends Controller
                     }
                 }
 
-                $evaluation = MonthlyPersonalityEvaluation::updateOrCreate(
-                    [
+                $attributes = [
+                    'score' => $totalScore,
+                    'scores' => $normalizedScores,
+                    'notes' => $request->notes,
+                ];
+
+                $evaluation = MonthlyPersonalityEvaluation::where('evaluatee_id', $request->user_id)
+                    ->where('evaluator_id', $evaluator->username)
+                    ->whereDate('evaluation_period', $period->toDateString())
+                    ->where('evaluation_type', $evaluationType)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($evaluation) {
+                    $evaluation->update($attributes);
+                } else {
+                    $evaluation = MonthlyPersonalityEvaluation::create([
                         'evaluatee_id' => $request->user_id,
                         'evaluator_id' => $evaluator->username,
                         'evaluation_period' => $period->toDateString(),
                         'evaluation_type' => $evaluationType,
-                    ],
-                    [
-                        'score' => $totalScore,
-                        'scores' => $request->scores,
-                        'notes' => $request->notes,
-                    ]
-                );
+                        ...$attributes,
+                    ]);
+                }
 
                 if ($extension) {
                     $extension->update(['status' => 'completed', 'completed_at' => now()]);
@@ -97,6 +137,19 @@ class EvaluationController extends Controller
                 return $evaluation;
             });
 
+            if ($evaluationType === 'personality' && Schema::hasTable('monthly_overall_scores')) {
+                try {
+                    app(ScoringService::class)->refreshCrewMonthlySnapshot($evaluatee, $period);
+                } catch (\Throwable $snapshotError) {
+                    Log::warning('Post-evaluation monthly snapshot refresh failed.', [
+                        'evaluatee_id' => $evaluatee->username,
+                        'period' => $period->toDateString(),
+                        'message' => $snapshotError->getMessage(),
+                    ]);
+                    report($snapshotError);
+                }
+            }
+
             $evaluation->setAttribute('total_score', round((float) $evaluation->score, 2));
             $evaluation->setAttribute('user_id', $evaluation->evaluatee_id);
             $evaluation->setAttribute('date', $evaluation->evaluation_period);
@@ -104,6 +157,21 @@ class EvaluationController extends Controller
             return response()->json($evaluation);
         } catch (ValidationException $e) {
             throw $e;
+        } catch (QueryException $e) {
+            if ($this->isEvaluationUniqueConstraintViolation($e)) {
+                return response()->json([
+                    'error' => 'Evaluasi untuk karyawan dan periode ini baru saja disimpan. Muat ulang halaman untuk melihat data terbaru.',
+                    'message' => 'Evaluasi untuk karyawan dan periode ini baru saja disimpan. Muat ulang halaman untuk melihat data terbaru.',
+                ], 409);
+            }
+
+            Log::error('Evaluation store failed.', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Evaluasi belum dapat disimpan. Silakan coba lagi.'
+            ], 500);
         } catch (\Throwable $e) {
             Log::error('Evaluation store failed.', [
                 'message' => $e->getMessage(),
@@ -113,6 +181,29 @@ class EvaluationController extends Controller
                 'error' => 'Evaluasi belum dapat disimpan. Silakan coba lagi.'
             ], 500);
         }
+    }
+
+    private function isEvaluationUniqueConstraintViolation(QueryException $e): bool
+    {
+        $sqlState = (string) ($e->errorInfo[0] ?? $e->getCode());
+        $isUnique = false;
+
+        if ($sqlState === '23505') {
+            $isUnique = true;
+        } elseif ($sqlState === '23000') {
+            $driverCode = (int) ($e->errorInfo[1] ?? 0);
+            $isUnique = $driverCode === 1062
+                || str_contains($e->getMessage(), 'UNIQUE constraint failed');
+        }
+
+        if (!$isUnique) {
+            return false;
+        }
+
+        $detail = strtolower($e->getMessage() . ' ' . ($e->errorInfo[2] ?? ''));
+
+        return str_contains($detail, 'mpe_unique_eval_period_type_idx')
+            || str_contains($detail, 'monthly_personality_evaluations.evaluatee_id');
     }
 
     public function checkPeriod(Request $request, $supervisorId)
@@ -228,6 +319,26 @@ class EvaluationController extends Controller
         }
 
         return 'personality';
+    }
+
+    private function resolveExpectedCriteriaKeys(string $evaluationType): array
+    {
+        if ($evaluationType === 'manager_review') {
+            return self::MANAGER_REVIEW_CRITERIA;
+        }
+
+        if (Schema::hasTable('evaluation_masters')) {
+            $masterIds = EvaluationMaster::where('active', true)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->pluck('id');
+
+            if ($masterIds->isNotEmpty()) {
+                return $masterIds->map(fn ($id) => 'evaluation_' . $id)->all();
+            }
+        }
+
+        return self::FALLBACK_PERSONALITY_CRITERIA;
     }
 
     private function evaluationTargetPeriod(string $evaluationType): Carbon
